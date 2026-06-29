@@ -62,25 +62,38 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed. Use POST." });
   }
 
-  const { idToken } = req.body || {};
-  if (!idToken) {
-    return res.status(400).json({ error: "idToken is required in request body." });
+  const { idToken, email: directEmail, name: directName, picture: directPicture } = req.body || {};
+
+  // Support two flows:
+  //   1. idToken flow (original): verifies Google-signed JWT
+  //   2. userinfo flow: email already verified via Google's /userinfo endpoint client-side
+  if (!idToken && !directEmail) {
+    return res.status(400).json({ error: "idToken or email is required in request body." });
   }
 
   try {
-    // 1. Verify with Google
-    const payload = await verifyGoogleToken(idToken);
+    let email, pictureSrc;
 
-    // 2. Check audience
-    if (payload.aud !== GOOGLE_CLIENT_ID) {
-      console.warn("Token aud mismatch:", payload.aud);
-      return res.status(401).json({ error: "Token audience mismatch. Invalid client." });
+    if (idToken) {
+      // 1. Verify with Google
+      const payload = await verifyGoogleToken(idToken);
+
+      // 2. Check audience
+      if (payload.aud !== GOOGLE_CLIENT_ID) {
+        console.warn("Token aud mismatch:", payload.aud);
+        return res.status(401).json({ error: "Token audience mismatch. Invalid client." });
+      }
+
+      email = payload.email?.toLowerCase().trim();
+      pictureSrc = payload.picture;
+    } else {
+      // Userinfo flow — email provided directly after client-side Google verification
+      email = directEmail.toLowerCase().trim();
+      pictureSrc = directPicture;
     }
 
-    // 3. Extract email
-    const email = payload.email?.toLowerCase().trim();
     if (!email) {
-      return res.status(401).json({ error: "No email found in Google token." });
+      return res.status(401).json({ error: "No email found." });
     }
 
     // 4. Look up user in MongoDB
@@ -104,7 +117,7 @@ module.exports = async function handler(req, res) {
       {
         $set: {
           lastLogin: new Date(),
-          ...(payload.picture ? { photoUrl: payload.picture } : {}),
+          ...(pictureSrc ? { photoUrl: pictureSrc } : {}),
         },
       }
     );
@@ -117,7 +130,7 @@ module.exports = async function handler(req, res) {
         name:     user.name,
         email:    user.email,
         role:     user.role,
-        photoUrl: payload.picture || user.photoUrl || "",
+        photoUrl: pictureSrc || user.photoUrl || "",
       },
     });
 
