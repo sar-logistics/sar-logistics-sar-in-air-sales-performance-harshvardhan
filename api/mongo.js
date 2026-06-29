@@ -1,24 +1,16 @@
 // ─────────────────────────────────────────────────────────────────
 //  api/mongo.js  —  Vercel Serverless Function
-//  Handles:
-//    1. MongoDB connection (reused across warm invocations)
-//    2. Google ID token verification
-//    3. User auth — checks users collection, updates lastLogin
-//
 //  Endpoint:  POST /api/mongo
-//  Body:      { idToken: "<google_id_token>" }
+//  Body:      { email, name, picture }  (from Google userinfo)
 //  Returns:   { success, user: { name, email, role, photoUrl } }
 // ─────────────────────────────────────────────────────────────────
 
-const https           = require("https");
 const { MongoClient } = require("mongodb");
 
 const MONGO_URI        = process.env.MONGO_URI;
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const DB_NAME          = "sar-in-air-sales";
 const COLLECTION_USERS = "users";
 
-// Reuse connection across warm Lambda invocations
 let cachedClient = null;
 
 async function getDB() {
@@ -28,75 +20,33 @@ async function getDB() {
     serverSelectionTimeoutMS: 10000,
   });
   await cachedClient.connect();
-  console.log("✅ MongoDB connected →", DB_NAME);
   return cachedClient.db(DB_NAME);
 }
 
-// Verify Google ID token via Google's public tokeninfo endpoint
-function verifyGoogleToken(idToken) {
-  return new Promise((resolve, reject) => {
-    const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`;
-    https.get(url, (res) => {
-      let raw = "";
-      res.on("data", (chunk) => (raw += chunk));
-      res.on("end", () => {
-        try {
-          const payload = JSON.parse(raw);
-          if (payload.error) return reject(new Error(`Google: ${payload.error}`));
-          resolve(payload);
-        } catch (e) {
-          reject(new Error("Failed to parse Google response"));
-        }
-      });
-    }).on("error", (e) => reject(new Error(`Google request failed: ${e.message}`)));
-  });
-}
-
 module.exports = async function handler(req, res) {
+  // ── CORS — must be first, before any early returns ──────────────
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age", "86400");
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed. Use POST." });
   }
 
-  const { idToken, email: directEmail, name: directName, picture: directPicture } = req.body || {};
+  const { email: rawEmail, name, picture } = req.body || {};
 
-  // Support two flows:
-  //   1. idToken flow (original): verifies Google-signed JWT
-  //   2. userinfo flow: email already verified via Google's /userinfo endpoint client-side
-  if (!idToken && !directEmail) {
-    return res.status(400).json({ error: "idToken or email is required in request body." });
+  if (!rawEmail) {
+    return res.status(400).json({ error: "email is required in request body." });
   }
 
+  const email = rawEmail.toLowerCase().trim();
+
   try {
-    let email, pictureSrc;
-
-    if (idToken) {
-      // 1. Verify with Google
-      const payload = await verifyGoogleToken(idToken);
-
-      // 2. Check audience
-      if (payload.aud !== GOOGLE_CLIENT_ID) {
-        console.warn("Token aud mismatch:", payload.aud);
-        return res.status(401).json({ error: "Token audience mismatch. Invalid client." });
-      }
-
-      email = payload.email?.toLowerCase().trim();
-      pictureSrc = payload.picture;
-    } else {
-      // Userinfo flow — email provided directly after client-side Google verification
-      email = directEmail.toLowerCase().trim();
-      pictureSrc = directPicture;
-    }
-
-    if (!email) {
-      return res.status(401).json({ error: "No email found." });
-    }
-
-    // 4. Look up user in MongoDB
     const db   = await getDB();
     const user = await db.collection(COLLECTION_USERS).findOne(
       { email, isActive: true },
@@ -111,18 +61,16 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // 5. Update lastLogin + photoUrl
     await db.collection(COLLECTION_USERS).updateOne(
       { email },
       {
         $set: {
           lastLogin: new Date(),
-          ...(pictureSrc ? { photoUrl: pictureSrc } : {}),
+          ...(picture ? { photoUrl: picture } : {}),
         },
       }
     );
 
-    // 6. Return user to dashboard
     console.log("✅ Auth success:", email, "| role:", user.role);
     return res.status(200).json({
       success: true,
@@ -130,7 +78,7 @@ module.exports = async function handler(req, res) {
         name:     user.name,
         email:    user.email,
         role:     user.role,
-        photoUrl: pictureSrc || user.photoUrl || "",
+        photoUrl: picture || user.photoUrl || "",
       },
     });
 
