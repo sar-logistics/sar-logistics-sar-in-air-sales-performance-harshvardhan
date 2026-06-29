@@ -98,47 +98,72 @@
 /* ====================== AUTH ====================== */
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
+var tokenClient = null;
 
-function startGoogleSignIn() {
-  var btn = document.getElementById('google-signin-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<div class="login-spinner"></div> Signing in…';
-  hideLoginError();
-
-  // Always use popup on explicit button click — reliable across all browsers
-  google.accounts.id.initialize({
+// Initialise the token client once the GSI library is ready
+// We use initTokenClient (implicit flow) — gives us an access_token we can
+// exchange for an id_token via Google's userinfo endpoint, all client-side.
+function initGoogleAuth() {
+  tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
-    callback: handleGoogleCredential,
-    ux_mode: 'popup',
-    auto_select: false,
-    cancel_on_tap_outside: true,
-  });
-  google.accounts.id.prompt(function(notification) {
-    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-      // Popup was blocked or dismissed — reset button
+    scope: 'openid email profile',
+    callback: handleTokenResponse,
+    error_callback: function(err) {
+      console.error('OAuth error:', err);
+      showLoginError('Sign-in failed. Please try again.');
       resetSignInButton();
     }
   });
 }
 
-function handleGoogleCredential(response) {
-  var idToken = response.credential;
-  if (!idToken) {
-    showLoginError('Sign-in was cancelled. Please try again.');
+function startGoogleSignIn() {
+  hideLoginError();
+  var btn = document.getElementById('google-signin-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="login-spinner"></div> Signing in…';
+
+  if (!tokenClient) {
+    showLoginError('Google Sign-In is still loading. Please wait a moment and try again.');
     resetSignInButton();
     return;
   }
-  verifyWithBackend(idToken);
+  // This opens the real Google account picker popup on button click
+  tokenClient.requestAccessToken({ prompt: 'select_account' });
 }
 
-function verifyWithBackend(idToken) {
+function handleTokenResponse(tokenResponse) {
+  if (tokenResponse.error) {
+    resetSignInButton();
+    return;
+  }
+
   var btn = document.getElementById('google-signin-btn');
   btn.innerHTML = '<div class="login-spinner"></div> Verifying…';
 
+  // Get userinfo from Google using the access token
+  fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+    headers: { Authorization: 'Bearer ' + tokenResponse.access_token }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(userinfo) {
+    if (!userinfo.email) {
+      showLoginError('Could not retrieve your account info. Please try again.');
+      resetSignInButton();
+      return;
+    }
+    verifyWithBackend(userinfo);
+  })
+  .catch(function() {
+    showLoginError('Could not reach Google. Please check your connection.');
+    resetSignInButton();
+  });
+}
+
+function verifyWithBackend(userinfo) {
   fetch('https://sar-logistics-sar-in-air-sales-performance-harshvardhan.vercel.app/api/mongo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken: idToken })
+    body: JSON.stringify({ email: userinfo.email, name: userinfo.name, picture: userinfo.picture })
   })
   .then(function(r) { return r.json().then(function(d){ return {ok: r.ok, data: d}; }); })
   .then(function(res) {
@@ -148,12 +173,11 @@ function verifyWithBackend(idToken) {
       resetSignInButton();
       return;
     }
-    // Auth success — store user, hide login, show dashboard
     currentUser = res.data.user;
     showDashboard();
   })
   .catch(function(err) {
-    console.error('Auth error:', err);
+    console.error('Backend error:', err);
     showLoginError('Could not reach the server. Please check your connection and try again.');
     resetSignInButton();
   });
@@ -902,7 +926,15 @@ document.addEventListener('click', function(e){ if(state.viewDropOpen && !e.targ
 
 
 
-// Dashboard boots only after successful Google auth (see showDashboard())
+// Initialise Google auth once GSI library is ready
+window.addEventListener('load', function() {
+  var interval = setInterval(function() {
+    if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
+      clearInterval(interval);
+      initGoogleAuth();
+    }
+  }, 100);
+});
 
 </script>
 </body>
