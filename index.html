@@ -160,7 +160,7 @@ function handleTokenResponse(tokenResponse) {
 }
 
 function verifyWithBackend(userinfo) {
-  fetch('https://sar-logistics-sar-in-air-sales-performance-harshvardhan.vercel.app/api/mongo', {
+  fetch('/api/mongo', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: userinfo.email, name: userinfo.name, picture: userinfo.picture })
