@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SAR Thailand · Sales Performance</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root {
+    --navy:    #0F1B2D;
+    --navy2:   #1A2D45;
+    --canvas:  #F4F6F9;
+    --white:   #FFFFFF;
+    --blue:    #2563EB;
+    --blue-lt: #EFF4FF;
+    --teal:    #0891B2;
+    --emerald: #059669;
+    --amber:   #D97706;
+    --red:     #DC2626;
+    --slate:   #64748B;
+    --slate-lt:#94A3B8;
+    --border:  #E2E8F0;
+    --fy-gold: #FEF3C7;
+    --fy-text: #92400E;
+    --shadow:  0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md:0 4px 12px rgba(0,0,0,.1);
+    --radius:  8px;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: 'Inter', system-ui, sans-serif; background: var(--canvas); color: #1E293B; font-size: 14px; }
+
+  /* ── LOGIN ── */
+  #login-screen { display: flex; align-items: center; justify-content: center; height: 100vh; background: var(--navy); }
+  .login-card { background: var(--white); border-radius: 16px; padding: 48px 40px; width: 380px; text-align: center; box-shadow: var(--shadow-md); }
+  .login-logo { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 28px; }
+  .login-logo-mark { width: 44px; height: 44px; background: var(--blue); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; font-size: 16px; }
+  .login-logo-text { font-size: 22px; font-weight: 700; color: var(--navy); }
+  .login-logo-text span { font-weight: 400; color: var(--slate); font-size: 13px; display: block; margin-top: 2px; }
+  .login-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  .login-sub { color: var(--slate); font-size: 13px; margin-bottom: 32px; line-height: 1.5; }
+  #google-btn-container { display: flex; justify-content: center; }
+  .login-note { margin-top: 20px; font-size: 11px; color: var(--slate-lt); }
+
+  /* ── APP SHELL ── */
+  #app { display: none; height: 100vh; flex-direction: row; }
+  #app.visible { display: flex; }
+
+  /* ── SIDEBAR ── */
+  .sidebar { width: 220px; flex-shrink: 0; background: var(--navy); display: flex; flex-direction: column; overflow-y: auto; }
+  .sidebar-header { padding: 20px 18px 16px; border-bottom: 1px solid rgba(255,255,255,.07); display: flex; align-items: center; gap: 10px; }
+  .logo-mark { width: 32px; height: 32px; background: var(--blue); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; font-size: 12px; flex-shrink: 0; }
+  .logo-text { font-size: 15px; font-weight: 700; color: #fff; line-height: 1.2; }
+  .logo-text span { font-size: 11px; font-weight: 400; color: rgba(255,255,255,.45); display: block; }
+  .nav-section { padding: 18px 10px 4px; }
+  .nav-label { font-size: 10px; font-weight: 600; color: rgba(255,255,255,.3); letter-spacing: .08em; text-transform: uppercase; padding: 0 8px; margin-bottom: 6px; }
+  .nav-item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 6px; cursor: pointer; color: rgba(255,255,255,.55); font-size: 13px; transition: all .15s; user-select: none; margin-bottom: 2px; }
+  .nav-item:hover { background: rgba(255,255,255,.07); color: rgba(255,255,255,.85); }
+  .nav-item.active { background: var(--blue); color: #fff; font-weight: 500; }
+  .sidebar-footer { margin-top: auto; padding: 14px 16px; border-top: 1px solid rgba(255,255,255,.07); display: flex; align-items: center; gap: 10px; }
+  .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--blue); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #fff; flex-shrink: 0; overflow: hidden; }
+  .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .user-info { flex: 1; min-width: 0; }
+  .user-name { font-size: 12px; font-weight: 500; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .user-role { font-size: 10px; color: rgba(255,255,255,.4); }
+  .sidebar-updated { font-size: 10px; color: rgba(255,255,255,.3); text-align: center; padding: 0 16px 12px; }
+
+  /* ── MAIN ── */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+  /* ── TOPBAR ── */
+  .topbar { background: var(--white); border-bottom: 1px solid var(--border); padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+  .topbar-group { display: flex; align-items: center; gap: 8px; }
+  .topbar-label { font-size: 11px; color: var(--slate); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; }
+  .topbar-select { border: 1px solid var(--border); border-radius: 6px; padding: 5px 28px 5px 10px; font-size: 13px; font-weight: 500; color: #1E293B; background: var(--white); appearance: none; cursor: pointer; outline: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+  .topbar-input { border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 13px; font-weight: 500; color: #1E293B; width: 90px; outline: none; }
+  .topbar-divider { width: 1px; height: 24px; background: var(--border); }
+  .currency-toggle { display: flex; background: var(--canvas); border-radius: 6px; padding: 2px; border: 1px solid var(--border); }
+  .currency-btn { padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: transparent; color: var(--slate); transition: all .15s; }
+  .currency-btn.active { background: var(--blue); color: #fff; }
+  .rate-group { display: flex; align-items: center; gap: 6px; }
+  .rate-label { font-size: 12px; color: var(--slate); }
+  .rate-value { font-size: 13px; font-weight: 600; color: #1E293B; }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .live-badge { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; color: var(--emerald); background: #ECFDF5; border: 1px solid #A7F3D0; padding: 4px 10px; border-radius: 20px; }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--emerald); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .btn-outline { border: 1px solid var(--border); background: var(--white); color: #1E293B; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 5px; transition: all .15s; }
+  .btn-outline:hover { background: var(--canvas); }
+
+  /* ── CONTENT ── */
+  .content { flex: 1; overflow-y: auto; padding: 20px 24px; }
+
+  /* ── KPI CARDS ── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 20px; }
+  .kpi-card { background: var(--white); border-radius: var(--radius); padding: 16px; border-top: 3px solid transparent; box-shadow: var(--shadow); }
+  .kpi-card.blue   { border-top-color: var(--blue); }
+  .kpi-card.teal   { border-top-color: var(--teal); }
+  .kpi-card.red    { border-top-color: var(--red); }
+  .kpi-card.green  { border-top-color: var(--emerald); }
+  .kpi-card.amber  { border-top-color: var(--amber); }
+  .kpi-card.purple { border-top-color: #7C3AED; }
+  .kpi-label { font-size: 10px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--slate); margin-bottom: 8px; }
+  .kpi-value { font-size: 26px; font-weight: 700; line-height: 1; margin-bottom: 4px; font-variant-numeric: tabular-nums; }
+  .kpi-card.blue   .kpi-value { color: var(--blue); }
+  .kpi-card.teal   .kpi-value { color: var(--teal); }
+  .kpi-card.red    .kpi-value { color: var(--red); }
+  .kpi-card.green  .kpi-value { color: var(--emerald); }
+  .kpi-card.amber  .kpi-value { color: var(--amber); }
+  .kpi-card.purple .kpi-value { color: #7C3AED; }
+  .kpi-sub { font-size: 11px; color: var(--slate-lt); }
+
+  /* ── TABLE ── */
+  .table-section { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+  .table-title { font-size: 15px; font-weight: 600; }
+  .table-subtitle { font-size: 12px; color: var(--slate); margin-left: 10px; }
+  .table-meta { font-size: 12px; color: var(--slate); }
+  .btn-leaderboard { background: var(--blue-lt); color: var(--blue); border: 1px solid #BFDBFE; padding: 5px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  thead th { position: sticky; top: 0; background: #F8FAFC; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--slate); padding: 10px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  thead th:first-child, thead th:nth-child(2) { text-align: left; }
+  thead th.fy-col { background: var(--fy-gold); color: var(--fy-text); }
+  tbody tr { border-bottom: 1px solid #F1F5F9; }
+  tbody tr:hover td { background: #FAFBFC; }
+  td { padding: 7px 12px; text-align: right; vertical-align: middle; }
+  td:first-child { text-align: left; }
+  td:nth-child(2) { text-align: left; font-size: 12px; color: var(--slate); padding-left: 20px; }
+  .rep-cell { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-weight: 600; font-size: 13px; cursor: pointer; user-select: none; }
+  .rep-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .rep-toggle { font-size: 10px; color: var(--slate-lt); margin-right: 2px; }
+  .grand-total .rep-cell { background: #F8FAFC; }
+  .grand-total td { background: #F8FAFC; font-weight: 500; }
+  .metric-row td:nth-child(2) { padding-left: 32px; }
+  .val-green { color: var(--emerald); font-weight: 600; }
+  .val-amber { color: var(--amber); font-weight: 600; }
+  .val-red   { color: var(--red); font-weight: 600; }
+  .val-blue  { color: var(--blue); font-weight: 600; }
+  .val-fy    { font-weight: 700; }
+  .achieve-cell { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .achieve-bar-wrap { width: 36px; height: 5px; background: #E2E8F0; border-radius: 3px; flex-shrink: 0; }
+  .achieve-bar { height: 5px; border-radius: 3px; }
+  .achieve-bar.good { background: var(--emerald); }
+  .achieve-bar.warn { background: var(--amber); }
+  .achieve-bar.poor { background: var(--red); }
+  .dash { color: var(--slate-lt); }
+  .rep-rows.collapsed { display: none; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card" id="login-card">
+    <div class="login-logo">
+      <div class="login-logo-mark">SAR</div>
+      <div class="login-logo-text">SAR Thailand <span>Freight · Analytics Platform</span></div>
+    </div>
+    <div class="login-title">Sign in to your account</div>
+    <div class="login-sub">Use your company Google account to access the dashboard.</div>
+    <div id="google-btn-container"></div>
+    <div class="login-note">Access is restricted to authorized SAR Thailand personnel.</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo-mark">SAR</div>
+      <div class="logo-text">SAR Thailand <span>Analytics</span></div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Reports</div>
+      <div class="nav-item active">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        Sales Performance
+      </div>
+      <div class="nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 21V9"/></svg>
+        Tradelane Insights
+      </div>
+      <div class="nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        Customer Insights
+      </div>
+      <div class="nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Agent Insights
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Operations</div>
+      <div class="nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Operation Pendency
+      </div>
+      <div class="nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Finance Pendency
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Admin</div>
+      <div class="nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Usage Analytics
+      </div>
+      <div class="nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Teams
+      </div>
+      <div class="nav-item">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
+        Admin Panel
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="user-avatar" id="sidebar-avatar">HR</div>
+      <div class="user-info">
+        <div class="user-name" id="sidebar-name">—</div>
+        <div class="user-role" id="sidebar-role">—</div>
+      </div>
+    </div>
+    <div class="sidebar-updated" id="sidebar-updated">Updated —</div>
+  </nav>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-group">
+        <span class="topbar-label">Report View</span>
+        <select class="topbar-select"><option>Monthly View</option><option>Quarterly View</option></select>
+      </div>
+      <div class="topbar-group">
+        <span class="topbar-label">From</span>
+        <input class="topbar-input" value="Jan-26"/>
+        <span class="topbar-label">To</span>
+        <input class="topbar-input" value="Jun-26"/>
+      </div>
+      <div class="topbar-divider"></div>
+      <div class="currency-toggle">
+        <button class="currency-btn" id="btn-thb" onclick="setCurrency('THB')">THB</button>
+        <button class="currency-btn active" id="btn-usd" onclick="setCurrency('USD')">USD</button>
+      </div>
+      <div class="rate-group">
+        <span class="rate-label">Rate</span>
+        <span class="rate-value">32.02</span>
+      </div>
+      <div class="topbar-divider"></div>
+      <button class="btn-outline">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+        Filters
+      </button>
+      <div class="topbar-right">
+        <div class="live-badge"><div class="live-dot"></div> Live Data</div>
+        <button class="btn-outline">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Refresh
+        </button>
+        <button class="btn-outline" onclick="signOut()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          Sign Out
+        </button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="kpi-grid">
+        <div class="kpi-card blue">  <div class="kpi-label">Total Shipments</div><div class="kpi-value" id="kpi-shipments">264</div><div class="kpi-sub">Jobs · Period</div></div>
+        <div class="kpi-card teal">  <div class="kpi-label">Total TEUs</div>    <div class="kpi-value" id="kpi-teus">681</div>    <div class="kpi-sub">671 FCL · 10 Tank</div></div>
+        <div class="kpi-card red">   <div class="kpi-label">Tons (Air)</div>    <div class="kpi-value dash">—</div>              <div class="kpi-sub">Chargeable wt</div></div>
+        <div class="kpi-card green"> <div class="kpi-label">Gross Profit</div>  <div class="kpi-value" id="kpi-gp">$48,118</div>  <div class="kpi-sub">USD · Period</div></div>
+        <div class="kpi-card amber"> <div class="kpi-label">GP Target</div>     <div class="kpi-value" id="kpi-target">$152,701</div><div class="kpi-sub" id="kpi-target-sub">Monthly avg $25,450</div></div>
+        <div class="kpi-card purple"><div class="kpi-label">Achievement</div>   <div class="kpi-value" id="kpi-achieve">31.5%</div> <div class="kpi-sub">vs Target</div></div>
+      </div>
+
+      <div class="table-section">
+        <div class="table-header">
+          <div>
+            <span class="table-title">Sales Performance</span>
+            <span class="table-subtitle">Monthly · USD</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="table-meta">Jan-26 – Jun-26</span>
+            <button class="btn-leaderboard">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              Leaderboard
+            </button>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table><thead id="table-head"></thead><tbody id="table-body"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
+const FX_RATE   = 32.02;
+let   currency  = 'USD';
+
+// ── DUMMY DATA (replace with MongoDB fetch later) ──────────────────
+const MONTHS = ['Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26'];
+const REPS = [
+  { id:'AD', name:'Anchalee Dubey',       color:'#2563EB', shipments:[4,5,14,8,8,3],   teus:[8,10,28,16,16,6],   gp:[541,736,2187,1762,1617,1483], target:[0,0,0,0,0,0] },
+  { id:'GM', name:'Genesis Montes',        color:'#0891B2', shipments:[3,0,1,2,2,0],    teus:[6,0,2,4,4,0],       gp:[1384,0,156,847,652,0],        target:[0,0,0,0,0,0] },
+  { id:'HR', name:'Harshvardhan Rawat',    color:'#059669', shipments:[12,20,22,18,10,14],teus:[30,50,55,45,25,35],gp:[2800,4200,5100,2900,1900,870], target:[8483,8483,8483,8483,8483,8483] },
+  { id:'PL', name:'Priya Lekha',           color:'#7C3AED', shipments:[8,16,18,14,5,6],  teus:[16,32,36,28,10,12], gp:[1800,3600,3200,1900,900,1200],target:[8483,8483,8483,8483,8483,8483] },
+  { id:'SC', name:'Somchai Charoenwong',   color:'#D97706', shipments:[9,15,10,11,3,3],  teus:[30,63,37,32,32,13], gp:[1199,2050,1121,346,862,685],  target:[8483,8483,8483,8483,8483,8483] },
+];
+
+function sum(arr) { return arr.reduce((a,b)=>a+b,0); }
+function grandTotal() {
+  const gt = {shipments:[],teus:[],gp:[],target:[]};
+  MONTHS.forEach((_,i)=>{
+    gt.shipments[i]=REPS.reduce((s,r)=>s+r.shipments[i],0);
+    gt.teus[i]     =REPS.reduce((s,r)=>s+r.teus[i],0);
+    gt.gp[i]       =REPS.reduce((s,r)=>s+r.gp[i],0);
+    gt.target[i]   =REPS.reduce((s,r)=>s+r.target[i],0);
+  });
+  return gt;
+}
+function fmt(val,isCurrency=false){
+  if(!val&&val!==0) return '<span class="dash">—</span>';
+  if(isCurrency){const v=currency==='USD'?val:val*FX_RATE;const s=currency==='USD'?'$':'฿';return s+v.toLocaleString('en-US',{maximumFractionDigits:0});}
+  return val===0?'<span class="dash">—</span>':val.toLocaleString('en-US');
+}
+function achieveCell(gp,target){
+  if(!target||target===0) return '<span class="dash">—</span>';
+  const pct=gp/target*100;
+  const cls=pct>=80?'good':pct>=40?'warn':'poor';
+  const txt=pct>=80?'val-green':pct>=40?'val-amber':'val-red';
+  return `<div class="achieve-cell"><span class="${txt}">${pct.toFixed(1)}%</span><div class="achieve-bar-wrap"><div class="achieve-bar ${cls}" style="width:${Math.min(pct,100).toFixed(0)}%"></div></div></div>`;
+}
+
+function buildTable(){
+  let hRow='<tr><th>Sales Rep</th><th>Metric</th><th class="fy-col">FY Total</th>';
+  MONTHS.forEach(m=>hRow+=`<th>${m}</th>`);
+  document.getElementById('table-head').innerHTML=hRow+'</tr>';
+  const gt=grandTotal();
+  let html=buildRepRows('GT','Grand Total','#374151',gt,true,true);
+  REPS.forEach(r=>html+=buildRepRows(r.id,r.name,r.color,r,false,false));
+  document.getElementById('table-body').innerHTML=html;
+  document.querySelectorAll('.rep-cell[data-rep]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const rows=document.querySelector(`.rep-rows[data-rep="${el.dataset.rep}"]`);
+      const tog=el.querySelector('.rep-toggle');
+      if(!rows) return;
+      tog.textContent=rows.classList.toggle('collapsed')?'▶':'▼';
+    });
+  });
+}
+
+function buildRepRows(id,name,color,data,isGT,startExpanded){
+  const {shipments:S,teus:T,gp:G,target:TG}=data;
+  const [fyS,fyT,fyG,fyTG]=[sum(S),sum(T),sum(G),sum(TG)];
+  const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  const rowClass=isGT?'grand-total':'';
+  const tog=startExpanded?'▼':'▶';
+  const collClass=startExpanded?'':' collapsed';
+  let html=`<tr class="${rowClass}"><td colspan="${3+MONTHS.length}" style="padding:0"><div class="rep-cell" data-rep="${id}"><span class="rep-toggle">${tog}</span><div class="rep-avatar" style="background:${color}">${initials}</div><span>${name}</span></div></td></tr>`;
+  html+=`<tbody class="rep-rows${collClass}" data-rep="${id}">`;
+  // Shipments
+  html+=`<tr class="metric-row ${rowClass}"><td></td><td>◀ Shipments</td><td class="fy-col val-fy">${fyS||'<span class="dash">—</span>'}</td>`;
+  S.forEach(v=>html+=`<td>${fmt(v)}</td>`); html+='</tr>';
+  // TEUs
+  html+=`<tr class="metric-row ${rowClass}"><td></td><td><span class="val-blue">▶ Total TEUs</span></td><td class="fy-col val-blue val-fy">${fyT||'<span class="dash">—</span>'}</td>`;
+  T.forEach(v=>html+=`<td class="val-blue">${fmt(v)}</td>`); html+='</tr>';
+  // GP
+  html+=`<tr class="metric-row ${rowClass}"><td></td><td>GP</td><td class="fy-col val-green val-fy">${fmt(fyG,true)}</td>`;
+  G.forEach(v=>html+=`<td class="val-green">${fmt(v,true)}</td>`); html+='</tr>';
+  // Target
+  html+=`<tr class="metric-row ${rowClass}"><td></td><td>Target</td><td class="fy-col val-amber val-fy">${fmt(fyTG,true)}</td>`;
+  TG.forEach(v=>html+=`<td class="val-amber">${fmt(v,true)}</td>`); html+='</tr>';
+  // Achievement
+  html+=`<tr class="metric-row ${rowClass}"><td></td><td>Achievement %</td><td class="fy-col">${achieveCell(fyG,fyTG)}</td>`;
+  G.forEach((g,i)=>html+=`<td>${achieveCell(g,TG[i])}</td>`); html+='</tr>';
+  html+='</tbody>';
+  return html;
+}
+
+function updateKPIs(){
+  const gt=grandTotal();
+  const [totalShip,totalTEU,totalGP,totalTgt]=[sum(gt.shipments),sum(gt.teus),sum(gt.gp),sum(gt.target)];
+  const fx=currency==='USD'?1:FX_RATE; const sym=currency==='USD'?'$':'฿';
+  document.getElementById('kpi-shipments').textContent=totalShip;
+  document.getElementById('kpi-teus').textContent=totalTEU;
+  document.getElementById('kpi-gp').textContent=sym+(totalGP*fx).toLocaleString('en-US',{maximumFractionDigits:0});
+  document.getElementById('kpi-target').textContent=sym+(totalTgt*fx).toLocaleString('en-US',{maximumFractionDigits:0});
+  document.getElementById('kpi-achieve').textContent=totalTgt?(totalGP/totalTgt*100).toFixed(1)+'%':'—';
+  document.getElementById('kpi-target-sub').textContent=`Monthly avg ${sym}${((totalTgt/MONTHS.length)*fx).toLocaleString('en-US',{maximumFractionDigits:0})}`;
+}
+
+function setCurrency(c){
+  currency=c;
+  document.getElementById('btn-thb').classList.toggle('active',c==='THB');
+  document.getElementById('btn-usd').classList.toggle('active',c==='USD');
+  buildTable(); updateKPIs();
+}
+
+// ── GOOGLE SIGN-IN ─────────────────────────────────────────────────
+window.onload = function(){
+  google.accounts.id.initialize({ client_id: CLIENT_ID, callback: handleCredential, auto_select: false });
+  google.accounts.id.renderButton(document.getElementById('google-btn-container'),{ theme:'outline', size:'large', shape:'rectangular', width:280 });
+};
+
+async function handleCredential(response){
+  const card=document.getElementById('login-card');
+  card.innerHTML=`<div style="padding:40px;text-align:center;color:#64748B;"><div style="font-size:28px;margin-bottom:12px;">⏳</div><div style="font-weight:600;margin-bottom:6px;">Verifying your account...</div><div style="font-size:13px;">Checking access permissions</div></div>`;
+
+  try {
+    const res  = await fetch('/api/mongo',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ idToken: response.credential }) });
+    const data = await res.json();
+
+    if(!res.ok){
+      card.innerHTML=`<div style="padding:40px;text-align:center;"><div style="font-size:32px;margin-bottom:12px;">${res.status===403?'🚫':'⚠️'}</div><div style="font-weight:600;font-size:16px;margin-bottom:8px;color:#DC2626;">${res.status===403?'Access Denied':'Sign-in Failed'}</div><div style="font-size:13px;color:#64748B;margin-bottom:24px;line-height:1.5;">${data.message||data.error||'Something went wrong.'}</div><button onclick="location.reload()" style="background:#2563EB;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;">Try Again</button></div>`;
+      return;
+    }
+
+    const {user}=data;
+    document.getElementById('sidebar-name').textContent=user.name;
+    document.getElementById('sidebar-role').textContent=user.role.charAt(0).toUpperCase()+user.role.slice(1);
+    const av=document.getElementById('sidebar-avatar');
+    av.innerHTML=user.photoUrl?`<img src="${user.photoUrl}" alt="${user.name}"/>`:user.name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+    const now=new Date();
+    document.getElementById('sidebar-updated').textContent=`Updated ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('app').classList.add('visible');
+    buildTable(); updateKPIs();
+
+  } catch(err){
+    card.innerHTML=`<div style="padding:40px;text-align:center;"><div style="font-size:32px;margin-bottom:12px;">⚠️</div><div style="font-weight:600;font-size:15px;margin-bottom:8px;">Network Error</div><div style="font-size:13px;color:#64748B;margin-bottom:24px;">${err.message}</div><button onclick="location.reload()" style="background:#2563EB;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;">Retry</button></div>`;
+  }
+}
+
+function signOut(){
+  google.accounts.id.disableAutoSelect();
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('app').classList.remove('visible');
+}
+</script>
+</body>
+</html>

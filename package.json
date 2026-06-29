@@ -1,0 +1,8 @@
+{
+  "name": "sar-thailand-dashboard",
+  "version": "1.0.0",
+  "description": "SAR Thailand Analytics Dashboard",
+  "dependencies": {
+    "mongodb": "^6.7.0"
+  }
+}
