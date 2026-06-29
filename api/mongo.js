@@ -1,89 +1,251 @@
 // ─────────────────────────────────────────────────────────────────
-//  api/mongo.js  —  Vercel Serverless Function
-//  Endpoint:  POST /api/mongo
-//  Body:      { email, name, picture }  (from Google userinfo)
-//  Returns:   { success, user: { name, email, role, photoUrl } }
+//  api/mongo-batch.js  —  Vercel Serverless Function
+//
+//  POST /api/mongo-batch?action=jobs
+//  Body: { records: { "Sea Export": [...rows], "Air Import": [...] } }
+//  → Clears + rebuilds each job collection from Sheet data
+//
+//  POST /api/mongo-batch?action=mapping
+//  Body: { collectionName: "mapping_sales_targets", records: [...] }
+//  → Clears + rebuilds a mapping collection
+//
+//  POST /api/mongo-batch?action=users
+//  Body: { users: [ { name, email, role } ] }
+//  → Upserts users
+//
+//  All requests must include header:  x-batch-secret: <BATCH_SECRET>
 // ─────────────────────────────────────────────────────────────────
 
 const { MongoClient } = require("mongodb");
 
-const MONGO_URI        = process.env.MONGO_URI;
-const DB_NAME          = "sar-in-air-sales";
-const COLLECTION_USERS = "users";
+const MONGO_URI    = process.env.MONGO_URI;
+const BATCH_SECRET = process.env.BATCH_SECRET;
+const DB_NAME      = "sar-in-air-sales";
+
+// Job tab → MongoDB collection mapping
+const COLLECTIONS = {
+  "Sea Export":        "jobs_sea_export",
+  "Sea Import":        "jobs_sea_import",
+  "Air Export":        "jobs_air_export",
+  "Air Import":        "jobs_air_import",
+  "ISO Tank - Export": "jobs_isotank_export",
+  "ISO Tank - Import": "jobs_isotank_import",
+  "General":           "jobs_general",
+  "Road":              "jobs_road",
+};
+
+// Valid mapping collections (whitelist for security)
+const MAPPING_COLLECTIONS = new Set([
+  "mapping_sales_targets",
+  "mapping_zone_targets",
+]);
 
 let cachedClient = null;
 
 async function getDB() {
   if (cachedClient) return cachedClient.db(DB_NAME);
   cachedClient = new MongoClient(MONGO_URI, {
-    connectTimeoutMS: 10000,
-    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 15000,
+    serverSelectionTimeoutMS: 15000,
   });
   await cachedClient.connect();
+  console.log("✅ MongoDB connected →", DB_NAME);
   return cachedClient.db(DB_NAME);
 }
 
-module.exports = async function handler(req, res) {
-  // ── CORS — must be first, before any early returns ──────────────
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Max-Age", "86400");
+// ── ACTION: jobs ─────────────────────────────────────────────────
+async function batchInsertJobs(db, records) {
+  const summary = {};
+  const errors  = [];
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
+  for (const [tabName, rows] of Object.entries(records)) {
+    const collectionName = COLLECTIONS[tabName];
+
+    if (!collectionName) {
+      errors.push(`Unknown tab: "${tabName}" — skipped.`);
+      continue;
+    }
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      summary[tabName] = 0;
+      continue;
+    }
+
+    try {
+      const col = db.collection(collectionName);
+      await col.deleteMany({});
+
+      const stamped = rows.map((row) => ({
+        ...row,
+        _tab:        tabName,
+        _insertedAt: new Date(),
+      }));
+
+      const result = await col.insertMany(stamped, { ordered: false });
+      summary[tabName] = result.insertedCount;
+      console.log(`✅ ${tabName}: inserted ${result.insertedCount}`);
+
+    } catch (err) {
+      console.error(`❌ ${tabName} failed:`, err.message);
+      errors.push(`${tabName}: ${err.message}`);
+      summary[tabName] = 0;
+    }
   }
 
+  return { summary, errors };
+}
+
+// ── ACTION: mapping ───────────────────────────────────────────────
+async function batchInsertMapping(db, collectionName, records) {
+  if (!MAPPING_COLLECTIONS.has(collectionName)) {
+    return { error: `Unknown mapping collection: "${collectionName}"` };
+  }
+
+  if (!Array.isArray(records) || records.length === 0) {
+    return { inserted: 0 };
+  }
+
+  const col = db.collection(collectionName);
+  await col.deleteMany({});
+
+  const stamped = records.map((row) => ({
+    ...row,
+    _insertedAt: new Date(),
+  }));
+
+  const result = await col.insertMany(stamped, { ordered: false });
+  console.log(`✅ Mapping [${collectionName}]: inserted ${result.insertedCount}`);
+  return { inserted: result.insertedCount };
+}
+
+// ── ACTION: users ─────────────────────────────────────────────────
+async function batchUpsertUsers(db, users) {
+  if (!Array.isArray(users) || users.length === 0) {
+    return { inserted: 0, updated: 0, errors: ["No users provided"] };
+  }
+
+  const col     = db.collection("users");
+  const results = { inserted: 0, updated: 0, errors: [] };
+
+  for (const u of users) {
+    const email = u.email?.toLowerCase().trim();
+    if (!email || !u.name) {
+      results.errors.push(`Skipped: missing name or email → ${JSON.stringify(u)}`);
+      continue;
+    }
+
+    try {
+      const result = await col.updateOne(
+        { email },
+        {
+          $set: {
+            name:      u.name,
+            email,
+            role:      u.role     || "user",
+            isActive:  u.isActive !== undefined ? u.isActive : true,
+            updatedAt: new Date(),
+          },
+          $setOnInsert: {
+            createdAt: new Date(),
+            lastLogin: null,
+            photoUrl:  "",
+          },
+        },
+        { upsert: true }
+      );
+
+      if (result.upsertedCount > 0)      results.inserted++;
+      else if (result.modifiedCount > 0) results.updated++;
+
+    } catch (err) {
+      results.errors.push(`${email}: ${err.message}`);
+    }
+  }
+
+  return results;
+}
+
+// ── Main handler ─────────────────────────────────────────────────
+module.exports = async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-batch-secret");
+
+  if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed. Use POST." });
   }
 
-  const { email: rawEmail, name, picture } = req.body || {};
-
-  if (!rawEmail) {
-    return res.status(400).json({ error: "email is required in request body." });
+  const incomingSecret = req.headers["x-batch-secret"];
+  if (!BATCH_SECRET || incomingSecret !== BATCH_SECRET) {
+    return res.status(401).json({ error: "Unauthorized. Invalid or missing batch secret." });
   }
 
-  const email = rawEmail.toLowerCase().trim();
+  const action = req.query?.action || req.body?.action;
+  if (!action) {
+    return res.status(400).json({ error: "action is required: jobs | mapping | users" });
+  }
 
   try {
-    const db   = await getDB();
-    const user = await db.collection(COLLECTION_USERS).findOne(
-      { email, isActive: true },
-      { projection: { name: 1, email: 1, role: 1, photoUrl: 1 } }
-    );
+    const db = await getDB();
 
-    if (!user) {
-      console.warn("Unauthorized access attempt:", email);
-      return res.status(403).json({
-        error:   "Access denied",
-        message: "Your account is not authorized. Contact Harshvardhan Rawat.",
+    // ── jobs ────────────────────────────────────────────────────
+    if (action === "jobs") {
+      const { records } = req.body || {};
+      if (!records || typeof records !== "object") {
+        return res.status(400).json({ error: 'records object required: { "Sea Export": [...] }' });
+      }
+
+      const totalRows = Object.values(records).reduce((s, r) => s + (r?.length || 0), 0);
+      console.log(`📦 Batch jobs: ${Object.keys(records).length} tabs, ${totalRows} rows`);
+
+      const { summary, errors } = await batchInsertJobs(db, records);
+      return res.status(200).json({
+        success:       true,
+        action:        "jobs",
+        summary,
+        totalInserted: Object.values(summary).reduce((s, n) => s + n, 0),
+        ...(errors.length ? { errors } : {}),
       });
     }
 
-    await db.collection(COLLECTION_USERS).updateOne(
-      { email },
-      {
-        $set: {
-          lastLogin: new Date(),
-          ...(picture ? { photoUrl: picture } : {}),
-        },
+    // ── mapping ─────────────────────────────────────────────────
+    if (action === "mapping") {
+      const { collectionName, records } = req.body || {};
+      if (!collectionName || !records) {
+        return res.status(400).json({ error: "collectionName and records are required." });
       }
-    );
 
-    console.log("✅ Auth success:", email, "| role:", user.role);
-    return res.status(200).json({
-      success: true,
-      user: {
-        name:     user.name,
-        email:    user.email,
-        role:     user.role,
-        photoUrl: picture || user.photoUrl || "",
-      },
-    });
+      const result = await batchInsertMapping(db, collectionName, records);
+      if (result.error) return res.status(400).json({ error: result.error });
+
+      return res.status(200).json({
+        success:  true,
+        action:   "mapping",
+        collection: collectionName,
+        inserted: result.inserted,
+      });
+    }
+
+    // ── users ────────────────────────────────────────────────────
+    if (action === "users") {
+      const { users } = req.body || {};
+      if (!users) return res.status(400).json({ error: "users array required." });
+
+      const results = await batchUpsertUsers(db, users);
+      return res.status(200).json({
+        success:  true,
+        action:   "users",
+        inserted: results.inserted,
+        updated:  results.updated,
+        ...(results.errors.length ? { errors: results.errors } : {}),
+      });
+    }
+
+    return res.status(400).json({ error: `Unknown action: "${action}". Use jobs | mapping | users` });
 
   } catch (err) {
-    console.error("❌ Auth error:", err.message);
-    return res.status(500).json({ error: "Authentication failed", detail: err.message });
+    console.error("❌ Batch error:", err.message);
+    return res.status(500).json({ error: "Batch operation failed", detail: err.message });
   }
 };
