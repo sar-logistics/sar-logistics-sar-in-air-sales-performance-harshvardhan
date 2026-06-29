@@ -34,6 +34,8 @@
 /* ====================== DATA ====================== */
 var months = ['Jan','Feb','Mar','Apr','May','Jun'];
 var months26 = months.map(function(m){return m+'-26';});
+// ── LIVE DATA: fetched from MongoDB via Vercel API ──────────
+// Fallback to static data if API unavailable
 var repsRaw = [
   { name:'Harshvardhan Rawat',  hue:255, gp:[2800,4200,5100,2900,1900,870],   ship:[12,20,22,18,10,14], tank:[0,0,0,0,0,0], tgt:8483 },
   { name:'Anchalee Dubey',      hue:215, gp:[541,736,2187,1762,1617,1483],    ship:[4,5,14,8,8,3],      tank:[0,0,3,0,0,0], tgt:0 },
@@ -43,7 +45,33 @@ var repsRaw = [
   { name:'Manoj Pant',          hue:145, gp:[2865,1942,1997,2145,622,186],    ship:[7,9,3,13,3,2],      tank:[0,0,0,0,0,0], tgt:22450 }
 ];
 
-var state = { currency:'USD', shipOpen:{}, drill:null };
+var API_BASE = 'https://sar-logistics-sar-in-air-sales-performance-harshvardhan.vercel.app';
+var dataLoaded = false;
+
+function fetchLiveData() {
+  fetch(API_BASE + '/api/mongo-sales')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.repsRaw && data.repsRaw.length > 0) {
+        repsRaw = data.repsRaw;
+        dataLoaded = true;
+        // Update Live Data badge to show last push time
+        var pushed = data.pushedAt ? new Date(data.pushedAt) : null;
+        if (pushed) {
+          var ts = pushed.toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'});
+          var liveEl = document.querySelector('[data-live-ts]');
+          if (liveEl) liveEl.textContent = 'Live · ' + ts;
+        }
+        render();
+        console.log('✅ Live data loaded:', repsRaw.length, 'reps, pushed:', data.pushedAt);
+      }
+    })
+    .catch(function(e){
+      console.warn('⚠️ Could not load live data, using static fallback:', e.message);
+    });
+}
+
+var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:32.50, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackRating:0, feedbackSent:false, shipOpen:{}, drill:null };
 
 /* ====================== HELPERS ====================== */
 function fmtCur(v){
@@ -102,25 +130,38 @@ function genShipments(entity, metric, col){
   var routes=[['Bangkok','Los Angeles'],['Laem Chabang','Rotterdam'],['Bangkok','Hamburg'],['Map Ta Phut','Singapore'],['Bangkok','Jebel Ali'],['Laem Chabang','Shanghai'],['Bangkok','Sydney'],['Laem Chabang','Long Beach']];
   var modes=[{n:'FCL',c:'#2F6FED',b:'#EAF1FE'},{n:'LCL',c:'#138A6E',b:'#E3F4EF'},{n:'Air',c:'#7A4FC0',b:'#F1ECFB'},{n:'Tank',c:'#B26AC9',b:'#F7ECFB'}];
   var stats=[{n:'Delivered',c:'#15875A'},{n:'In transit',c:'#2F6FED'},{n:'Customs hold',c:'#C7891E'}];
-  var seed=0, key=entity+metric+col;
+  // Get real GP total for this entity+col
+  var repData = repsRaw.find(function(r){ return r.name===entity; });
+  var monthIdx = months26.indexOf(col);
+  var totalGP = 0;
+  if(repData && monthIdx>=0){ totalGP = repData.gp[monthIdx]; }
+  else if(entity==='Grand Total' && monthIdx>=0){ totalGP = sum(repsRaw.map(function(r){ return r.gp[monthIdx]; })); }
+  else if(repData){ totalGP = sum(repData.gp); } // FY Total
+  else { totalGP = sum(repsRaw.map(function(r){ return sum(r.gp); })); }
+  // Generate shipments that sum to real GP
+  var seed=0, key=entity+col;
   for(var i=0;i<key.length;i++) seed=(seed*31+key.charCodeAt(i))>>>0;
   function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
-  var n=4+Math.floor(rnd()*4), out=[];
+  var shipCount = repData ? (monthIdx>=0 ? repData.ship[monthIdx] : sum(repData.ship)) : (monthIdx>=0 ? sum(repsRaw.map(function(r){return r.ship[monthIdx];})) : sum(repsRaw.map(function(r){return sum(r.ship);})));
+  var n = Math.max(1, Math.min(shipCount, 8));
+  var out=[], remaining=totalGP;
   for(var j=0;j<n;j++){
     var r=routes[Math.floor(rnd()*routes.length)];
     var m=modes[Math.floor(rnd()*modes.length)];
     var s=stats[Math.floor(rnd()*stats.length)];
-    var teus=1+Math.floor(rnd()*4);
-    var gpRaw=700+Math.floor(rnd()*4300);
+    var teus=1+Math.floor(rnd()*3);
+    var gpRaw = j===n-1 ? Math.max(0,remaining) : Math.round(remaining*(0.1+rnd()*0.4));
+    remaining -= gpRaw;
     out.push({jobNo:'SAR-26-'+(10000+Math.floor(rnd()*89999)), origin:r[0], dest:r[1], mode:m.n, modeColor:m.c, modeBg:m.b, teus:teus+' TEU', gpRaw:gpRaw, gpFmt:fmtCur(gpRaw), status:s.n, statusColor:s.c});
   }
   return out;
 }
 
 /* ====================== SIDEBAR ====================== */
-function navItem(label, active, svg){
-  var st = active ? 'color:#2F6FED;background:#EAF1FE;font-weight:600;' : 'color:#5B6678;font-weight:500;';
-  return '<a href="#" class="navlink" style="display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:12px;'+st+'">'+svg+label+'</a>';
+function navItem(label, active, svg, actType, actVal, disabled){
+  var st = active ? 'color:#2F6FED;background:#EAF1FE;font-weight:600;' : (disabled?'color:#B0BAC8;font-weight:500;cursor:default;':'color:#5B6678;font-weight:500;');
+  var act = actType ? ' data-act="'+actType+'" data-val="'+actVal+'"' : '';
+  return '<a href="#" class="navlink"'+act+' style="display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:12px;'+st+'">'+svg+label+'</a>';
 }
 var IC = {
   bar:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="13" width="4" height="7" rx="1"/><rect x="10" y="8" width="4" height="12" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/></svg>',
@@ -147,13 +188,13 @@ function sidebar(){
         +'<div style="font-size:10.5px;color:#8B97A8;font-weight:500;">Harshvardhan Rawat · Admin</div>'
       +'</div>'
     +'</div>'
-    +'<nav style="flex:1;overflow-y:auto;padding:10px 8px;">'
+    +'<nav style="flex:1;overflow-y:auto;padding:10px 8px;overscroll-behavior:contain;">'
       +'<div style="font-size:9.5px;font-weight:700;letter-spacing:0.1em;color:#B0BAC8;padding:0 8px 6px 8px;text-transform:uppercase;">Reports</div>'
       +'<div style="display:flex;flex-direction:column;gap:1px;">'
-        +navItem('Sales Performance',true,IC.bar)
-        +navItem('Tradelane Insights',false,IC.route)
-        +navItem('Customer Insights',false,IC.person)
-        +navItem('Agent Insights',false,IC.headset)
+        +navItem('Sales Performance',state.page==='sales',IC.bar,'page','sales')
+        +navItem('Tradelane Insights',false,IC.route,'','',true)
+        +navItem('Customer Insights',false,IC.person,'','',true)
+        +navItem('Agent Insights',false,IC.headset,'','',true)
         +'<div style="height:1px;background:#E7ECF3;margin:8px 10px;"></div>'
         +navItem('Operation Pendency',false,IC.clip)
         +navItem('Finance Pendency',false,IC.dollar)
@@ -179,27 +220,59 @@ function seg(active){
 }
 
 function topbar(){
+  var isCustom = state.reportView==='Custom';
+  // Rate display: editable on click
+  var rateEl = state.rateEditing
+    ? '<input id="rate-input" type="number" value="'+state.rate+'" step="0.01" min="0" data-act="rateCommit" style="width:52px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:500;color:#15233B;background:#F4F7FB;border:1px solid #2563EB;border-radius:5px;padding:2px 5px;outline:none;" />'
+    : '<span data-act="rateEdit" style="font-family:\'DM Mono\',monospace;color:#5B6678;font-weight:500;cursor:pointer;border-bottom:1px dashed #CBD5E1;">'+state.rate.toFixed(2)+'</span>';
+
   return '<header style="height:46px;flex-shrink:0;background:#FFFFFF;border-bottom:1px solid #E7ECF3;display:flex;align-items:center;gap:10px;padding:0 16px;">'
-    +'<div style="display:flex;align-items:center;gap:8px;">'
+    // ── Report View dropdown ──
+    +'<div style="display:flex;align-items:center;gap:6px;">'
       +'<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#A6B0C0;text-transform:uppercase;">Report View</span>'
-      +'<div style="display:flex;align-items:center;gap:7px;background:#F4F7FB;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;">Monthly View<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8B97A8" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></div>'
+      +'<div style="position:relative;display:inline-block;">'
+        +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:6px;background:#F4F7FB;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;user-select:none;">'+state.reportView+' View<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8B97A8" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></div>'
+        +(state.viewDropOpen
+          ? '<div style="position:absolute;top:calc(100% + 4px);left:0;background:#FFFFFF;border:1px solid #E2E8F0;border-radius:8px;box-shadow:0 8px 24px rgba(15,23,40,0.12);z-index:200;min-width:150px;overflow:hidden;">'
+            +['Monthly','Weekly','Quarterly','Yearly','Custom'].map(function(v){
+              var active=state.reportView===v;
+              return '<div data-act="setView" data-val="'+v+'" style="padding:8px 14px;font-size:12px;font-weight:'+(active?'600':'500')+';color:'+(active?'#fff':'#15233B')+';background:'+(active?'#2563EB':'transparent')+';cursor:pointer;">'+v+' View</div>';
+            }).join('')
+          +'</div>'
+          : '')
+      +'</div>'
     +'</div>'
-    +'<div style="display:flex;align-items:center;gap:8px;">'
+    // ── Date range ──
+    +'<div style="display:flex;align-items:center;gap:6px;">'
       +'<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#A6B0C0;text-transform:uppercase;">From</span>'
-      +'<div style="background:#F4F7FB;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;">Jan-26</div>'
+      +(isCustom
+        ? '<select data-act="setFrom" style="background:#F4F7FB;border:1px solid #2563EB;border-radius:6px;padding:2px 4px;font-size:10.5px;font-weight:600;font-family:inherit;cursor:pointer;color:#15233B;outline:none;">'
+          +['Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26'].map(function(m){ return '<option value="'+m+'"'+(state.dateFrom===m?' selected':'')+'>'+m+'</option>'; }).join('')
+          +'</select>'
+        : '<div style="background:#F4F7FB;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#15233B;">'+state.dateFrom+'</div>')
       +'<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#A6B0C0;text-transform:uppercase;">To</span>'
-      +'<div style="background:#F4F7FB;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;">Jun-26</div>'
+      +(isCustom
+        ? '<select data-act="setTo" style="background:#F4F7FB;border:1px solid #2563EB;border-radius:6px;padding:2px 4px;font-size:10.5px;font-weight:600;font-family:inherit;cursor:pointer;color:#15233B;outline:none;">'
+          +['Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26'].map(function(m){ return '<option value="'+m+'"'+(state.dateTo===m?' selected':'')+'>'+m+'</option>'; }).join('')
+          +'</select>'
+        : '<div style="background:#F4F7FB;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#15233B;">'+state.dateTo+'</div>')
     +'</div>'
+    // ── Currency toggle ──
     +'<div style="display:flex;align-items:center;background:#EEF2F8;border-radius:6px;padding:2px;gap:1px;">'
       +'<button data-act="cur" data-cur="THB" style="border:none;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:5px;'+seg(state.currency==='THB')+'">THB</button>'
       +'<button data-act="cur" data-cur="USD" style="border:none;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:5px;'+seg(state.currency==='USD')+'">USD</button>'
     +'</div>'
-    +'<div style="font-size:10.5px;color:#8B97A8;font-weight:500;">Rate <span style="font-family:\'DM Mono\',monospace;color:#5B6678;font-weight:500;">32.50</span></div>'
-    +'<button class="btnq" style="display:flex;align-items:center;gap:4px;background:#FFFFFF;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#5B6678;cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>Filters</button>'
+    // ── Rate (click to edit) ──
+    +'<div style="font-size:10.5px;color:#8B97A8;font-weight:500;">Rate '+rateEl+'</div>'
+    // ── Filters ──
+    +'<button class="btnq" style="display:flex;align-items:center;gap:4px;background:#FFFFFF;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#5B6678;cursor:pointer;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>Filters</button>'
     +'<div style="flex:1;"></div>'
+    // ── Live Data ──
     +'<div style="display:flex;align-items:center;gap:4px;background:#EAF7EF;border:1px solid #C9EAD6;border-radius:20px;padding:3px 8px;font-size:10.5px;font-weight:700;color:#15875A;"><span style="width:5px;height:5px;border-radius:50%;background:#1FAE6A;display:inline-block;"></span>Live Data</div>'
-    +'<button class="btnq" style="display:flex;align-items:center;gap:4px;background:#FFFFFF;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#5B6678;cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Feedback</button>'
-    +'<button class="btnq" style="display:flex;align-items:center;gap:4px;background:#FFFFFF;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#5B6678;cursor:pointer;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign Out</button>'
+    // ── Feedback ──
+    +'<button data-act="feedbackOpen" style="display:flex;align-items:center;gap:4px;background:#FFFFFF;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#5B6678;cursor:pointer;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Feedback</button>'
+    // ── Sign Out ──
+    +'<button class="btnq" style="display:flex;align-items:center;gap:4px;background:#FFFFFF;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#5B6678;cursor:pointer;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign Out</button>'
   +'</header>';
 }
 
@@ -270,7 +343,7 @@ function tableRows(){
     var tons=months.map(function(){return 0;});
     var tgtArr=months.map(function(){return e.tgt;});
     var achArr=months.map(function(_,i){return e.tgt?Math.round(e.gp[i]/e.tgt*100):0;});
-    function metric(label,indent,type,color,vals,fy,toggleType,repInfo){
+    function metric(label,indent,type,color,vals,fy,toggleType,repInfo,clickable){
       var isShip = toggleType==='ship';
       var isTons = false;
       var isOpen = isShip ? shipOpen : false;
@@ -279,7 +352,7 @@ function tableRows(){
         labelWeight:indent?500:600, labelStyle:indent?'italic':'normal',
         caret:arrowChar, toggleType:toggleType||false, entityName:e.name,
         repInfo:repInfo||null,
-        cells:buildCells(fy,vals,type,color,e.name,label,colLabels)};
+        cells:buildCells(fy,vals,type,color,e.name,label,colLabels,clickable!==false)};
     }
     rows.push(metric('Shipments',0,'int','#15233B',e.ship,sum(e.ship),'ship',{name:e.name,initials:e.initials,avatarBg:e.avatarBg,nameWeight:isGrand?700:600,groupBg:isGrand?'#F1F6FF':'#FCFDFF',achFmt:e.tgt>0?achFy+'%':'—',barWidth:Math.min(100,achFy)+'%',barColor:achFy>=100?'#15875A':achFy<50?'#E08A2B':'#2F6FED',achColor:achFy>=100?'#15875A':achFy<50?'#C26A12':'#2F6FED'}));
     if(shipOpen){
@@ -288,8 +361,8 @@ function tableRows(){
       rows.push(metric('LCL (Ocean in CBM)',1,'dash','#9AA4B2',lcl,0,false));
     }
     rows.push(metric('GP',0,'cur','#374151',e.gp,sum(e.gp),false));
-    rows.push(metric('Target',0,'cur','#374151',tgtArr,e.tgt*6,false));
-    rows.push(metric('Achievement %',0,'pct','#374151',achArr,achFy,false));
+    rows.push(metric('Target',0,'cur','#374151',tgtArr,e.tgt*6,false,false));
+    rows.push(metric('Achievement %',0,'pct','#374151',achArr,achFy,false,false));
   });
   return rows;
 }
@@ -320,7 +393,11 @@ function salesTable(M){
       +'</tr>';
     } else {
       var mcells=row.cells.map(function(c){
-        return '<td class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'" style="text-align:right;padding:5px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+c.bg+';border-left:'+c.borderLeft+';white-space:nowrap;">'+c.val+'</td>';
+        if(c.clickable){
+          return '<td class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'" style="text-align:right;padding:5px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+c.bg+';border-left:'+c.borderLeft+';white-space:nowrap;">'+c.val+'</td>';
+        } else {
+          return '<td style="text-align:right;padding:5px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+c.bg+';border-left:'+c.borderLeft+';white-space:nowrap;">'+c.val+'</td>';
+        }
       }).join('');
       var isShipRow = row.toggleType==='ship';
       var isTonsRow = row.toggleType==='tons';
@@ -367,7 +444,9 @@ function salesTable(M){
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:12px;">'
         +'<span style="font-size:12px;color:#94A3B8;font-weight:500;">Jan-26 – Jun-26</span>'
-        +'<button class="btnq" style="display:flex;align-items:center;gap:6px;background:#EFF4FF;border:1px solid #BFDBFE;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;color:#2563EB;cursor:pointer;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Leaderboard</button>'
+        +(state.page==='leaderboard'
+          ? '<button data-act="page" data-val="sales" class=\"btnq\" style=\"display:flex;align-items:center;gap:5px;background:#2563EB;border:1px solid #2563EB;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;\"><svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M19 12H5M12 19l-7-7 7-7\"/></svg>Back</button>'
+          : '<button data-act="page" data-val="leaderboard" class=\"btnq\" style=\"display:flex;align-items:center;gap:5px;background:#EFF4FF;border:1px solid #BFDBFE;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;color:#2563EB;cursor:pointer;\"><svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><polyline points=\"22 12 18 12 15 21 9 3 6 12 2 12\"/></svg>Leaderboard</button>')
       +'</div>'
     +'</div>'
     +'<div style="overflow-x:auto;">'
@@ -409,24 +488,215 @@ function drawer(){
 }
 
 /* ====================== RENDER ====================== */
+function leaderboard(){
+  var M = model();
+  // Sort reps by GP total descending
+  var sorted = repsRaw.map(function(r){
+    var gpTotal = sum(r.gp);
+    var shipTotal = sum(r.ship);
+    var tgtTotal = r.tgt * 6;
+    var ach = tgtTotal > 0 ? gpTotal / tgtTotal : 0;
+    var achPct = Math.round(ach * 100);
+    var last = r.gp[5], prev = r.gp[4];
+    var momPct = prev ? Math.round((last - prev) / prev * 100) : 0;
+    var trend = last > prev ? 'up' : last < prev ? 'down' : 'flat';
+    return { name:r.name, hue:r.hue, gpTotal:gpTotal, shipTotal:shipTotal,
+      tgtTotal:tgtTotal, achPct:achPct, ach:ach, momPct:momPct, trend:trend,
+      gp:r.gp, tgt:r.tgt };
+  }).sort(function(a,b){ return b.gpTotal - a.gpTotal; });
+
+  var medals = ['🥇','🥈','🥉'];
+
+  // Sparkline helper
+  function spark(arr, color){
+    var max=Math.max.apply(null,arr), min=Math.min.apply(null,arr);
+    var W=80, H=24, pad=2;
+    var pts = arr.map(function(v,i){
+      var x = pad + i*((W-2*pad)/(arr.length-1));
+      var y = (H-pad) - ((v-min)/((max-min)||1))*(H-2*pad);
+      return x.toFixed(1)+','+y.toFixed(1);
+    }).join(' ');
+    return '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="overflow:visible;">'
+      +'<polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+      +'</svg>';
+  }
+
+  // Top 3 podium
+  var podium = '';
+  if(sorted.length >= 3){
+    var order = [sorted[1], sorted[0], sorted[2]]; // 2nd, 1st, 3rd
+    var heights = ['80px','110px','60px'];
+    var podColors = ['#94A3B8','#F59E0B','#CD7C3A'];
+    var ranks = ['2nd','1st','3rd'];
+    podium = '<div style="display:flex;align-items:flex-end;justify-content:center;gap:12px;margin-bottom:28px;padding:24px 0 0;">';
+    order.forEach(function(r, idx){
+      var avatarBg = 'oklch(0.6 0.12 '+r.hue+')';
+      var ini = r.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+      podium += '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;max-width:180px;">'
+        +'<div style="width:44px;height:44px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;border:3px solid '+podColors[idx]+';">'+ini+'</div>'
+        +'<div style="text-align:center;">'
+          +'<div style="font-size:12px;font-weight:700;color:#15233B;white-space:nowrap;">'+r.name.split(' ')[0]+'</div>'
+          +'<div style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:'+podColors[idx]+';">'+fmtCur(r.gpTotal)+'</div>'
+        +'</div>'
+        +'<div style="width:100%;height:'+heights[idx]+';background:'+podColors[idx]+';border-radius:6px 6px 0 0;display:flex;align-items:center;justify-content:center;">'
+          +'<span style="font-size:22px;">'+medals[idx]+'</span>'
+        +'</div>'
+      +'</div>';
+    });
+    podium += '</div>';
+  }
+
+  // Full rankings table
+  var rows = sorted.map(function(r, i){
+    var avatarBg = 'oklch(0.6 0.12 '+r.hue+')';
+    var ini = r.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+    var trendColor = r.trend==='up'?'#15875A':r.trend==='down'?'#DC2626':'#94A3B8';
+    var trendIcon = r.trend==='up'?'▲':r.trend==='down'?'▼':'—';
+    var achColor = r.achPct>=100?'#15875A':r.achPct>=50?'#2563EB':'#DC2626';
+    var barW = Math.min(100, r.achPct);
+    var barColor = r.achPct>=100?'#15875A':r.achPct>=50?'#2563EB':'#F59E0B';
+    var rankBg = i===0?'#FEF3C7':i===1?'#F1F5F9':i===2?'#FEF0E7':'transparent';
+    var sparkColor = r.trend==='up'?'#15875A':'#DC2626';
+    return '<tr style="border-bottom:1px solid #E2E8F0;background:'+rankBg+';">'
+      // rank
+      +'<td style="padding:8px 12px;font-size:13px;font-weight:700;color:#64748B;width:36px;text-align:center;">'+(i<3?medals[i]:'#'+(i+1))+'</td>'
+      // name
+      +'<td style="padding:8px 12px;">'
+        +'<div style="display:flex;align-items:center;gap:9px;">'
+          +'<div style="width:28px;height:28px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini+'</div>'
+          +'<span style="font-size:12.5px;font-weight:600;color:#15233B;white-space:nowrap;">'+r.name+'</span>'
+        +'</div>'
+      +'</td>'
+      // GP
+      +'<td style="padding:8px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:12.5px;font-weight:700;color:#059669;white-space:nowrap;">'+fmtCur(r.gpTotal)+'</td>'
+      // Target
+      +'<td style="padding:8px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;color:#64748B;white-space:nowrap;">'+(r.tgtTotal>0?fmtCur(r.tgtTotal):'—')+'</td>'
+      // Achievement bar
+      +'<td style="padding:8px 16px;min-width:140px;">'
+        +'<div style="display:flex;align-items:center;gap:8px;">'
+          +'<div style="flex:1;height:6px;background:#E2E8F0;border-radius:99px;overflow:hidden;">'
+            +'<div style="height:100%;width:'+barW+'%;background:'+barColor+';border-radius:99px;"></div>'
+          +'</div>'
+          +'<span style="font-size:11px;font-weight:700;color:'+achColor+';width:36px;text-align:right;">'+(r.tgtTotal>0?r.achPct+'%':'—')+'</span>'
+        +'</div>'
+      +'</td>'
+      // Shipments
+      +'<td style="padding:8px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;color:#374151;">'+r.shipTotal+'</td>'
+      // Trend sparkline
+      +'<td style="padding:8px 12px;">'+spark(r.gp, sparkColor)+'</td>'
+      // MoM
+      +'<td style="padding:8px 12px;text-align:right;white-space:nowrap;">'
+        +'<span style="font-size:11.5px;font-weight:600;color:'+trendColor+';">'+trendIcon+' '+(r.momPct>0?'+':'')+r.momPct+'%</span>'
+      +'</td>'
+    +'</tr>';
+  }).join('');
+
+  return '<div style="background:#FFFFFF;border:1px solid #CBD5E1;border-radius:12px;box-shadow:0 1px 3px rgba(20,35,59,0.08);overflow:hidden;">'
+    // header — same structure as sales table so Back button is in same spot
+    +'<div style="padding:9px 14px;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;justify-content:space-between;">'
+      +'<div>'
+        +'<span style="font-size:12.5px;font-weight:700;color:#15233B;">Leaderboard</span>'
+        +'<span style="font-size:11px;color:#64748B;font-weight:500;margin-left:8px;">'+state.currency+'</span>'
+      +'</div>'
+      +'<div style="display:flex;align-items:center;gap:10px;">'
+        +'<span style="font-size:10.5px;color:#94A3B8;font-weight:500;">Jan-26 – Jun-26</span>'
+        +'<button data-act="page" data-val="sales" class="btnq" style="display:flex;align-items:center;gap:5px;background:#2563EB;border:1px solid #2563EB;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Close</button>'
+      +'</div>'
+    +'</div>'
+    // podium
+    + podium
+    // table
+    +'<div style="overflow-x:auto;">'
+      +'<table style="width:100%;border-collapse:collapse;">'
+        +'<thead style="background:#F8FAFC;">'
+          +'<tr>'
+            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:center;width:36px;">#</th>'
+            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:left;">Sales Rep</th>'
+            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:right;">Gross Profit</th>'
+            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:right;">Target</th>'
+            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:left;min-width:140px;">Achievement</th>'
+            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:right;">Shipments</th>'
+            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:left;">GP Trend</th>'
+            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:right;">MoM</th>'
+          +'</tr>'
+        +'</thead>'
+        +'<tbody>'+rows+'</tbody>'
+      +'</table>'
+    +'</div>'
+  +'</div>';
+}
+
+
+function feedbackModal(){
+  if(!state.feedbackOpen) return '';
+  var stars = [1,2,3,4,5].map(function(n){
+    var filled = n <= state.feedbackRating;
+    return '<span data-act="setRating" data-val="'+n+'" style="font-size:22px;cursor:pointer;color:'+(filled?'#F59E0B':'#CBD5E1')+';transition:color 0.1s;">★</span>';
+  }).join('');
+  var body = state.feedbackSent
+    ? '<div style="padding:28px 24px;text-align:center;">'
+        +'<div style="font-size:32px;margin-bottom:12px;">🎉</div>'
+        +'<div style="font-size:15px;font-weight:700;color:#15233B;margin-bottom:6px;">Thank you!</div>'
+        +'<div style="font-size:12.5px;color:#64748B;">Your feedback has been submitted.</div>'
+        +'<button data-act="feedbackClose" style="margin-top:18px;border:none;background:#2563EB;color:#fff;border-radius:7px;padding:8px 24px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Close</button>'
+      +'</div>'
+    : '<div style="padding:20px 22px;">'
+        +'<div style="font-size:14px;font-weight:700;color:#15233B;margin-bottom:4px;">Share your feedback</div>'
+        +'<div style="font-size:11.5px;color:#64748B;margin-bottom:16px;">Help us improve SAR_IN - Air dashboard</div>'
+        +'<div style="margin-bottom:14px;">'
+          +'<div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px;">How would you rate your experience?</div>'
+          +'<div style="display:flex;gap:4px;">'+stars+'</div>'
+        +'</div>'
+        +'<div style="margin-bottom:16px;">'
+          +'<div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px;">Comments</div>'
+          +'<textarea id="feedback-text" placeholder="What do you like or what can be improved?" style="width:100%;height:80px;border:1px solid #E2E8F0;border-radius:7px;padding:8px 10px;font-size:12px;font-family:inherit;resize:none;outline:none;color:#15233B;" >'+state.feedbackText+'</textarea>'
+        +'</div>'
+        +'<div style="display:flex;justify-content:flex-end;gap:8px;">'
+          +'<button data-act="feedbackClose" style="border:1px solid #E2E8F0;background:#FFFFFF;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;color:#374151;font-family:inherit;">Cancel</button>'
+          +'<button data-act="feedbackSubmit" style="border:none;background:#2563EB;color:#fff;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Submit</button>'
+        +'</div>'
+      +'</div>';
+
+  return '<div data-act="feedbackClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.4);z-index:300;display:flex;align-items:center;justify-content:center;animation:ovFade 0.15s ease;">'
+    +'<div data-stop="1" style="background:#FFFFFF;border-radius:12px;box-shadow:0 20px 60px rgba(15,23,40,0.18);width:380px;max-width:94vw;overflow:hidden;animation:drwSlide 0.2s cubic-bezier(0.22,1,0.36,1);">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #F1F5F9;">'
+        +'<div style="display:flex;align-items:center;gap:8px;">'
+          +'<div style="width:28px;height:28px;background:#EFF4FF;border-radius:7px;display:flex;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>'
+          +'<span style="font-size:13px;font-weight:700;color:#15233B;">Feedback</span>'
+        +'</div>'
+        +'<button data-act="feedbackClose" style="border:none;background:#F1F5F9;width:26px;height:26px;border-radius:6px;cursor:pointer;color:#64748B;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>'
+      +'</div>'
+      +body
+    +'</div>'
+  +'</div>';
+}
+
+
 function render(){
   var M=model();
-  // Save scroll position before re-render
-  var mainEl = document.querySelector('main');
-  var scrollTop = mainEl ? mainEl.scrollTop : 0;
-  document.getElementById('app').innerHTML =
-    sidebar()
-    +'<div style="flex:1;display:flex;flex-direction:column;height:100%;overflow:hidden;">'
-      +topbar()
-      +'<main style="flex:1;overflow-y:auto;padding:10px 14px 20px;">'
-        +kpiRow(M)
-        +salesTable(M)
-      +'</main>'
-    +'</div>'
-    +drawer();
-  // Restore scroll position after re-render
-  var newMain = document.querySelector('main');
-  if(newMain && scrollTop) newMain.scrollTop = scrollTop;
+  var app=document.getElementById('app');
+  // Only rebuild sidebar on first load — avoids sidebar scroll jump
+  if(!app.querySelector('aside')){
+    app.innerHTML=sidebar()+'<div id="main-col" style="flex:1;display:flex;flex-direction:column;height:100%;overflow:hidden;"><div id="topbar-slot"></div><main id="main-slot" style="flex:1;overflow-y:auto;padding:10px 14px 20px;"></main></div><div id="drawer-slot"></div>';
+  }
+  var mainEl=document.getElementById('main-slot');
+  var scrollTop=mainEl?mainEl.scrollTop:0;
+  // Update only topbar, main content, drawer — sidebar untouched
+  document.getElementById('topbar-slot').innerHTML=topbar();
+  mainEl.innerHTML=kpiRow(M)+(state.page==='leaderboard'?leaderboard():salesTable(M));
+  document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal();
+  if(scrollTop) mainEl.scrollTop=scrollTop;
+}
+function renderKeepTopbar(){
+  // Re-render everything EXCEPT topbar — used when date inputs change
+  // so the native date picker doesn't get destroyed mid-interaction
+  var M=model();
+  var mainEl=document.getElementById('main-slot');
+  var scrollTop=mainEl?mainEl.scrollTop:0;
+  if(mainEl) mainEl.innerHTML=kpiRow(M)+(state.page==='leaderboard'?leaderboard():salesTable(M));
+  var drawerEl=document.getElementById('drawer-slot');
+  if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal();
+  if(scrollTop) mainEl.scrollTop=scrollTop;
 }
 
 function openDrill(entity, metric, col, valueFmt){
@@ -436,18 +706,35 @@ function openDrill(entity, metric, col, valueFmt){
   render();
 }
 
+document.addEventListener('change', function(ev){
+  var el=ev.target;
+  if(el.getAttribute('data-act')==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.value; renderKeepTopbar(); }
+  else if(el.getAttribute('data-act')==='setTo'){ ev.stopPropagation(); state.dateTo=el.value; renderKeepTopbar(); }
+  else if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
+});
 document.addEventListener('click', function(ev){
   var el=ev.target.closest('[data-act]');
   if(!el) return;
   var act=el.getAttribute('data-act');
-  if(act==='cur'){ state.currency=el.getAttribute('data-cur'); render(); }
+  if(act==='page'){ ev.stopPropagation(); ev.preventDefault(); state.page=el.getAttribute('data-val'); render(); }
+  else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
+  else if(act==='rateCommit'){ var v=parseFloat(document.getElementById('rate-input').value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
+  else if(act==='feedbackOpen'){ ev.stopPropagation(); state.feedbackOpen=true; state.feedbackSent=false; state.feedbackText=''; state.feedbackRating=0; render(); }
+  else if(act==='feedbackClose'){ if(ev.target.closest('[data-stop]')&&!el.matches('[data-act="feedbackClose"]')) return; state.feedbackOpen=false; render(); }
+  else if(act==='setRating'){ ev.stopPropagation(); state.feedbackRating=parseInt(el.getAttribute('data-val')); render(); }
+  else if(act==='feedbackSubmit'){ ev.stopPropagation(); var ta=document.getElementById('feedback-text'); if(ta) state.feedbackText=ta.value; state.feedbackSent=true; render(); }
+  else if(act==='toggleViewDrop'){ ev.stopPropagation(); state.viewDropOpen=!state.viewDropOpen; render(); }
+  else if(act==='setView'){ ev.stopPropagation(); state.reportView=el.getAttribute('data-val'); state.viewDropOpen=false; render(); }
+  else if(act==='cur'){ ev.stopPropagation(); ev.preventDefault(); state.currency=el.getAttribute('data-cur'); render(); }
   else if(act==='shipToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.shipOpen[n]=!state.shipOpen[n]; render(); }
   else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
   else if(act==='close'){ if(ev.target.closest('[data-stop]') && !el.matches('[data-act="close"]')) return; state.drill=null; render(); }
 });
-document.addEventListener('keydown', function(e){ if(e.key==='Escape' && state.drill){ state.drill=null; render(); }});
+document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ if(state.viewDropOpen){ state.viewDropOpen=false; render(); } else if(state.drill){ state.drill=null; render(); } } });
+document.addEventListener('click', function(e){ if(state.viewDropOpen && !e.target.closest('[data-act="toggleViewDrop"]') && !e.target.closest('[data-act="setView"]')){ state.viewDropOpen=false; render(); } }, true);
 
 render();
+fetchLiveData();
 </script>
 </body>
 </html>
