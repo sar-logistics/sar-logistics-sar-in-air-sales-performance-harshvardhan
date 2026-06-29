@@ -16,8 +16,7 @@
   ::-webkit-scrollbar{width:10px;height:10px;}
   ::-webkit-scrollbar-thumb{background:#D5DEEA;border-radius:8px;border:2px solid transparent;background-clip:content-box;}
   ::-webkit-scrollbar-thumb:hover{background:#BFCBDC;background-clip:content-box;}
-
-    @keyframes drwSlide{from{transform:translateX(36px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+  @keyframes drwSlide{from{transform:translateX(36px);opacity:0;}to{transform:translateX(0);opacity:1;}}
   @keyframes ovFade{from{opacity:0;}to{opacity:1;}}
   .navlink:hover{background:#F4F7FB;}
   .btnq:hover{border-color:#C9D4E2 !important;}
@@ -29,7 +28,6 @@
 </style>
 </head>
 <body>
-
 <div id="app" style="display:flex;height:100vh;width:100%;overflow:hidden;"></div>
 
 <script>
@@ -734,9 +732,6 @@ document.addEventListener('click', function(ev){
 });
 document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ if(state.viewDropOpen){ state.viewDropOpen=false; render(); } else if(state.drill){ state.drill=null; render(); } } });
 document.addEventListener('click', function(e){ if(state.viewDropOpen && !e.target.closest('[data-act="toggleViewDrop"]') && !e.target.closest('[data-act="setView"]')){ state.viewDropOpen=false; render(); } }, true);
-
-
-
 
 render();
 fetchLiveData();
