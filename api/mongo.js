@@ -1,16 +1,6 @@
 // ─────────────────────────────────────────────────────────────────
 //  api/mongo-batch.js  —  Vercel Serverless Function
-//
-//  POST /api/mongo-batch?action=jobs
-//  Body: { records: { "Sea Export": [...rows], "Air Import": [...] } }
-//
-//  POST /api/mongo-batch?action=mapping
-//  Body: { collectionName: "mapping_sales_targets", records: [...] }
-//
-//  POST /api/mongo-batch?action=users
-//  Body: { users: [ { name, email, role } ] }
-//
-//  Called from Google Apps Script — no secret required
+//  No auth secret — called from Google Apps Script only
 // ─────────────────────────────────────────────────────────────────
 
 const { MongoClient } = require("mongodb");
@@ -46,7 +36,7 @@ async function getDB() {
   return cachedClient.db(DB_NAME);
 }
 
-async function batchInsertJobs(db, records) {
+async function batchInsertJobs(db, records, clearFirst = true) {
   const summary = {};
   const errors  = [];
 
@@ -62,7 +52,8 @@ async function batchInsertJobs(db, records) {
     }
     try {
       const col = db.collection(collectionName);
-      await col.deleteMany({});
+      // Only wipe on first chunk — subsequent chunks append
+      if (clearFirst) await col.deleteMany({});
       const stamped = rows.map((row) => ({ ...row, _tab: tabName, _insertedAt: new Date() }));
       const result  = await col.insertMany(stamped, { ordered: false });
       summary[tabName] = result.insertedCount;
@@ -79,7 +70,6 @@ async function batchInsertMapping(db, collectionName, records) {
     return { error: `Unknown mapping collection: "${collectionName}"` };
   }
   if (!Array.isArray(records) || records.length === 0) return { inserted: 0 };
-
   const col = db.collection(collectionName);
   await col.deleteMany({});
   const stamped = records.map((row) => ({ ...row, _insertedAt: new Date() }));
@@ -93,13 +83,9 @@ async function batchUpsertUsers(db, users) {
   }
   const col     = db.collection("users");
   const results = { inserted: 0, updated: 0, errors: [] };
-
   for (const u of users) {
     const email = u.email?.toLowerCase().trim();
-    if (!email || !u.name) {
-      results.errors.push(`Skipped: missing name or email → ${JSON.stringify(u)}`);
-      continue;
-    }
+    if (!email || !u.name) { results.errors.push(`Skipped: ${JSON.stringify(u)}`); continue; }
     try {
       const result = await col.updateOne(
         { email },
@@ -109,11 +95,9 @@ async function batchUpsertUsers(db, users) {
         },
         { upsert: true }
       );
-      if (result.upsertedCount > 0)      results.inserted++;
+      if (result.upsertedCount > 0) results.inserted++;
       else if (result.modifiedCount > 0) results.updated++;
-    } catch (err) {
-      results.errors.push(`${email}: ${err.message}`);
-    }
+    } catch (err) { results.errors.push(`${email}: ${err.message}`); }
   }
   return results;
 }
@@ -133,9 +117,9 @@ module.exports = async function handler(req, res) {
     const db = await getDB();
 
     if (action === "jobs") {
-      const { records } = req.body || {};
+      const { records, clearFirst = true } = req.body || {};
       if (!records) return res.status(400).json({ error: "records required" });
-      const { summary, errors } = await batchInsertJobs(db, records);
+      const { summary, errors } = await batchInsertJobs(db, records, clearFirst);
       return res.status(200).json({
         success: true, action: "jobs", summary,
         totalInserted: Object.values(summary).reduce((s, n) => s + n, 0),
