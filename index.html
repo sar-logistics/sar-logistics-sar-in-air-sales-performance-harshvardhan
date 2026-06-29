@@ -17,15 +17,7 @@
   ::-webkit-scrollbar-thumb{background:#D5DEEA;border-radius:8px;border:2px solid transparent;background-clip:content-box;}
   ::-webkit-scrollbar-thumb:hover{background:#BFCBDC;background-clip:content-box;}
 
-  /* ── LOGIN ─────────────────────────────────────────────── */
-  #login-screen{display:flex;align-items:center;justify-content:center;height:100vh;background:#0F1B2D;position:fixed;inset:0;z-index:9999;}
-  .login-card{background:#fff;border-radius:16px;padding:44px 40px;width:360px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
-  .login-logo{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:24px;}
-  .login-logo-mark{width:40px;height:40px;background:#2563EB;border-radius:9px;display:flex;align-items:center;justify-content:center;}
-  .login-title{font-size:18px;font-weight:700;color:#15233B;margin-bottom:6px;}
-  .login-sub{font-size:12.5px;color:#64748B;margin-bottom:28px;line-height:1.5;}
-  .login-note{margin-top:16px;font-size:10.5px;color:#94A3B8;}
-  @keyframes drwSlide{from{transform:translateX(36px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+    @keyframes drwSlide{from{transform:translateX(36px);opacity:0;}to{transform:translateX(0);opacity:1;}}
   @keyframes ovFade{from{opacity:0;}to{opacity:1;}}
   .navlink:hover{background:#F4F7FB;}
   .btnq:hover{border-color:#C9D4E2 !important;}
@@ -35,27 +27,8 @@
   .dcell:hover{background:#E9F1FF !important;}
   .shipcard:hover{border-color:#C9D4E2 !important;background:#FCFDFF;}
 </style>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-
-<div id="login-screen">
-  <div class="login-card">
-    <div class="login-logo">
-      <div class="login-logo-mark">
-        <svg width="22" height="22" viewBox="0 0 32 32" fill="none"><rect x="4" y="18" width="6" height="10" rx="1.5" fill="white"/><rect x="13" y="12" width="6" height="16" rx="1.5" fill="white"/><rect x="22" y="6" width="6" height="22" rx="1.5" fill="white"/></svg>
-      </div>
-      <div style="text-align:left;line-height:1.3;">
-        <div style="font-size:16px;font-weight:700;color:#15233B;">SAR_IN - Air</div>
-        <div style="font-size:11px;color:#64748B;">Sales Performance</div>
-      </div>
-    </div>
-    <div class="login-title">Sign in to continue</div>
-    <div class="login-sub">Use your SAR company Google account to access the dashboard.</div>
-    <div id="google-btn-container" style="display:flex;justify-content:center;"></div>
-    <div class="login-note">Access restricted to authorized SAR Thailand personnel.</div>
-  </div>
-</div>
 
 <div id="app" style="display:flex;height:100vh;width:100%;overflow:hidden;"></div>
 
@@ -763,80 +736,10 @@ document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ if(state
 document.addEventListener('click', function(e){ if(state.viewDropOpen && !e.target.closest('[data-act="toggleViewDrop"]') && !e.target.closest('[data-act="setView"]')){ state.viewDropOpen=false; render(); } }, true);
 
 
-/* ====================== GOOGLE AUTH ====================== */
-var CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
-var API_BASE  = 'https://sar-logistics-sar-in-air-sales-performance-harshvardhan.vercel.app';
 
-window.onload = function() {
-  if (typeof google !== 'undefined' && google.accounts) {
-    google.accounts.id.initialize({
-      client_id    : CLIENT_ID,
-      callback     : handleCredential,
-      auto_select  : false
-    });
-    google.accounts.id.renderButton(
-      document.getElementById('google-btn-container'),
-      { theme:'outline', size:'large', shape:'rectangular', width:280 }
-    );
-  } else {
-    // Google script not loaded yet — retry
-    setTimeout(window.onload, 500);
-  }
-};
-
-async function handleCredential(response) {
-  var loginCard = document.querySelector('.login-card');
-  loginCard.innerHTML = '<div style="padding:40px;text-align:center;color:#64748B;"><div style="font-size:28px;margin-bottom:12px;">⏳</div><div style="font-weight:600;margin-bottom:6px;">Verifying...</div></div>';
-
-  try {
-    var res  = await fetch(API_BASE + '/api/mongo', {
-      method  : 'POST',
-      headers : { 'Content-Type':'application/json' },
-      body    : JSON.stringify({ idToken: response.credential })
-    });
-    var data = await res.json();
-
-    if (!res.ok) {
-      loginCard.innerHTML = '<div style="padding:40px;text-align:center;">'
-        + '<div style="font-size:28px;margin-bottom:12px;">🚫</div>'
-        + '<div style="font-weight:700;font-size:15px;color:#DC2626;margin-bottom:8px;">' + (res.status===403?'Access Denied':'Sign-in Failed') + '</div>'
-        + '<div style="font-size:12.5px;color:#64748B;margin-bottom:20px;">' + (data.message||data.error||'Please try again.') + '</div>'
-        + '<button onclick="location.reload()" style="background:#2563EB;color:#fff;border:none;padding:9px 22px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;">Try Again</button>'
-        + '</div>';
-      return;
-    }
-
-    // Success — hide login, show dashboard
-    var user = data.user;
-    document.getElementById('login-screen').style.display = 'none';
-
-    // Update sidebar with real user info
-    var sidebarFooter = document.querySelector('#app aside > div:last-child');
-    if (sidebarFooter) {
-      var ini = user.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
-      sidebarFooter.innerHTML = '<div style="width:26px;height:26px;border-radius:50%;background:oklch(0.6 0.12 255);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' + ini + '</div>'
-        + '<div style="font-size:10px;color:#8B97A8;font-weight:500;line-height:1.4;">' + user.name + '<br><span style="color:#15875A;">● ' + user.role + '</span></div>';
-    }
-
-    // Load live data
-    fetchLiveData();
-
-  } catch(err) {
-    loginCard.innerHTML = '<div style="padding:40px;text-align:center;">'
-      + '<div style="font-size:28px;margin-bottom:12px;">⚠️</div>'
-      + '<div style="font-weight:600;font-size:15px;margin-bottom:8px;">Network Error</div>'
-      + '<div style="font-size:12px;color:#64748B;margin-bottom:20px;">' + err.message + '</div>'
-      + '<button onclick="location.reload()" style="background:#2563EB;color:#fff;border:none;padding:9px 22px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;">Retry</button>'
-      + '</div>';
-  }
-}
-
-function signOut() {
-  if (typeof google !== 'undefined') google.accounts.id.disableAutoSelect();
-  location.reload();
-}
 
 render();
+fetchLiveData();
 </script>
 </body>
 </html>
