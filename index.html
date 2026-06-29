@@ -105,36 +105,20 @@ function startGoogleSignIn() {
   btn.innerHTML = '<div class="login-spinner"></div> Signing in…';
   hideLoginError();
 
-  // Use Google Identity Services One Tap / popup flow
-  google.accounts.id.initialize({
-    client_id: GOOGLE_CLIENT_ID,
-    callback: handleGoogleCredential,
-    auto_select: false,
-    cancel_on_tap_outside: true,
-  });
-  google.accounts.id.prompt(function(notification) {
-    // If One Tap suppressed or not shown, fall back to popup
-    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-      triggerGooglePopup();
-    }
-  });
-}
-
-function triggerGooglePopup() {
-  // OAuth2 popup fallback using tokenClient
-  var client = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: 'openid email profile',
-    callback: '' // handled via id flow
-  });
-  // Re-init with renderButton to force popup
+  // Always use popup on explicit button click — reliable across all browsers
   google.accounts.id.initialize({
     client_id: GOOGLE_CLIENT_ID,
     callback: handleGoogleCredential,
     ux_mode: 'popup',
     auto_select: false,
+    cancel_on_tap_outside: true,
   });
-  google.accounts.id.prompt();
+  google.accounts.id.prompt(function(notification) {
+    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+      // Popup was blocked or dismissed — reset button
+      resetSignInButton();
+    }
+  });
 }
 
 function handleGoogleCredential(response) {
@@ -919,23 +903,7 @@ document.addEventListener('click', function(e){ if(state.viewDropOpen && !e.targ
 
 
 // Dashboard boots only after successful Google auth (see showDashboard())
-// Auto-sign-in attempt for returning users via Google One Tap
-window.addEventListener('load', function() {
-  if (typeof google !== 'undefined' && google.accounts) {
-    google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleCredential,
-      auto_select: true, // silently signs back in if session exists
-    });
-    google.accounts.id.prompt(function(notification) {
-      // If auto_select fires and signs in → handleGoogleCredential called automatically
-      // If not, user sees the login screen and clicks manually
-      if (notification.getMomentType() === 'skipped' || notification.getMomentType() === 'dismissed') {
-        console.log('One Tap not available — manual sign-in shown');
-      }
-    });
-  }
-});
+
 </script>
 </body>
 </html>
