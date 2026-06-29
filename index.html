@@ -305,19 +305,21 @@ let   currency  = 'USD';
 // ── DUMMY DATA (replace with MongoDB fetch later) ──────────────────
 const MONTHS = ['Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26'];
 const REPS = [
-  { id:'AD', name:'Anchalee Dubey',       color:'#2563EB', shipments:[4,5,14,8,8,3],   teus:[8,10,28,16,16,6],   gp:[541,736,2187,1762,1617,1483], target:[0,0,0,0,0,0] },
-  { id:'GM', name:'Genesis Montes',        color:'#0891B2', shipments:[3,0,1,2,2,0],    teus:[6,0,2,4,4,0],       gp:[1384,0,156,847,652,0],        target:[0,0,0,0,0,0] },
-  { id:'HR', name:'Harshvardhan Rawat',    color:'#059669', shipments:[12,20,22,18,10,14],teus:[30,50,55,45,25,35],gp:[2800,4200,5100,2900,1900,870], target:[8483,8483,8483,8483,8483,8483] },
-  { id:'PL', name:'Priya Lekha',           color:'#7C3AED', shipments:[8,16,18,14,5,6],  teus:[16,32,36,28,10,12], gp:[1800,3600,3200,1900,900,1200],target:[8483,8483,8483,8483,8483,8483] },
-  { id:'SC', name:'Somchai Charoenwong',   color:'#D97706', shipments:[9,15,10,11,3,3],  teus:[30,63,37,32,32,13], gp:[1199,2050,1121,346,862,685],  target:[8483,8483,8483,8483,8483,8483] },
+  { id:'AD', name:'Anchalee Dubey',       color:'#2563EB', shipments:[4,5,14,8,8,3],    teus:[8,10,28,16,16,6],   lcl:[0,0,0,0,0,0], tons:[0,0,0,0,0,0], gp:[541,736,2187,1762,1617,1483],  target:[0,0,0,0,0,0] },
+  { id:'GM', name:'Genesis Montes',        color:'#0891B2', shipments:[3,0,1,2,2,0],     teus:[6,0,2,4,4,0],       lcl:[0,0,0,0,0,0], tons:[0,0,0,0,0,0], gp:[1384,0,156,847,652,0],         target:[0,0,0,0,0,0] },
+  { id:'HR', name:'Harshvardhan Rawat',    color:'#059669', shipments:[12,20,22,18,10,14],teus:[30,50,55,45,25,35], lcl:[0,0,0,0,0,0], tons:[0,0,0,0,0,0], gp:[2800,4200,5100,2900,1900,870],  target:[8483,8483,8483,8483,8483,8483] },
+  { id:'PL', name:'Priya Lekha',           color:'#7C3AED', shipments:[8,16,18,14,5,6],  teus:[16,32,36,28,10,12], lcl:[0,0,0,0,0,0], tons:[0,0,0,0,0,0], gp:[1800,3600,3200,1900,900,1200],  target:[8483,8483,8483,8483,8483,8483] },
+  { id:'SC', name:'Somchai Charoenwong',   color:'#D97706', shipments:[9,15,10,11,3,3],  teus:[30,63,37,32,32,13], lcl:[0,0,0,0,0,0], tons:[0,0,0,0,0,0], gp:[1199,2050,1121,346,862,685],    target:[8483,8483,8483,8483,8483,8483] },
 ];
 
 function sum(arr) { return arr.reduce((a,b)=>a+b,0); }
 function grandTotal() {
-  const gt = {shipments:[],teus:[],gp:[],target:[]};
+  const gt = {shipments:[],teus:[],lcl:[],tons:[],gp:[],target:[]};
   MONTHS.forEach((_,i)=>{
     gt.shipments[i]=REPS.reduce((s,r)=>s+r.shipments[i],0);
     gt.teus[i]     =REPS.reduce((s,r)=>s+r.teus[i],0);
+    gt.lcl[i]      =REPS.reduce((s,r)=>s+r.lcl[i],0);
+    gt.tons[i]     =REPS.reduce((s,r)=>s+r.tons[i],0);
     gt.gp[i]       =REPS.reduce((s,r)=>s+r.gp[i],0);
     gt.target[i]   =REPS.reduce((s,r)=>s+r.target[i],0);
   });
@@ -355,31 +357,65 @@ function buildTable(){
 }
 
 function buildRepRows(id,name,color,data,isGT,startExpanded){
-  const {shipments:S,teus:T,gp:G,target:TG}=data;
-  const [fyS,fyT,fyG,fyTG]=[sum(S),sum(T),sum(G),sum(TG)];
+  const {shipments:S,teus:T,lcl:L,tons:A,gp:G,target:TG}=data;
+  const [fyS,fyT,fyL,fyA,fyG,fyTG]=[sum(S),sum(T),sum(L),sum(A),sum(G),sum(TG)];
   const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
   const rowClass=isGT?'grand-total':'';
   const tog=startExpanded?'▼':'▶';
   const collClass=startExpanded?'':' collapsed';
+  const teuSubId=`teu-sub-${id}`;
+
   let html=`<tr class="${rowClass}"><td colspan="${3+MONTHS.length}" style="padding:0"><div class="rep-cell" data-rep="${id}"><span class="rep-toggle">${tog}</span><div class="rep-avatar" style="background:${color}">${initials}</div><span>${name}</span></div></td></tr>`;
   html+=`<tbody class="rep-rows${collClass}" data-rep="${id}">`;
-  // Shipments
+
+  // Shipments — clickable arrow left
   html+=`<tr class="metric-row ${rowClass}"><td></td><td>◀ Shipments</td><td class="fy-col val-fy">${fyS||'<span class="dash">—</span>'}</td>`;
   S.forEach(v=>html+=`<td>${fmt(v)}</td>`); html+='</tr>';
-  // TEUs
-  html+=`<tr class="metric-row ${rowClass}"><td></td><td><span class="val-blue">▶ Total TEUs</span></td><td class="fy-col val-blue val-fy">${fyT||'<span class="dash">—</span>'}</td>`;
+
+  // Total TEUs — clickable to expand LCL/Tons
+  html+=`<tr class="metric-row ${rowClass}" style="cursor:pointer" onclick="toggleTeuSub('${teuSubId}',this)">
+    <td></td>
+    <td><span class="val-blue"><span class="teu-tog" id="tog-${teuSubId}">▶</span> Total TEUs</span></td>
+    <td class="fy-col val-blue val-fy">${fyT||'<span class="dash">—</span>'}</td>`;
   T.forEach(v=>html+=`<td class="val-blue">${fmt(v)}</td>`); html+='</tr>';
+
+  // LCL (CBM) — sub-row, hidden by default
+  html+=`<tr class="metric-row ${rowClass} teu-sub-row" id="${teuSubId}-lcl" style="display:none">
+    <td></td><td style="padding-left:44px;color:var(--slate-lt);font-style:italic">LCL (CBM)</td>
+    <td class="fy-col val-muted">${fyL?fmt(fyL):'<span class="dash">—</span>'}</td>`;
+  L.forEach(v=>html+=`<td class="val-muted">${v?fmt(v):'<span class="dash">—</span>'}</td>`); html+='</tr>';
+
+  // Tons (Air) — sub-row, hidden by default
+  html+=`<tr class="metric-row ${rowClass} teu-sub-row" id="${teuSubId}-tons" style="display:none">
+    <td></td><td style="padding-left:44px;color:var(--slate-lt);font-style:italic">Tons (Air)</td>
+    <td class="fy-col" style="color:var(--amber)">${fyA?fmt(fyA):'<span class="dash" style=\"color:var(--amber)\">—</span>'}</td>`;
+  A.forEach(v=>html+=`<td style="color:var(--amber)">${v?fmt(v):'<span class="dash" style=\"color:var(--amber)\">—</span>'}</td>`); html+='</tr>';
+
   // GP
   html+=`<tr class="metric-row ${rowClass}"><td></td><td>GP</td><td class="fy-col val-green val-fy">${fmt(fyG,true)}</td>`;
   G.forEach(v=>html+=`<td class="val-green">${fmt(v,true)}</td>`); html+='</tr>';
+
   // Target
   html+=`<tr class="metric-row ${rowClass}"><td></td><td>Target</td><td class="fy-col val-amber val-fy">${fmt(fyTG,true)}</td>`;
   TG.forEach(v=>html+=`<td class="val-amber">${fmt(v,true)}</td>`); html+='</tr>';
+
   // Achievement
   html+=`<tr class="metric-row ${rowClass}"><td></td><td>Achievement %</td><td class="fy-col">${achieveCell(fyG,fyTG)}</td>`;
   G.forEach((g,i)=>html+=`<td>${achieveCell(g,TG[i])}</td>`); html+='</tr>';
+
   html+='</tbody>';
   return html;
+}
+
+function toggleTeuSub(subId, row) {
+  const lcl  = document.getElementById(subId+'-lcl');
+  const tons = document.getElementById(subId+'-tons');
+  const tog  = document.getElementById('tog-'+subId);
+  if (!lcl) return;
+  const isHidden = lcl.style.display === 'none';
+  lcl.style.display  = isHidden ? '' : 'none';
+  tons.style.display = isHidden ? '' : 'none';
+  tog.textContent    = isHidden ? '▼' : '▶';
 }
 
 function updateKPIs(){
