@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;}
@@ -19,6 +20,8 @@
 
     @keyframes drwSlide{from{transform:translateX(36px);opacity:0;}to{transform:translateX(0);opacity:1;}}
   @keyframes ovFade{from{opacity:0;}to{opacity:1;}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+  @keyframes spin{to{transform:rotate(360deg);}}
   .navlink:hover{background:#F4F7FB;}
   .btnq:hover{border-color:#C9D4E2 !important;}
   .sumrow{cursor:pointer;}
@@ -26,18 +29,221 @@
   .dcell{cursor:pointer;}
   .dcell:hover{background:#E9F1FF !important;}
   .shipcard:hover{border-color:#C9D4E2 !important;background:#FCFDFF;}
+
+  /* ── Login screen ── */
+  #login-screen{position:fixed;inset:0;background:#F4F7FB;display:flex;align-items:center;justify-content:center;z-index:1000;animation:ovFade 0.3s ease;}
+  .login-card{background:#FFFFFF;border:1px solid #E2E8F0;border-radius:16px;box-shadow:0 4px 32px rgba(20,35,59,0.10);width:380px;max-width:92vw;padding:36px 32px 32px;animation:fadeUp 0.4s cubic-bezier(0.22,1,0.36,1);}
+  .login-logo{width:40px;height:40px;border-radius:10px;background:#2F6FED;display:flex;align-items:center;justify-content:center;margin-bottom:20px;}
+  .login-title{font-size:20px;font-weight:800;color:#15233B;letter-spacing:-0.02em;margin-bottom:4px;}
+  .login-subtitle{font-size:12.5px;color:#64748B;font-weight:500;margin-bottom:28px;line-height:1.5;}
+  .google-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;background:#FFFFFF;border:1.5px solid #E2E8F0;border-radius:9px;padding:11px 20px;font-size:13px;font-weight:600;color:#15233B;cursor:pointer;font-family:inherit;transition:border-color 0.15s,box-shadow 0.15s;}
+  .google-btn:hover{border-color:#2F6FED;box-shadow:0 0 0 3px rgba(47,111,237,0.08);}
+  .google-btn:active{background:#F8FAFC;}
+  .google-btn:disabled{opacity:0.55;cursor:not-allowed;border-color:#E2E8F0;box-shadow:none;}
+  .login-error{display:none;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:9px 12px;font-size:11.5px;color:#B91C1C;font-weight:500;margin-top:14px;line-height:1.5;}
+  .login-error.show{display:block;}
+  .login-divider{height:1px;background:#F1F5F9;margin:24px 0;}
+  .login-footer{font-size:11px;color:#94A3B8;font-weight:500;text-align:center;line-height:1.6;}
+  .login-spinner{width:16px;height:16px;border:2px solid #E2E8F0;border-top-color:#2F6FED;border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0;}
+  .login-badge{display:inline-flex;align-items:center;gap:5px;background:#EAF7EF;border:1px solid #C9EAD6;border-radius:20px;padding:3px 8px;font-size:10.5px;font-weight:700;color:#15875A;margin-bottom:16px;}
+  .g-logo{flex-shrink:0;}
 </style>
 </head>
 <body>
 
-<div id="app" style="display:flex;height:100vh;width:100%;overflow:hidden;"></div>
+<!-- ── Login Screen ── -->
+<div id="login-screen">
+  <div class="login-card">
+    <!-- Logo -->
+    <div class="login-logo">
+      <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
+        <rect x="4" y="18" width="6" height="10" rx="1.5" fill="white"/>
+        <rect x="13" y="12" width="6" height="16" rx="1.5" fill="white"/>
+        <rect x="22" y="6" width="6" height="22" rx="1.5" fill="white"/>
+      </svg>
+    </div>
+    <!-- Live badge -->
+    <div class="login-badge">
+      <span style="width:5px;height:5px;border-radius:50%;background:#1FAE6A;display:inline-block;"></span>
+      FY 26 · Live Dashboard
+    </div>
+    <div class="login-title">SAR_IN – Air Sales</div>
+    <div class="login-subtitle">Sign in with your SAR Google Workspace account to access the sales performance dashboard.</div>
+
+    <!-- Google Sign-In button -->
+    <button class="google-btn" id="google-signin-btn" onclick="startGoogleSignIn()">
+      <svg class="g-logo" width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+        <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+        <path d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/>
+        <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+      </svg>
+      Continue with Google
+    </button>
+
+    <!-- Error message -->
+    <div class="login-error" id="login-error"></div>
+
+    <div class="login-divider"></div>
+    <div class="login-footer">
+      Access is restricted to authorised SAR team members.<br>
+      Contact <strong style="color:#374151;">Harshvardhan Rawat</strong> to request access.
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none;height:100vh;width:100%;overflow:hidden;flex-direction:row;"></div>
 
 <script>
+/* ====================== AUTH ====================== */
+var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
+var currentUser = null;
+
+function startGoogleSignIn() {
+  var btn = document.getElementById('google-signin-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="login-spinner"></div> Signing in…';
+  hideLoginError();
+
+  // Use Google Identity Services One Tap / popup flow
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredential,
+    auto_select: false,
+    cancel_on_tap_outside: true,
+  });
+  google.accounts.id.prompt(function(notification) {
+    // If One Tap suppressed or not shown, fall back to popup
+    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+      triggerGooglePopup();
+    }
+  });
+}
+
+function triggerGooglePopup() {
+  // OAuth2 popup fallback using tokenClient
+  var client = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: 'openid email profile',
+    callback: '' // handled via id flow
+  });
+  // Re-init with renderButton to force popup
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredential,
+    ux_mode: 'popup',
+    auto_select: false,
+  });
+  google.accounts.id.prompt();
+}
+
+function handleGoogleCredential(response) {
+  var idToken = response.credential;
+  if (!idToken) {
+    showLoginError('Sign-in was cancelled. Please try again.');
+    resetSignInButton();
+    return;
+  }
+  verifyWithBackend(idToken);
+}
+
+function verifyWithBackend(idToken) {
+  var btn = document.getElementById('google-signin-btn');
+  btn.innerHTML = '<div class="login-spinner"></div> Verifying…';
+
+  fetch('https://sar-logistics-sar-in-air-sales-performance-harshvardhan.vercel.app/api/mongo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken: idToken })
+  })
+  .then(function(r) { return r.json().then(function(d){ return {ok: r.ok, data: d}; }); })
+  .then(function(res) {
+    if (!res.ok || !res.data.success) {
+      var msg = res.data.message || res.data.error || 'Access denied.';
+      showLoginError(msg);
+      resetSignInButton();
+      return;
+    }
+    // Auth success — store user, hide login, show dashboard
+    currentUser = res.data.user;
+    showDashboard();
+  })
+  .catch(function(err) {
+    console.error('Auth error:', err);
+    showLoginError('Could not reach the server. Please check your connection and try again.');
+    resetSignInButton();
+  });
+}
+
+function showDashboard() {
+  var loginScreen = document.getElementById('login-screen');
+  var appEl = document.getElementById('app');
+
+  loginScreen.style.opacity = '0';
+  loginScreen.style.transition = 'opacity 0.25s ease';
+  setTimeout(function() {
+    loginScreen.style.display = 'none';
+    appEl.style.display = 'flex';
+
+    // Patch sidebar with real user data
+    if (currentUser) {
+      var ini = currentUser.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+      var roleLabel = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+      patchSidebarUser(ini, currentUser.name, roleLabel, currentUser.photoUrl);
+    }
+    render();
+  }, 260);
+}
+
+function patchSidebarUser(initials, name, role, photoUrl) {
+  // Called after render() builds the sidebar
+  setTimeout(function() {
+    var aside = document.querySelector('aside');
+    if (!aside) return;
+    // Update the bottom avatar + name in sidebar footer
+    var footer = aside.querySelector('div[style*="border-top"]');
+    if (footer) {
+      var avatarEl = footer.querySelector('div[style*="border-radius:50%"]');
+      if (avatarEl) {
+        if (photoUrl) {
+          avatarEl.innerHTML = '';
+          avatarEl.style.overflow = 'hidden';
+          avatarEl.style.padding = '0';
+          avatarEl.innerHTML = '<img src="'+photoUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />';
+        } else {
+          avatarEl.textContent = initials;
+        }
+      }
+    }
+    // Update the header name/role
+    var header = aside.querySelector('div[style*="border-bottom"]');
+    if (header) {
+      var nameEl = header.querySelector('div[style*="font-size:13.5px"]');
+      if (nameEl) nameEl.textContent = 'SAR_IN – Air';
+      var roleEl = header.querySelector('div[style*="font-size:10.5px"]');
+      if (roleEl) roleEl.textContent = name + ' · ' + role;
+    }
+  }, 50);
+}
+
+function showLoginError(msg) {
+  var el = document.getElementById('login-error');
+  if (el) { el.textContent = msg; el.classList.add('show'); }
+}
+function hideLoginError() {
+  var el = document.getElementById('login-error');
+  if (el) el.classList.remove('show');
+}
+function resetSignInButton() {
+  var btn = document.getElementById('google-signin-btn');
+  if (!btn) return;
+  btn.disabled = false;
+  btn.innerHTML = '<svg class="g-logo" width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/><path d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg> Continue with Google';
+}
+
 /* ====================== DATA ====================== */
 var months = ['Jan','Feb','Mar','Apr','May','Jun'];
 var months26 = months.map(function(m){return m+'-26';});
-// ── LIVE DATA: fetched from MongoDB via Vercel API ──────────
-// Fallback to static data if API unavailable
 var repsRaw = [
   { name:'Harshvardhan Rawat',  hue:255, gp:[2800,4200,5100,2900,1900,870],   ship:[12,20,22,18,10,14], tank:[0,0,0,0,0,0], tgt:8483 },
   { name:'Anchalee Dubey',      hue:215, gp:[541,736,2187,1762,1617,1483],    ship:[4,5,14,8,8,3],      tank:[0,0,3,0,0,0], tgt:0 },
@@ -46,32 +252,6 @@ var repsRaw = [
   { name:'Somchai Charoenwong', hue:30,  gp:[1199,2050,1121,346,862,685],     ship:[9,15,10,11,3,3],    tank:[0,0,0,0,0,0], tgt:8483 },
   { name:'Manoj Pant',          hue:145, gp:[2865,1942,1997,2145,622,186],    ship:[7,9,3,13,3,2],      tank:[0,0,0,0,0,0], tgt:22450 }
 ];
-
-var API_BASE = 'https://sar-logistics-sar-in-air-sales-performance-harshvardhan.vercel.app';
-var dataLoaded = false;
-
-function fetchLiveData() {
-  fetch(API_BASE + '/api/mongo-sales')
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (data.repsRaw && data.repsRaw.length > 0) {
-        repsRaw = data.repsRaw;
-        dataLoaded = true;
-        // Update Live Data badge to show last push time
-        var pushed = data.pushedAt ? new Date(data.pushedAt) : null;
-        if (pushed) {
-          var ts = pushed.toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'});
-          var liveEl = document.querySelector('[data-live-ts]');
-          if (liveEl) liveEl.textContent = 'Live · ' + ts;
-        }
-        render();
-        console.log('✅ Live data loaded:', repsRaw.length, 'reps, pushed:', data.pushedAt);
-      }
-    })
-    .catch(function(e){
-      console.warn('⚠️ Could not load live data, using static fallback:', e.message);
-    });
-}
 
 var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:32.50, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackRating:0, feedbackSent:false, shipOpen:{}, drill:null };
 
@@ -738,8 +918,24 @@ document.addEventListener('click', function(e){ if(state.viewDropOpen && !e.targ
 
 
 
-render();
-fetchLiveData();
+// Dashboard boots only after successful Google auth (see showDashboard())
+// Auto-sign-in attempt for returning users via Google One Tap
+window.addEventListener('load', function() {
+  if (typeof google !== 'undefined' && google.accounts) {
+    google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredential,
+      auto_select: true, // silently signs back in if session exists
+    });
+    google.accounts.id.prompt(function(notification) {
+      // If auto_select fires and signs in → handleGoogleCredential called automatically
+      // If not, user sees the login screen and clicks manually
+      if (notification.getMomentType() === 'skipped' || notification.getMomentType() === 'dismissed') {
+        console.log('One Tap not available — manual sign-in shown');
+      }
+    });
+  }
+});
 </script>
 </body>
 </html>
