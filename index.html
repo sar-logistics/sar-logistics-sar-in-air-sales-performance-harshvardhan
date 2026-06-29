@@ -368,8 +368,11 @@ function buildRepRows(id,name,color,data,isGT,startExpanded){
   let html=`<tr class="${rowClass}"><td colspan="${3+MONTHS.length}" style="padding:0"><div class="rep-cell" data-rep="${id}"><span class="rep-toggle">${tog}</span><div class="rep-avatar" style="background:${color}">${initials}</div><span>${name}</span></div></td></tr>`;
   html+=`<tbody class="rep-rows${collClass}" data-rep="${id}">`;
 
-  // Shipments — clickable arrow left
-  html+=`<tr class="metric-row ${rowClass}"><td></td><td>◀ Shipments</td><td class="fy-col val-fy">${fyS||'<span class="dash">—</span>'}</td>`;
+  // Shipments — clickable ◀ collapses/expands all metric sub-rows
+  html+=`<tr class="metric-row ${rowClass}" style="cursor:pointer" onclick="toggleRepRows('${id}',this)">
+    <td></td>
+    <td><span class="val-blue shipments-tog" id="ship-tog-${id}">◀</span> Shipments</td>
+    <td class="fy-col val-fy">${fyS||'<span class="dash">—</span>'}</td>`;
   S.forEach(v=>html+=`<td>${fmt(v)}</td>`); html+='</tr>';
 
   // Total TEUs — clickable to expand LCL/Tons
@@ -416,6 +419,21 @@ function toggleTeuSub(subId, row) {
   lcl.style.display  = isHidden ? '' : 'none';
   tons.style.display = isHidden ? '' : 'none';
   tog.textContent    = isHidden ? '▼' : '▶';
+}
+
+function toggleRepRows(repId, clickedRow) {
+  // Find all metric sub-rows after the shipments row for this rep
+  const tbody = document.querySelector(`.rep-rows[data-rep="${repId}"]`);
+  const tog   = document.getElementById('ship-tog-'+repId);
+  if (!tbody) return;
+  // Get all rows except the shipments row itself (first row in tbody)
+  const allRows = tbody.querySelectorAll('tr');
+  const isCollapsed = allRows[1]?.style.display === 'none';
+  allRows.forEach((tr, i) => {
+    if (i === 0) return; // keep shipments row always visible
+    tr.style.display = isCollapsed ? '' : 'none';
+  });
+  tog.textContent = isCollapsed ? '◀' : '▶';
 }
 
 function updateKPIs(){
