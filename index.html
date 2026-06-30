@@ -550,10 +550,11 @@ function zoneHue(zone){
 }
 
 function repEntity(r){
+  var ini = r.isBranch ? r.name.slice(0,2).toUpperCase() : initials(r.name);
   return {
-    name: r.name, initials: initials(r.name),
+    name: r.name, initials: ini,
     avatarBg: 'oklch(0.6 0.12 ' + r.hue + ')',
-    isRep: true, zone: r.zone,
+    isRep: true, isBranch: !!r.isBranch, zone: r.zone,
     ship: r.ship, gp: r.gp,
     tons: r.tons || months26.map(function(){return 0;}),
     teu:  r.teu  || months26.map(function(){return 0;}),
@@ -1067,7 +1068,7 @@ function tableRows(){
       achFmt: e.tgt>0 ? achFy+'%' : '—',
       barWidth: Math.min(100,achFy)+'%',
       barColor: barColor, achColor: achColor,
-      isZone: isZone, isGrand: isGrand
+      isZone: isZone, isGrand: isGrand, isBranch: !!e.isBranch
     };
 
     rows.push(metric('Shipments', 0, 'int', '#15233B', e.ship, sum(e.ship), 'ship', repInfo));
@@ -1202,14 +1203,16 @@ function salesTable(M){
     var nameCell;
     if (isMiddleOfBlock && ri) {
       var avatarEl;
-      if (isZoneRow || isGrandRow) {
+      if (isZoneRow || isGrandRow || ri.isBranch) {
         avatarEl = '<div style="width:22px;height:22px;border-radius:5px;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
       } else {
         avatarEl = '<div style="width:22px;height:22px;border-radius:50%;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
       }
       var nameLabel = isZoneRow
         ? '<div><div style="font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#7C3AED;text-transform:uppercase;line-height:1;">Zone</div><div style="font-size:11.5px;font-weight:700;color:#15233B;white-space:nowrap;">'+ri.name+'</div></div>'
-        : '<div style="font-size:11.5px;font-weight:'+ri.nameWeight+';white-space:nowrap;color:#15233B;">'+ri.name+'</div>';
+        : ri.isBranch
+          ? '<div><div style="font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#C26A12;text-transform:uppercase;line-height:1;">Branch</div><div style="font-size:11.5px;font-weight:'+ri.nameWeight+';color:#15233B;white-space:nowrap;">'+ri.name+'</div></div>'
+          : '<div style="font-size:11.5px;font-weight:'+ri.nameWeight+';white-space:nowrap;color:#15233B;">'+ri.name+'</div>';
       var zoneToggle = '';
       if (isZoneRow) {
         var zCollapsed = state.zoneOpen[blockEntity] === false;
