@@ -38,7 +38,7 @@ async function getDB() {
   return cachedClient.db(DB_NAME);
 }
 
-async function batchInsertJobs(db, records, clearFirst = true) {
+async function batchInsertJobs(db, records, clearFirst = true, fy = null) {
   const summary = {};
   const errors  = [];
 
@@ -54,9 +54,15 @@ async function batchInsertJobs(db, records, clearFirst = true) {
     }
     try {
       const col = db.collection(collectionName);
-      // Only wipe on first chunk — subsequent chunks append
-      if (clearFirst) await col.deleteMany({});
-      const stamped = rows.map((row) => ({ ...row, _tab: tabName, _insertedAt: new Date() }));
+      // Only wipe rows belonging to THIS fiscal year's previous push — never
+      // wipe the whole collection, since FY26 and FY27 data now coexist in
+      // the same collections. If no fy tag is given, fall back to wiping the
+      // whole collection (legacy single-FY behavior) for backward compatibility.
+      if (clearFirst) {
+        if (fy) await col.deleteMany({ _fy: fy });
+        else await col.deleteMany({});
+      }
+      const stamped = rows.map((row) => ({ ...row, _tab: tabName, _fy: fy || null, _insertedAt: new Date() }));
       const result  = await col.insertMany(stamped, { ordered: false });
       summary[tabName] = result.insertedCount;
     } catch (err) {
@@ -67,14 +73,18 @@ async function batchInsertJobs(db, records, clearFirst = true) {
   return { summary, errors };
 }
 
-async function batchInsertMapping(db, collectionName, records) {
+async function batchInsertMapping(db, collectionName, records, fy = null) {
   if (!MAPPING_COLLECTIONS.has(collectionName)) {
     return { error: `Unknown mapping collection: "${collectionName}"` };
   }
   if (!Array.isArray(records) || records.length === 0) return { inserted: 0 };
   const col = db.collection(collectionName);
-  await col.deleteMany({});
-  const stamped = records.map((row) => ({ ...row, _insertedAt: new Date() }));
+  // Only wipe THIS fiscal year's previously-pushed mapping rows — FY26 and
+  // FY27 mapping data now coexist in the same collection. If no fy tag is
+  // given, fall back to wiping the whole collection (legacy behavior).
+  if (fy) await col.deleteMany({ _fy: fy });
+  else await col.deleteMany({});
+  const stamped = records.map((row) => ({ ...row, _fy: fy || null, _insertedAt: new Date() }));
   const result  = await col.insertMany(stamped, { ordered: false });
   return { inserted: result.insertedCount };
 }
@@ -240,10 +250,15 @@ function getDateColumnFor(cls) {
   return "Job Date";
 }
 
-// Indian Fiscal Year 2026 runs Apr 2025 → Mar 2026
+// Indian Fiscal Years — FY26 runs Apr 2025 → Mar 2026, FY27 runs Apr 2026 → Mar 2027.
+// Both are listed here since FY26 and FY27 job data now coexist in the same
+// MongoDB collections (appended, not replaced) and need to be recognized
+// together for month-bucketing across the combined dataset.
 const FY_MONTHS = [
   "Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
-  "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"
+  "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
+  "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
+  "Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27"
 ];
 const MONTH_NAMES  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -483,14 +498,25 @@ async function getSalesAggregate(db, force) {
   return result;
 }
 
+// Given a month label like "Apr-26", returns which fiscal year it belongs
+// to: "FY26" covers Apr-25→Mar-26, "FY27" covers Apr-26→Mar-27.
+function fyForMonthLabel(monthLabel) {
+  const fy26Months = new Set(["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25","Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"]);
+  return fy26Months.has(monthLabel) ? "FY26" : "FY27";
+}
+
 async function computeSalesAggregate(db) {
-  // 1. Load sales rep mapping
+  // 1. Load sales rep mapping — built as ONE lookup PER FISCAL YEAR, since
+  // FY26 and FY27 mapping rows now coexist in the same collection and a
+  // rep's zone/target can legitimately differ between the two years.
   const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
-  const repLookup = {};
+  const repLookupByFY = { FY26: {}, FY27: {} };
   for (const row of mappingRows) {
     const key = normalizeName(row["Sales Rep Name"]);
     if (!key) continue;
-    repLookup[key] = {
+    const fy = (row._fy === "FY27") ? "FY27" : "FY26"; // untagged/legacy rows default to FY26
+    if (!repLookupByFY[fy]) repLookupByFY[fy] = {};
+    repLookupByFY[fy][key] = {
       displayName:   String(row["Display Name"] || row["Sales Rep Name"] || "").trim(),
       zone:          String(row["Zone"] || "Unassigned").trim(),
       lob:           String(row["LOB"] || "").trim(),
@@ -499,13 +525,15 @@ async function computeSalesAggregate(db) {
     };
   }
 
-  // 2. Load zone targets
+  // 2. Load zone targets — same per-FY split
   const zoneTargetRows = await db.collection("mapping_zone_targets").find({}).toArray();
-  const zoneTargets = {};
+  const zoneTargetsByFY = { FY26: {}, FY27: {} };
   for (const row of zoneTargetRows) {
     const zone = String(row["Zone"] || "").trim();
     if (!zone) continue;
-    zoneTargets[zone] = {
+    const fy = (row._fy === "FY27") ? "FY27" : "FY26";
+    if (!zoneTargetsByFY[fy]) zoneTargetsByFY[fy] = {};
+    zoneTargetsByFY[fy][zone] = {
       yearlyTarget:  parseFloat(row["Yearly Target (USD)"]  || 0) || 0,
       monthlyTarget: parseFloat(row["Monthly Target (USD)"] || 0) || 0,
     };
@@ -541,8 +569,6 @@ async function computeSalesAggregate(db) {
       const salesPerson = normalizeName(job["Sales Person"]);
       if (!salesPerson) continue;
 
-      const mapped = repLookup[salesPerson];
-
       // Classify this row by its own LOB column (or _tab for ISO Tank),
       // NOT by which collection it happens to be stored in — protects
       // against rows that were misfiled into the wrong sheet tab.
@@ -561,6 +587,13 @@ async function computeSalesAggregate(db) {
         }
       }
       if (!monthLabel || !FY_MONTHS.includes(monthLabel)) continue;
+
+      // Pick the mapping lookup matching THIS row's own fiscal year — a rep's
+      // zone/target can differ between FY26 and FY27, so the right lookup
+      // table depends on which year this specific job row's date falls in.
+      const rowFY = fyForMonthLabel(monthLabel);
+      const repLookup = repLookupByFY[rowFY] || {};
+      const mapped = repLookup[salesPerson];
 
       const gp = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0;
 
@@ -686,13 +719,20 @@ async function computeSalesAggregate(db) {
   });
 
   // 5. Build zone summaries
+  // Zone targets: prefer FY27's value if present, else fall back to FY26's —
+  // since a single zone-summary row spans months from both fiscal years,
+  // there's no single "correct" FY to pull from; defaulting to the more
+  // recent year's target is the most useful choice for an at-a-glance number.
   const zonesMap = {};
   for (const rep of repsRaw) {
     if (!zonesMap[rep.zone]) {
+      const fy27Target = zoneTargetsByFY.FY27[rep.zone];
+      const fy26Target = zoneTargetsByFY.FY26[rep.zone];
+      const chosenTarget = fy27Target || fy26Target || {};
       zonesMap[rep.zone] = {
         zone: rep.zone,
-        monthlyTarget: zoneTargets[rep.zone]?.monthlyTarget || 0,
-        yearlyTarget:  zoneTargets[rep.zone]?.yearlyTarget  || 0,
+        monthlyTarget: chosenTarget.monthlyTarget || 0,
+        yearlyTarget:  chosenTarget.yearlyTarget  || 0,
         gp:   activeMonths.map(() => 0),
         ship: activeMonths.map(() => 0),
         tons: activeMonths.map(() => 0),
@@ -931,9 +971,9 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "jobs") {
-      const { records, clearFirst = true } = req.body || {};
+      const { records, clearFirst = true, fy = null } = req.body || {};
       if (!records) return res.status(400).json({ error: "records required" });
-      const { summary, errors } = await batchInsertJobs(db, records, clearFirst);
+      const { summary, errors } = await batchInsertJobs(db, records, clearFirst, fy);
       salesCache = null; // invalidate in-memory cache — fresh data was just pushed
       await db.collection("_meta").updateOne(
         { _id: "lastDataPush" },
@@ -948,9 +988,9 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "mapping") {
-      const { collectionName, records } = req.body || {};
+      const { collectionName, records, fy = null } = req.body || {};
       if (!collectionName || !records) return res.status(400).json({ error: "collectionName and records required" });
-      const result = await batchInsertMapping(db, collectionName, records);
+      const result = await batchInsertMapping(db, collectionName, records, fy);
       if (result.error) return res.status(400).json({ error: result.error });
       return res.status(200).json({ success: true, action: "mapping", collection: collectionName, inserted: result.inserted });
     }
