@@ -177,29 +177,56 @@ const JOB_COLLECTIONS = [
   "jobs_clearance_export", "jobs_clearance_import",
 ];
 
-// Tons metric is calculated only from Air Export/Import (per current scope)
-const AIR_COLLECTIONS = new Set(["jobs_air_export", "jobs_air_import"]);
+// ISO Tank rows are identified by which sheet tab they came from (the _tab
+// stamp added at insert time), since ISO Tank has its own dedicated tabs —
+// this is reliable regardless of what the LOB column says on those rows.
+const ISOTANK_COLLECTIONS = new Set(["jobs_isotank_export", "jobs_isotank_import"]);
 
-// TEU and LCL(CBM) metrics are calculated only from Sea + ISO Tank collections
-const TEU_LCL_COLLECTIONS = new Set([
-  "jobs_sea_export", "jobs_sea_import",
-  "jobs_isotank_export", "jobs_isotank_import",
-]);
+// Everything else is classified by the row's actual "LOB" column value,
+// NOT by which MongoDB collection it landed in. This protects against rows
+// being misfiled into the wrong sheet tab/collection (e.g. an ISO Tank row
+// sitting inside the Sea Export tab) — the LOB text on the row is the
+// source of truth for Export vs Import vs Air vs Sea classification.
+function classifyRow(job, collName) {
+  if (ISOTANK_COLLECTIONS.has(collName)) {
+    const isExport = collName === "jobs_isotank_export";
+    return { kind: "ISOTANK", direction: isExport ? "EXPORT" : "IMPORT" };
+  }
 
-// Export-side collections use "ETD Loading Port" as the date column;
-// Import-side collections use "ETA Discharge". Both fall back to "Job Date"
-// if the primary column is blank. General/Road keep using Job Date only.
-const EXPORT_COLLECTIONS = new Set([
-  "jobs_sea_export", "jobs_air_export", "jobs_isotank_export", "jobs_clearance_export",
-]);
-const IMPORT_COLLECTIONS = new Set([
-  "jobs_sea_import", "jobs_air_import", "jobs_isotank_import", "jobs_clearance_import",
-]);
+  const lob = String(job["LOB"] || "").toUpperCase().trim();
 
-function getDateColumnFor(collName) {
-  if (EXPORT_COLLECTIONS.has(collName)) return "ETD Loading Port";
-  if (IMPORT_COLLECTIONS.has(collName)) return "ETA Discharge";
-  return "Job Date"; // General, Road
+  if (lob === "SEA EXPORT")      return { kind: "SEA",       direction: "EXPORT" };
+  if (lob === "SEA IMPORT")      return { kind: "SEA",       direction: "IMPORT" };
+  if (lob === "AIR EXPORT")      return { kind: "AIR",       direction: "EXPORT" };
+  if (lob === "AIR IMPORT")      return { kind: "AIR",       direction: "IMPORT" };
+  if (lob === "CLEARANCE EXPORT") return { kind: "CLEARANCE", direction: "EXPORT" };
+  if (lob === "CLEARANCE IMPORT") return { kind: "CLEARANCE", direction: "IMPORT" };
+  if (lob === "GENERAL")         return { kind: "GENERAL",   direction: null };
+  if (lob === "ROAD")            return { kind: "ROAD",       direction: null };
+
+  // Unknown/blank LOB — fall back to the collection it was pushed from,
+  // so the row still gets *some* reasonable treatment instead of being dropped.
+  if (collName.includes("sea"))       return { kind: "SEA",       direction: collName.includes("import") ? "IMPORT" : "EXPORT" };
+  if (collName.includes("air"))       return { kind: "AIR",       direction: collName.includes("import") ? "IMPORT" : "EXPORT" };
+  if (collName.includes("clearance")) return { kind: "CLEARANCE", direction: collName.includes("import") ? "IMPORT" : "EXPORT" };
+  if (collName.includes("general"))   return { kind: "GENERAL",   direction: null };
+  if (collName.includes("road"))      return { kind: "ROAD",       direction: null };
+  return { kind: "UNKNOWN", direction: null };
+}
+
+// Tons metric is calculated only for AIR rows (Export or Import)
+function isAirRow(cls) { return cls.kind === "AIR"; }
+
+// TEU and LCL(CBM) metrics are calculated only for SEA and ISOTANK rows
+function hasTeuLclRow(cls) { return cls.kind === "SEA" || cls.kind === "ISOTANK"; }
+
+// Date column: Export-direction rows use "ETD Loading Port", Import-direction
+// rows use "ETA Discharge". GENERAL/ROAD (no direction) use "Job Date" only.
+// All fall back to "Job Date" if the primary column is blank.
+function getDateColumnFor(cls) {
+  if (cls.direction === "EXPORT") return "ETD Loading Port";
+  if (cls.direction === "IMPORT") return "ETA Discharge";
+  return "Job Date";
 }
 
 // Indian Fiscal Year 2026 runs Apr 2025 → Mar 2026
@@ -275,18 +302,16 @@ async function computeSalesAggregate(db) {
   const unmapped     = {}; // tracks sales person names with no mapping match
 
   for (const collName of JOB_COLLECTIONS) {
-    const isAir = AIR_COLLECTIONS.has(collName);
-    const hasTeuLcl = TEU_LCL_COLLECTIONS.has(collName);
-    const dateCol = getDateColumnFor(collName);
-
+    // Fetch every field any classification might need — we don't know which
+    // branch a row falls into until we read its LOB, so project broadly.
     const jobs = await db.collection(collName).find(
       {},
       { projection: {
-          "Sales Person": 1, "Shipment No": 1, "Job Date": 1,
+          "Sales Person": 1, "Shipment No": 1, "Job Date": 1, "LOB": 1,
           "Actual Profit (J=C-G)": 1,
-          [dateCol]: 1, // ETD Loading Port / ETA Discharge / Job Date — whichever applies
-          ...(isAir ? { "Chargeable Weight": 1, "Chargeable Weight Unit": 1 } : {}),
-          ...(hasTeuLcl ? { "Container TEU": 1, "Volume": 1, "Volume Unit": 1 } : {}),
+          "ETD Loading Port": 1, "ETA Discharge": 1,
+          "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
+          "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
         }
       }
     ).toArray();
@@ -303,7 +328,13 @@ async function computeSalesAggregate(db) {
 
       const repKey = mapped.displayName + "||" + mapped.zone;
 
-      // Primary date column for this collection type, falling back to Job Date if blank
+      // Classify this row by its own LOB column (or _tab for ISO Tank),
+      // NOT by which collection it happens to be stored in — protects
+      // against rows that were misfiled into the wrong sheet tab.
+      const cls = classifyRow(job, collName);
+      const dateCol = getDateColumnFor(cls);
+
+      // Primary date column for this row's classification, falling back to Job Date if blank
       let monthLabel = null;
       const primaryDate = job[dateCol];
       const fallbackDate = job["Job Date"];
@@ -318,9 +349,9 @@ async function computeSalesAggregate(db) {
 
       const gp = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0;
 
-      // Tons — only from Air Export/Import, Chargeable Weight (kg) ÷ 1000
+      // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
-      if (isAir) {
+      if (isAirRow(cls)) {
         const rawWeight = parseFloat(job["Chargeable Weight"] || 0) || 0;
         const unit = String(job["Chargeable Weight Unit"] || "").toLowerCase().trim();
         // Assume kg unless explicitly marked as already in tons/lb
@@ -333,11 +364,11 @@ async function computeSalesAggregate(db) {
         }
       }
 
-      // TEU — only from Sea Export/Import and ISO Tank Export/Import, "Container TEU" column
+      // TEU — only for SEA and ISOTANK rows, "Container TEU" column
       let teu = 0;
-      // LCL (CBM) — same collections, "Volume" column (assumed CBM)
+      // LCL (CBM) — same rows, "Volume" column (assumed CBM)
       let lcl = 0;
-      if (hasTeuLcl) {
+      if (hasTeuLclRow(cls)) {
         teu = parseFloat(job["Container TEU"] || 0) || 0;
         const vol = parseFloat(job["Volume"] || 0) || 0;
         const volUnit = String(job["Volume Unit"] || "").toUpperCase().trim();
@@ -432,6 +463,10 @@ async function computeSalesAggregate(db) {
 let customerCache = null;
 let customerCacheTime = 0;
 
+// Used by Customer Insights (separate from the LOB-based sales aggregation above) —
+// Customer Insights is intentionally scoped to Air Export + Air Import only.
+const CUSTOMER_INSIGHTS_COLLECTIONS = ["jobs_air_export", "jobs_air_import"];
+
 async function getCustomerAggregate(db, force) {
   if (!force && customerCache && (Date.now() - customerCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...customerCache, cached: true };
@@ -446,7 +481,7 @@ async function computeCustomerAggregate(db) {
   // Scoped to Air Export + Air Import only (current business scope)
   const custMap = {}; // customer name → { shipments, revenue, gp }
 
-  for (const collName of AIR_COLLECTIONS) {
+  for (const collName of CUSTOMER_INSIGHTS_COLLECTIONS) {
     const jobs = await db.collection(collName).find(
       {},
       { projection: {
@@ -552,7 +587,7 @@ module.exports = async function handler(req, res) {
   if (!action) return res.status(400).json({ error: "action required: jobs | mapping | users | sales" });
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org", "lobCheck"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -569,6 +604,22 @@ module.exports = async function handler(req, res) {
       sample.jobs_air_export_sample = await db.collection("jobs_air_export").find({}).limit(2).toArray();
       sample.jobs_air_import_sample = await db.collection("jobs_air_import").find({}).limit(2).toArray();
       return res.status(200).json(sample);
+    }
+
+    if (action === "lobCheck") {
+      // Shows the actual LOB value distribution inside each collection —
+      // use this to verify rows are classified correctly by classifyRow().
+      const result = {};
+      for (const collName of JOB_COLLECTIONS) {
+        const rows = await db.collection(collName).find({}, { projection: { "LOB": 1 } }).toArray();
+        const counts = {};
+        for (const r of rows) {
+          const lob = String(r["LOB"] || "(blank)").trim();
+          counts[lob] = (counts[lob] || 0) + 1;
+        }
+        result[collName] = { totalRows: rows.length, lobBreakdown: counts };
+      }
+      return res.status(200).json({ success: true, result });
     }
 
     if (action === "meta") {
