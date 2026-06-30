@@ -272,6 +272,14 @@ module.exports = async function handler(req, res) {
   try {
     const db = await getDB();
 
+    if (action === "meta") {
+      const meta = await db.collection("_meta").findOne({ _id: "lastDataPush" });
+      return res.status(200).json({
+        success: true,
+        lastUpdated: meta?.updatedAt ? meta.updatedAt.toISOString() : null,
+      });
+    }
+
     if (action === "sales") {
       const result = await getSalesAggregate(db);
       return res.status(200).json(result);
@@ -281,7 +289,12 @@ module.exports = async function handler(req, res) {
       const { records, clearFirst = true } = req.body || {};
       if (!records) return res.status(400).json({ error: "records required" });
       const { summary, errors } = await batchInsertJobs(db, records, clearFirst);
-      salesCache = null; // invalidate cache — fresh data was just pushed
+      salesCache = null; // invalidate in-memory cache — fresh data was just pushed
+      await db.collection("_meta").updateOne(
+        { _id: "lastDataPush" },
+        { $set: { updatedAt: new Date() } },
+        { upsert: true }
+      );
       return res.status(200).json({
         success: true, action: "jobs", summary,
         totalInserted: Object.values(summary).reduce((s, n) => s + n, 0),
