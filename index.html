@@ -193,13 +193,13 @@ function showDashboard() {
     loginScreen.style.display = 'none';
     appEl.style.display = 'flex';
 
-    // Render instantly using cached data (localStorage) if available,
-    // otherwise show a lightweight loading shell. Never block on network.
+    // Render instantly from localStorage cache if we have one — no TTL,
+    // it lives until MongoDB actually has newer data
     var cached = getCachedSalesData();
     if (cached) {
-      repsRaw  = cached.repsRaw;
-      zonesRaw = cached.zones || [];
-      months26 = cached.months || months26;
+      repsRaw   = cached.repsRaw;
+      zonesRaw  = cached.zones || [];
+      months26  = cached.months || months26;
       dataReady = true;
       render();
     } else {
@@ -213,32 +213,50 @@ function showDashboard() {
       if (cached) patchSidebarUser(ini, currentUser.name, roleLabel, currentUser.photoUrl);
     }
 
-    // Always refresh in the background — updates silently when ready
-    fetchLiveData(function() {
-      render();
-      if (window._pendingUserPatch) {
-        var p = window._pendingUserPatch;
-        patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
-      }
+    // Cheap check: has MongoDB data changed since our cache was built?
+    checkForFreshData(cached, function(needsRefresh) {
+      if (!needsRefresh) return; // cache is still current — skip the heavy fetch entirely
+
+      fetchLiveData(function() {
+        render();
+        if (window._pendingUserPatch) {
+          var p = window._pendingUserPatch;
+          patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
+        }
+      });
     });
   }, 260);
 }
 
+// Lightweight check — just reads a timestamp, no aggregation cost
+function checkForFreshData(cached, callback) {
+  fetch('/api/mongo-batch?action=meta')
+    .then(function(r){ return r.json(); })
+    .then(function(meta){
+      if (!cached) return callback(true); // no cache at all — must fetch
+      if (!meta.lastUpdated) return callback(false); // no push recorded — trust cache
+      var dbUpdatedAt = new Date(meta.lastUpdated).getTime();
+      var cacheBuiltAt = cached._cachedAt || 0;
+      callback(dbUpdatedAt > cacheBuiltAt); // refresh only if DB is newer than our cache
+    })
+    .catch(function(){
+      // Meta check failed — fall back to using cache if we have one, else fetch
+      callback(!cached);
+    });
+}
+
 function getCachedSalesData() {
   try {
-    var raw = sessionStorage.getItem('sar_sales_cache');
+    var raw = localStorage.getItem('sar_sales_cache');
     if (!raw) return null;
-    var parsed = JSON.parse(raw);
-    // Cache valid for 10 minutes
-    if (Date.now() - parsed._cachedAt > 10 * 60 * 1000) return null;
-    return parsed;
+    return JSON.parse(raw);
   } catch (e) { return null; }
 }
 
 function setCachedSalesData(data) {
   try {
     data._cachedAt = Date.now();
-    sessionStorage.setItem('sar_sales_cache', JSON.stringify(data));
+    localStorage.setItem('sar_sales_cache', JSON.stringify(data));
   } catch (e) { /* storage full or unavailable — ignore */ }
 }
 
