@@ -17,6 +17,8 @@ const COLLECTIONS = {
   "ISO Tank - Import": "jobs_isotank_import",
   "General":           "jobs_general",
   "Road":              "jobs_road",
+  "Clearance - Export": "jobs_clearance_export",
+  "Clearance - Import": "jobs_clearance_import",
 };
 
 const MAPPING_COLLECTIONS = new Set([
@@ -172,10 +174,33 @@ async function updateUserFields(db, email, fields) {
 const JOB_COLLECTIONS = [
   "jobs_sea_export", "jobs_sea_import", "jobs_air_export", "jobs_air_import",
   "jobs_isotank_export", "jobs_isotank_import", "jobs_general", "jobs_road",
+  "jobs_clearance_export", "jobs_clearance_import",
 ];
 
 // Tons metric is calculated only from Air Export/Import (per current scope)
 const AIR_COLLECTIONS = new Set(["jobs_air_export", "jobs_air_import"]);
+
+// TEU and LCL(CBM) metrics are calculated only from Sea + ISO Tank collections
+const TEU_LCL_COLLECTIONS = new Set([
+  "jobs_sea_export", "jobs_sea_import",
+  "jobs_isotank_export", "jobs_isotank_import",
+]);
+
+// Export-side collections use "ETD Loading Port" as the date column;
+// Import-side collections use "ETA Discharge". Both fall back to "Job Date"
+// if the primary column is blank. General/Road keep using Job Date only.
+const EXPORT_COLLECTIONS = new Set([
+  "jobs_sea_export", "jobs_air_export", "jobs_isotank_export", "jobs_clearance_export",
+]);
+const IMPORT_COLLECTIONS = new Set([
+  "jobs_sea_import", "jobs_air_import", "jobs_isotank_import", "jobs_clearance_import",
+]);
+
+function getDateColumnFor(collName) {
+  if (EXPORT_COLLECTIONS.has(collName)) return "ETD Loading Port";
+  if (IMPORT_COLLECTIONS.has(collName)) return "ETA Discharge";
+  return "Job Date"; // General, Road
+}
 
 // Indian Fiscal Year 2026 runs Apr 2025 → Mar 2026
 const FY_MONTHS = [
@@ -251,11 +276,17 @@ async function computeSalesAggregate(db) {
 
   for (const collName of JOB_COLLECTIONS) {
     const isAir = AIR_COLLECTIONS.has(collName);
+    const hasTeuLcl = TEU_LCL_COLLECTIONS.has(collName);
+    const dateCol = getDateColumnFor(collName);
+
     const jobs = await db.collection(collName).find(
       {},
       { projection: {
-          "Sales Person": 1, "Job Date": 1, "Actual Profit (J=C-G)": 1,
+          "Sales Person": 1, "Shipment No": 1, "Job Date": 1,
+          "Actual Profit (J=C-G)": 1,
+          [dateCol]: 1, // ETD Loading Port / ETA Discharge / Job Date — whichever applies
           ...(isAir ? { "Chargeable Weight": 1, "Chargeable Weight Unit": 1 } : {}),
+          ...(hasTeuLcl ? { "Container TEU": 1, "Volume": 1, "Volume Unit": 1 } : {}),
         }
       }
     ).toArray();
@@ -272,8 +303,11 @@ async function computeSalesAggregate(db) {
 
       const repKey = mapped.displayName + "||" + mapped.zone;
 
+      // Primary date column for this collection type, falling back to Job Date if blank
       let monthLabel = null;
-      const rawDate = job["Job Date"];
+      const primaryDate = job[dateCol];
+      const fallbackDate = job["Job Date"];
+      const rawDate = primaryDate || fallbackDate;
       if (rawDate) {
         const d = new Date(rawDate);
         if (!isNaN(d.getTime())) {
@@ -299,11 +333,25 @@ async function computeSalesAggregate(db) {
         }
       }
 
+      // TEU — only from Sea Export/Import and ISO Tank Export/Import, "Container TEU" column
+      let teu = 0;
+      // LCL (CBM) — same collections, "Volume" column (assumed CBM)
+      let lcl = 0;
+      if (hasTeuLcl) {
+        teu = parseFloat(job["Container TEU"] || 0) || 0;
+        const vol = parseFloat(job["Volume"] || 0) || 0;
+        const volUnit = String(job["Volume Unit"] || "").toUpperCase().trim();
+        // Only count as LCL(CBM) if the unit is actually CBM (or blank, assumed CBM)
+        if (!volUnit || volUnit === "CBM") lcl = vol;
+      }
+
       if (!repMonthData[repKey]) repMonthData[repKey] = {};
-      if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, ship: 0, tons: 0 };
+      if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, ship: 0, tons: 0, teu: 0, lcl: 0 };
       repMonthData[repKey][monthLabel].gp   += gp;
       repMonthData[repKey][monthLabel].ship += 1;
       repMonthData[repKey][monthLabel].tons += tons;
+      repMonthData[repKey][monthLabel].teu  += teu;
+      repMonthData[repKey][monthLabel].lcl  += lcl;
 
       if (!repMeta[repKey]) repMeta[repKey] = mapped;
     }
@@ -324,6 +372,8 @@ async function computeSalesAggregate(db) {
     const gp   = activeMonths.map(m => Math.round(monthData[m]?.gp || 0));
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
     const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
+    const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
+    const lcl  = activeMonths.map(m => Math.round((monthData[m]?.lcl  || 0) * 100) / 100);
 
     repsRaw.push({
       name:  meta.displayName,
@@ -331,7 +381,7 @@ async function computeSalesAggregate(db) {
       lob:   meta.lob,
       email: meta.email,
       hue:   zoneHue(meta.zone),
-      gp, ship, tons,
+      gp, ship, tons, teu, lcl,
       tank:  activeMonths.map(() => 0),
       tgt:   0, // rep-level targets ignored — Target/Achievement shown at Zone level only
     });
@@ -355,11 +405,15 @@ async function computeSalesAggregate(db) {
         gp:   activeMonths.map(() => 0),
         ship: activeMonths.map(() => 0),
         tons: activeMonths.map(() => 0),
+        teu:  activeMonths.map(() => 0),
+        lcl:  activeMonths.map(() => 0),
       };
     }
     rep.gp.forEach((v, i)   => { zonesMap[rep.zone].gp[i]   += v; });
     rep.ship.forEach((v, i) => { zonesMap[rep.zone].ship[i] += v; });
     rep.tons.forEach((v, i) => { zonesMap[rep.zone].tons[i] += v; });
+    rep.teu.forEach((v, i)  => { zonesMap[rep.zone].teu[i]  += v; });
+    rep.lcl.forEach((v, i)  => { zonesMap[rep.zone].lcl[i]  += v; });
   }
 
   return {
