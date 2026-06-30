@@ -139,8 +139,8 @@ let salesCache = null;
 let salesCacheTime = 0;
 const SALES_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-async function getSalesAggregate(db) {
-  if (salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
+async function getSalesAggregate(db, force) {
+  if (!force && salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...salesCache, cached: true };
   }
 
@@ -312,8 +312,8 @@ async function computeSalesAggregate(db) {
 let customerCache = null;
 let customerCacheTime = 0;
 
-async function getCustomerAggregate(db) {
-  if (customerCache && (Date.now() - customerCacheTime) < SALES_CACHE_TTL_MS) {
+async function getCustomerAggregate(db, force) {
+  if (!force && customerCache && (Date.now() - customerCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...customerCache, cached: true };
   }
   const result = await computeCustomerAggregate(db);
@@ -378,8 +378,8 @@ async function computeCustomerAggregate(db) {
 let usageCache = null;
 let usageCacheTime = 0;
 
-async function getUsageAnalytics(db) {
-  if (usageCache && (Date.now() - usageCacheTime) < SALES_CACHE_TTL_MS) {
+async function getUsageAnalytics(db, force) {
+  if (!force && usageCache && (Date.now() - usageCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...usageCache, cached: true };
   }
   const result = await computeUsageAnalytics(db);
@@ -459,18 +459,20 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    const forceRefresh = req.query?.force === "1" || req.query?.force === "true";
+
     if (action === "sales") {
-      const result = await getSalesAggregate(db);
+      const result = await getSalesAggregate(db, forceRefresh);
       return res.status(200).json(result);
     }
 
     if (action === "customers") {
-      const result = await getCustomerAggregate(db);
+      const result = await getCustomerAggregate(db, forceRefresh);
       return res.status(200).json(result);
     }
 
     if (action === "usage") {
-      const result = await getUsageAnalytics(db);
+      const result = await getUsageAnalytics(db, forceRefresh);
       return res.status(200).json(result);
     }
 
