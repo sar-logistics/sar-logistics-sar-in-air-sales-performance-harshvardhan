@@ -259,11 +259,6 @@ async function computeSalesAggregate(db) {
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
     const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
 
-    // Target rolls up from Zone target only, split evenly across reps in that zone
-    const zoneMonthlyTarget = zoneTargets[meta.zone]?.monthlyTarget || 0;
-    const repCount = repsPerZone[meta.zone] || 1;
-    const repTarget = Math.round(zoneMonthlyTarget / repCount);
-
     repsRaw.push({
       name:  meta.displayName,
       zone:  meta.zone,
@@ -272,7 +267,7 @@ async function computeSalesAggregate(db) {
       hue:   zoneHue(meta.zone),
       gp, ship, tons,
       tank:  activeMonths.map(() => 0),
-      tgt:   repTarget,
+      tgt:   0, // rep-level targets ignored — Target/Achievement shown at Zone level only
     });
   }
 
