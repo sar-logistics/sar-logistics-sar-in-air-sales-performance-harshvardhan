@@ -108,6 +108,9 @@ const JOB_COLLECTIONS = [
   "jobs_isotank_export", "jobs_isotank_import", "jobs_general", "jobs_road",
 ];
 
+// Tons metric is calculated only from Air Export/Import (per current scope)
+const AIR_COLLECTIONS = new Set(["jobs_air_export", "jobs_air_import"]);
+
 const FY_MONTHS    = ["Jan-26","Feb-26","Mar-26","Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26","Oct-26","Nov-26","Dec-26"];
 const MONTH_NAMES  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -166,9 +169,14 @@ async function computeSalesAggregate(db) {
   const repMeta      = {};
 
   for (const collName of JOB_COLLECTIONS) {
+    const isAir = AIR_COLLECTIONS.has(collName);
     const jobs = await db.collection(collName).find(
       {},
-      { projection: { "Sales Person": 1, "Job Date": 1, "Actual Profit (J=C-G)": 1 } }
+      { projection: {
+          "Sales Person": 1, "Job Date": 1, "Actual Profit (J=C-G)": 1,
+          ...(isAir ? { "Chargeable Weight": 1, "Chargeable Weight Unit": 1 } : {}),
+        }
+      }
     ).toArray();
 
     for (const job of jobs) {
@@ -192,10 +200,26 @@ async function computeSalesAggregate(db) {
 
       const gp = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0;
 
+      // Tons — only from Air Export/Import, Chargeable Weight (kg) ÷ 1000
+      let tons = 0;
+      if (isAir) {
+        const rawWeight = parseFloat(job["Chargeable Weight"] || 0) || 0;
+        const unit = String(job["Chargeable Weight Unit"] || "").toLowerCase().trim();
+        // Assume kg unless explicitly marked as already in tons/lb
+        if (unit === "ton" || unit === "tons" || unit === "mt") {
+          tons = rawWeight;
+        } else if (unit === "lb" || unit === "lbs") {
+          tons = rawWeight * 0.000453592;
+        } else {
+          tons = rawWeight / 1000; // default: kg → tons
+        }
+      }
+
       if (!repMonthData[repKey]) repMonthData[repKey] = {};
-      if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, ship: 0 };
+      if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, ship: 0, tons: 0 };
       repMonthData[repKey][monthLabel].gp   += gp;
       repMonthData[repKey][monthLabel].ship += 1;
+      repMonthData[repKey][monthLabel].tons += tons;
 
       if (!repMeta[repKey]) repMeta[repKey] = mapped;
     }
@@ -209,6 +233,7 @@ async function computeSalesAggregate(db) {
     const meta = repMeta[repKey];
     const gp   = activeMonths.map(m => Math.round(monthData[m]?.gp || 0));
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
+    const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
 
     repsRaw.push({
       name:  meta.displayName,
@@ -216,7 +241,7 @@ async function computeSalesAggregate(db) {
       lob:   meta.lob,
       email: meta.email,
       hue:   zoneHue(meta.zone),
-      gp, ship,
+      gp, ship, tons,
       tank:  activeMonths.map(() => 0),
       tgt:   Math.round(meta.monthlyTarget),
     });
@@ -239,10 +264,12 @@ async function computeSalesAggregate(db) {
         yearlyTarget:  zoneTargets[rep.zone]?.yearlyTarget  || 0,
         gp:   activeMonths.map(() => 0),
         ship: activeMonths.map(() => 0),
+        tons: activeMonths.map(() => 0),
       };
     }
     rep.gp.forEach((v, i)   => { zonesMap[rep.zone].gp[i]   += v; });
     rep.ship.forEach((v, i) => { zonesMap[rep.zone].ship[i] += v; });
+    rep.tons.forEach((v, i) => { zonesMap[rep.zone].tons[i] += v; });
   }
 
   return {
