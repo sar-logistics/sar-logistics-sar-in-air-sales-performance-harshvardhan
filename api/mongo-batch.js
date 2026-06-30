@@ -262,6 +262,8 @@ const SALES_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 // metric: "Shipments" | "GP" | "Tons (Air)" | "TEUs (Ocean)" | "LCL (Ocean in CBM)"
 // month: e.g. "Apr-25", or "FY Total" for the whole year
 async function getDrillRows(db, entity, metric, month) {
+  const CROSS_SALES_ZONE = "Cross Sales";
+
   // 1. Load sales rep mapping so we can resolve entity → which Sales Person names to match
   const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
   const repsByZone = {};      // zone → [normalizedSalesPersonName, ...]
@@ -284,28 +286,38 @@ async function getDrillRows(db, entity, metric, month) {
     rawNamesByNorm[norm].push(String(rawName || "").trim());
   }
 
-  // Figure out which normalized sales-person-names are relevant to this entity.
-  // Grand Total still only includes MAPPED reps — matching computeSalesAggregate's
-  // behavior of excluding unmapped Sales Person rows — so totals line up exactly
-  // with what's shown in the main table.
+  // Cross Sales (and its branches) work completely differently: instead of
+  // matching a known Sales Person against the mapping sheet, we match rows
+  // whose Sales Person has NO mapping entry at all, optionally further
+  // filtered by Location (branch). Detect that case up front.
+  const isCrossSalesZone   = entity === CROSS_SALES_ZONE;
+  const isCrossSalesBranch = !isCrossSalesZone && !repsByZone[entity] && !salesPersonByDisplay[entity];
+  // (isCrossSalesBranch is a loose guess at this point — confirmed once we
+  // actually see Location values in the data; an unknown entity name that
+  // isn't a zone or rep is treated as a possible branch name.)
+
   let relevantNorms;
-  if (entity === "Grand Total") {
-    relevantNorms = allMappedNames;
-  } else if (repsByZone[entity]) {
-    relevantNorms = new Set(repsByZone[entity]);
-  } else if (salesPersonByDisplay[entity]) {
-    relevantNorms = new Set([salesPersonByDisplay[entity]]);
-  } else {
-    relevantNorms = new Set();
+  if (!isCrossSalesZone && !isCrossSalesBranch) {
+    if (entity === "Grand Total") {
+      relevantNorms = allMappedNames;
+    } else if (repsByZone[entity]) {
+      relevantNorms = new Set(repsByZone[entity]);
+    } else if (salesPersonByDisplay[entity]) {
+      relevantNorms = new Set([salesPersonByDisplay[entity]]);
+    } else {
+      relevantNorms = new Set();
+    }
   }
 
   // Build a regex-free $in list of raw Sales Person strings the DB query can use.
   // This drastically cuts the rows MongoDB returns over the wire, instead of
   // fetching every row in every collection and filtering in JS.
   const relevantRawNames = [];
-  relevantNorms.forEach(norm => {
-    (rawNamesByNorm[norm] || []).forEach(raw => relevantRawNames.push(raw));
-  });
+  if (relevantNorms) {
+    relevantNorms.forEach(norm => {
+      (rawNamesByNorm[norm] || []).forEach(raw => relevantRawNames.push(raw));
+    });
+  }
 
   const isFYTotal = month === "FY Total";
   const isAirMetric = metric === "Tons (Air)";
@@ -322,7 +334,7 @@ async function getDrillRows(db, entity, metric, month) {
   });
 
   const baseProjection = {
-    "Shipment No": 1, "Sales Person": 1, "Job Date": 1, "LOB": 1,
+    "Shipment No": 1, "Sales Person": 1, "Job Date": 1, "LOB": 1, "Location": 1,
     "Customer": 1, "Carrier": 1, "Loading Port": 1, "Discharge Port": 1,
     "Actual Profit (J=C-G)": 1, "Billed Revenue (C)": 1,
     "ETD Loading Port": 1, "ETA Discharge": 1,
@@ -330,13 +342,21 @@ async function getDrillRows(db, entity, metric, month) {
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
   };
 
+  // For Cross Sales (zone or branch), we can't push a useful $in filter to
+  // Mongo since we're matching on "absence" of a mapping, not presence of a
+  // known name — so those queries fetch broadly and filter in JS below.
+  // For everything else, push the Sales Person $in filter to the DB.
+  const useCrossSalesPath = isCrossSalesZone || isCrossSalesBranch;
+
   // Run all collection queries in parallel instead of sequentially —
   // this is the single biggest speed win, since 10 sequential round-trips
   // to MongoDB is far slower than 10 concurrent ones.
   const queryPromises = relevantCollections.map(collName => {
-    const filter = relevantRawNames.length > 0
-      ? { "Sales Person": { $in: relevantRawNames } }
-      : { "Sales Person": { $in: [] } }; // no mapped reps match — return nothing
+    const filter = useCrossSalesPath
+      ? {} // can't pre-filter at the DB level for "unmapped" rows — filter in JS
+      : (relevantRawNames.length > 0
+          ? { "Sales Person": { $in: relevantRawNames } }
+          : { "Sales Person": { $in: [] } }); // no mapped reps match — return nothing
     return db.collection(collName).find(filter, { projection: baseProjection }).toArray()
       .then(rows => ({ collName, rows }));
   });
@@ -348,7 +368,19 @@ async function getDrillRows(db, entity, metric, month) {
   for (const { collName, rows } of resultsByCollection) {
     for (const job of rows) {
       const normPerson = normalizeName(job["Sales Person"]);
-      if (!normPerson || !relevantNorms.has(normPerson)) continue;
+      if (!normPerson) continue;
+
+      if (useCrossSalesPath) {
+        // Must be an UNMAPPED sales person to belong to Cross Sales at all
+        if (allMappedNames.has(normPerson)) continue;
+        // If drilling into a specific branch, also match its Location
+        if (isCrossSalesBranch) {
+          const branch = String(job["Location"] || "Unspecified").trim() || "Unspecified";
+          if (branch !== entity) continue;
+        }
+      } else {
+        if (!relevantNorms.has(normPerson)) continue;
+      }
 
       const cls = classifyRow(job, collName);
 
@@ -559,13 +591,10 @@ async function computeSalesAggregate(db) {
   }
 
   // 4. Shape into repsRaw
-  const activeMonths = FY_MONTHS.filter(m => Object.values(repMonthData).some(d => d[m]));
-
-  // Count reps per zone so zone target can be split evenly across them
-  const repsPerZone = {};
-  for (const meta of Object.values(repMeta)) {
-    repsPerZone[meta.zone] = (repsPerZone[meta.zone] || 0) + 1;
-  }
+  const activeMonths = FY_MONTHS.filter(m =>
+    Object.values(repMonthData).some(d => d[m]) ||
+    Object.values(branchMonthData).some(d => d[m])
+  );
 
   const repsRaw = [];
   for (const [repKey, monthData] of Object.entries(repMonthData)) {
@@ -588,7 +617,32 @@ async function computeSalesAggregate(db) {
     });
   }
 
+  // Cross Sales branches — shown as "rep-like" rows under the Cross Sales
+  // zone, but representing a Location/branch rather than an individual person.
+  for (const [branchName, monthData] of Object.entries(branchMonthData)) {
+    const gp   = activeMonths.map(m => Math.round(monthData[m]?.gp || 0));
+    const ship = activeMonths.map(m => monthData[m]?.ship || 0);
+    const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
+    const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
+    const lcl  = activeMonths.map(m => Math.round((monthData[m]?.lcl  || 0) * 100) / 100);
+
+    repsRaw.push({
+      name:  branchName,
+      zone:  CROSS_SALES_ZONE,
+      lob:   "",
+      email: "",
+      hue:   zoneHue(CROSS_SALES_ZONE + branchName),
+      gp, ship, tons, teu, lcl,
+      tank:  activeMonths.map(() => 0),
+      tgt:   0,
+      isBranch: true, // flags this as a branch, not an individual rep — frontend uses this for labeling
+    });
+  }
+
   repsRaw.sort((a, b) => {
+    // Cross Sales always sorts last, after every real zone
+    if (a.zone === CROSS_SALES_ZONE && b.zone !== CROSS_SALES_ZONE) return 1;
+    if (b.zone === CROSS_SALES_ZONE && a.zone !== CROSS_SALES_ZONE) return -1;
     if (a.zone !== b.zone) return a.zone.localeCompare(b.zone);
     const aGP = a.gp.reduce((s, v) => s + v, 0);
     const bGP = b.gp.reduce((s, v) => s + v, 0);
