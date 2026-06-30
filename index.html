@@ -1123,7 +1123,7 @@ function salesTable(M){
   var BORDER = '#D5DCE6';      // main grid border — softened
   var BORDER_STRONG = '#B0BAC8'; // block separators — still distinct but lighter
   var head='<tr>'
-    +'<th style="position:sticky;left:0;z-index:3;background:#EEF2F8;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:185px;min-width:185px;">Zones/Sales Rep</th>'
+    +'<th style="position:sticky;left:0;z-index:3;background:#EEF2F8;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1.5px solid '+BORDER_STRONG+';width:185px;min-width:185px;">Zones/Sales Rep</th>'
     +'<th style="position:sticky;left:185px;z-index:3;background:#EEF2F8;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">Metrics</th>'
     +'<th style="position:sticky;left:'+FY_COL_LEFT+'px;z-index:3;text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#FCF3DA;white-space:nowrap;border-left:2px solid '+BORDER_STRONG+';border-right:2px solid #D9B45C;">Grand Total</th>'
     + colLabels.slice(1).map(function(l){
@@ -1201,9 +1201,11 @@ function salesTable(M){
     var actAttr  = isShipRow ? ' data-act="shipToggle" data-name="'+esc(row.entityName)+'"' : '';
     var labelCell = '<div style="display:flex;align-items:center;"'+actAttr+'>'+labelContent+'</div>';
 
-    // Block separators are noticeably darker/thicker than regular row dividers
+    // Block separators are noticeably darker/thicker than regular row dividers.
+    // Rep-to-rep boundaries inside a zone get a clearly darker line too,
+    // so each sales rep's block is visually distinguishable from the next.
     var topBorder = isFirstOfBlock
-      ? ((isZoneRow || isGrandRow) ? 'border-top:2px solid '+BORDER_STRONG+';' : 'border-top:1px solid '+BORDER+';')
+      ? ((isZoneRow || isGrandRow) ? 'border-top:2px solid '+BORDER_STRONG+';' : 'border-top:1.5px solid #9AA6B8;')
       : 'border-top:1px solid #EEF1F6;';
 
     // Name cell — rendered (non-empty) only on the vertical-middle row of
@@ -1228,9 +1230,9 @@ function salesTable(M){
           : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
         zoneToggle = '<div data-act="zoneToggle" data-zone="'+esc(blockEntity)+'" style="width:18px;height:18px;border-radius:5px;background:#7C3AED;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;margin-left:auto;box-shadow:0 1px 3px rgba(124,79,194,0.35);">'+chevSvg+'</div>';
       }
-      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;width:185px;min-width:185px;text-align:left;"><div style="display:flex;align-items:center;justify-content:flex-start;gap:7px;">'+avatarEl+nameLabel+zoneToggle+'</div></td>';
+      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;width:185px;min-width:185px;text-align:left;border-right:1.5px solid '+BORDER_STRONG+';"><div style="display:flex;align-items:center;justify-content:flex-start;gap:7px;">'+avatarEl+nameLabel+zoneToggle+'</div></td>';
     } else {
-      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;width:185px;min-width:185px;"></td>';
+      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;width:185px;min-width:185px;border-right:1.5px solid '+BORDER_STRONG+';"></td>';
     }
 
     return '<tr style="background:'+rowBg+';border-bottom:1px solid #E7ECF3;'+topBorder+'">'
