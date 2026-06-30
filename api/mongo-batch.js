@@ -220,6 +220,17 @@ function isAirRow(cls) { return cls.kind === "AIR"; }
 // TEU and LCL(CBM) metrics are calculated only for SEA and ISOTANK rows
 function hasTeuLclRow(cls) { return cls.kind === "SEA" || cls.kind === "ISOTANK"; }
 
+// Decides which physical metric a row's Cargo Type maps to, independent of
+// LOB kind. This is the source of truth for TEU vs LCL within Sea/ISO Tank
+// rows — a Sea Export row can be FCL (→ Container TEU) or LCL (→ Volume)
+// depending purely on what Cargo Type says, not on its LOB classification.
+function cargoMetricFor(job) {
+  const cargoType = String(job["Cargo Type"] || "").toUpperCase().trim();
+  if (cargoType === "FCL" || cargoType === "LIQUID (CONT)") return "TEU";
+  if (cargoType === "LCL") return "LCL";
+  return null; // unrecognized Cargo Type — contributes to neither TEU nor LCL
+}
+
 // Date column: Export-direction rows use "ETD Loading Port", Import-direction
 // rows use "ETA Discharge". GENERAL/ROAD (no direction) use "Job Date" only.
 // All fall back to "Job Date" if the primary column is blank.
@@ -334,7 +345,7 @@ async function getDrillRows(db, entity, metric, month) {
   });
 
   const baseProjection = {
-    "Shipment No": 1, "Sales Person": 1, "Job Date": 1, "LOB": 1, "Location": 1,
+    "Shipment No": 1, "Sales Person": 1, "Job Date": 1, "LOB": 1, "Location": 1, "Cargo Type": 1,
     "Customer": 1, "Carrier": 1, "Loading Port": 1, "Discharge Port": 1,
     "Actual Profit (J=C-G)": 1, "Billed Revenue (C)": 1,
     "ETD Loading Port": 1, "ETA Discharge": 1,
@@ -383,11 +394,13 @@ async function getDrillRows(db, entity, metric, month) {
       }
 
       const cls = classifyRow(job, collName);
+      const cargoMetric = hasTeuLclRow(cls) ? cargoMetricFor(job) : null;
 
       // Metric-specific row filtering — only include rows that actually
       // contribute to the metric that was clicked
       if (metric === "Tons (Air)" && !isAirRow(cls)) continue;
-      if ((metric === "TEUs (Ocean)" || metric === "LCL (Ocean in CBM)") && !hasTeuLclRow(cls)) continue;
+      if (metric === "TEUs (Ocean)" && cargoMetric !== "TEU") continue;
+      if (metric === "LCL (Ocean in CBM)" && cargoMetric !== "LCL") continue;
 
       const dateCol = getDateColumnFor(cls);
       const rawDate = job[dateCol] || job["Job Date"];
@@ -515,7 +528,7 @@ async function computeSalesAggregate(db) {
     const jobs = await db.collection(collName).find(
       {},
       { projection: {
-          "Sales Person": 1, "Shipment No": 1, "Job Date": 1, "LOB": 1, "Location": 1,
+          "Sales Person": 1, "Shipment No": 1, "Job Date": 1, "LOB": 1, "Location": 1, "Cargo Type": 1,
           "Actual Profit (J=C-G)": 1,
           "ETD Loading Port": 1, "ETA Discharge": 1,
           "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
@@ -566,16 +579,22 @@ async function computeSalesAggregate(db) {
         }
       }
 
-      // TEU — only for SEA and ISOTANK rows, "Container TEU" column
+      // TEU / LCL(CBM) — only for SEA and ISOTANK rows, but WHICH of the two
+      // a row contributes to is decided by its Cargo Type, not its LOB kind:
+      //   Cargo Type = FCL or "Liquid (Cont)" → Container TEU column
+      //   Cargo Type = LCL                    → Volume column (assumed CBM)
       let teu = 0;
-      // LCL (CBM) — same rows, "Volume" column (assumed CBM)
       let lcl = 0;
       if (hasTeuLclRow(cls)) {
-        teu = parseFloat(job["Container TEU"] || 0) || 0;
-        const vol = parseFloat(job["Volume"] || 0) || 0;
-        const volUnit = String(job["Volume Unit"] || "").toUpperCase().trim();
-        // Only count as LCL(CBM) if the unit is actually CBM (or blank, assumed CBM)
-        if (!volUnit || volUnit === "CBM") lcl = vol;
+        const cargoMetric = cargoMetricFor(job);
+        if (cargoMetric === "TEU") {
+          teu = parseFloat(job["Container TEU"] || 0) || 0;
+        } else if (cargoMetric === "LCL") {
+          const vol = parseFloat(job["Volume"] || 0) || 0;
+          const volUnit = String(job["Volume Unit"] || "").toUpperCase().trim();
+          // Only count as LCL(CBM) if the unit is actually CBM (or blank, assumed CBM)
+          if (!volUnit || volUnit === "CBM") lcl = vol;
+        }
       }
 
       if (!mapped) {
