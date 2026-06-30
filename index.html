@@ -578,37 +578,6 @@ function entities(){
 }
 
 /* ====================== DRILL-DOWN ====================== */
-function genShipments(entity, metric, col){
-  var routes=[['Bangkok','Los Angeles'],['Laem Chabang','Rotterdam'],['Bangkok','Hamburg'],['Map Ta Phut','Singapore'],['Bangkok','Jebel Ali'],['Laem Chabang','Shanghai'],['Bangkok','Sydney'],['Laem Chabang','Long Beach']];
-  var modes=[{n:'FCL',c:'#2F6FED',b:'#EAF1FE'},{n:'LCL',c:'#138A6E',b:'#E3F4EF'},{n:'Air',c:'#7A4FC0',b:'#F1ECFB'},{n:'Tank',c:'#B26AC9',b:'#F7ECFB'}];
-  var stats=[{n:'Delivered',c:'#15875A'},{n:'In transit',c:'#2F6FED'},{n:'Customs hold',c:'#C7891E'}];
-  // Get real GP total for this entity+col
-  var repData = repsRaw.find(function(r){ return r.name===entity; });
-  var monthIdx = months26.indexOf(col);
-  var totalGP = 0;
-  if(repData && monthIdx>=0){ totalGP = repData.gp[monthIdx]; }
-  else if(entity==='Grand Total' && monthIdx>=0){ totalGP = sum(repsRaw.map(function(r){ return r.gp[monthIdx]; })); }
-  else if(repData){ totalGP = sum(repData.gp); } // FY Total
-  else { totalGP = sum(repsRaw.map(function(r){ return sum(r.gp); })); }
-  // Generate shipments that sum to real GP
-  var seed=0, key=entity+col;
-  for(var i=0;i<key.length;i++) seed=(seed*31+key.charCodeAt(i))>>>0;
-  function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
-  var shipCount = repData ? (monthIdx>=0 ? repData.ship[monthIdx] : sum(repData.ship)) : (monthIdx>=0 ? sum(repsRaw.map(function(r){return r.ship[monthIdx];})) : sum(repsRaw.map(function(r){return sum(r.ship);})));
-  var n = Math.max(1, Math.min(shipCount, 8));
-  var out=[], remaining=totalGP;
-  for(var j=0;j<n;j++){
-    var r=routes[Math.floor(rnd()*routes.length)];
-    var m=modes[Math.floor(rnd()*modes.length)];
-    var s=stats[Math.floor(rnd()*stats.length)];
-    var teus=1+Math.floor(rnd()*3);
-    var gpRaw = j===n-1 ? Math.max(0,remaining) : Math.round(remaining*(0.1+rnd()*0.4));
-    remaining -= gpRaw;
-    out.push({jobNo:'SAR-26-'+(10000+Math.floor(rnd()*89999)), origin:r[0], dest:r[1], mode:m.n, modeColor:m.c, modeBg:m.b, teus:teus+' TEU', gpRaw:gpRaw, gpFmt:fmtCur(gpRaw), status:s.n, statusColor:s.c});
-  }
-  return out;
-}
-
 /* ====================== SIDEBAR ====================== */
 function navItem(label, active, svg, actType, actVal, disabled){
   var st = active ? 'color:#2F6FED;background:#EAF1FE;font-weight:600;' : (disabled?'color:#B0BAC8;font-weight:500;cursor:default;':'color:#5B6678;font-weight:500;');
@@ -1032,6 +1001,7 @@ function buildSummaryCells(e, colLabels){
 }
 function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, colLabels, noTarget){
   var series=[fy].concat(monthVals);
+  var isClickable = metricLabel !== 'Target' && metricLabel !== 'Achievement %';
   return series.map(function(v,i){
     var val, color=baseColor, isDash=false;
     if(noTarget && (type==='pct' || (type==='cur' && metricLabel==='Target'))){
@@ -1046,7 +1016,7 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
     else { val='\u2014'; isDash=true; }
     if(isDash) color='#C7CEDA';
     var isFY=i===0;
-    return {val:val, color:color, bg:isFY?'#FFFBF0':'transparent', borderLeft:isFY?'2px solid #F0D9A8':'0', weight:isFY?600:500, entity:entityName, metric:metricLabel, col:colLabels[i], drillVal:val};
+    return {val:val, color:color, bg:isFY?'#FFFBF0':'transparent', borderLeft:isFY?'2px solid #F0D9A8':'0', weight:isFY?600:500, entity:entityName, metric:metricLabel, col:colLabels[i], drillVal:val, clickable: isClickable && !isDash};
   });
 }
 
@@ -1195,7 +1165,11 @@ function salesTable(M){
       var borderStyle = isFY
         ? 'box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;'
         : 'border-right:1px solid '+BORDER+';';
-      return '<td class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'" style="'+stickyStyle+borderStyle+'text-align:right;padding:6px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+cellBg+';white-space:nowrap;">'+c.val+'</td>';
+      var clickAttrs = c.clickable
+        ? ' class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'"'
+        : '';
+      var cursorStyle = c.clickable ? 'cursor:pointer;' : '';
+      return '<td'+clickAttrs+' style="'+stickyStyle+borderStyle+cursorStyle+'text-align:right;padding:6px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+cellBg+';white-space:nowrap;">'+c.val+'</td>';
     });
     var mcells = allCells.join('');
 
@@ -1283,27 +1257,79 @@ function salesTable(M){
 function drawer(){
   if(!state.drill) return '';
   var d=state.drill;
-  var ships=d.shipments.map(function(s){
-    return '<div class="shipcard" style="border:1px solid #EBEFF5;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><span style="font-family:\'DM Mono\',monospace;font-size:12.5px;font-weight:500;color:#2F6FED;">'+s.jobNo+'</span><span style="font-size:11px;font-weight:700;color:'+s.modeColor+';background:'+s.modeBg+';border-radius:5px;padding:2px 7px;">'+s.mode+'</span></div>'
-      +'<div style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:#15233B;"><span>'+s.origin+'</span><svg width="14" height="9" viewBox="0 0 20 10" fill="none" stroke="#C2CAD6" stroke-width="1.6" stroke-linecap="round"><path d="M1 5h17M14 2l4 3-4 3"/></svg><span>'+s.dest+'</span></div>'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #F2F5F9;padding-top:8px;"><span style="display:flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:'+s.statusColor+';"><span style="width:6px;height:6px;border-radius:50%;background:'+s.statusColor+';display:inline-block;"></span>'+s.status+'</span><div style="display:flex;align-items:center;gap:12px;"><span style="font-size:11.5px;color:#97A1B2;font-weight:500;">'+s.teus+'</span><span style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:500;color:#15875A;">'+s.gpFmt+'</span></div></div>'
+
+  var bodyContent;
+  if (d.loading) {
+    bodyContent = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:60px 0;">'
+      +'<div style="display:flex;flex-direction:column;align-items:center;gap:12px;">'
+        +'<div class="login-spinner" style="width:24px;height:24px;border-width:3px;"></div>'
+        +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading shipment details…</div>'
+      +'</div>'
     +'</div>';
-  }).join('');
+  } else if (d.error) {
+    bodyContent = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:40px 24px;text-align:center;">'
+      +'<div style="font-size:12.5px;color:#DC2626;font-weight:600;">'+esc(d.error)+'</div>'
+    +'</div>';
+  } else if (!d.rows || d.rows.length === 0) {
+    bodyContent = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:40px 24px;text-align:center;">'
+      +'<div style="font-size:12.5px;color:#94A3B8;font-weight:600;">No matching job rows found for this cell.</div>'
+    +'</div>';
+  } else {
+    var cards = d.rows.map(function(s){
+      var dt = new Date(s.date);
+      var dateFmt = dt.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'2-digit' });
+      var route = (s.origin || s.destination)
+        ? '<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:#15233B;">'
+            +'<span>'+esc(s.origin || '—')+'</span>'
+            +'<svg width="14" height="9" viewBox="0 0 20 10" fill="none" stroke="#C2CAD6" stroke-width="1.6" stroke-linecap="round"><path d="M1 5h17M14 2l4 3-4 3"/></svg>'
+            +'<span>'+esc(s.destination || '—')+'</span>'
+          +'</div>'
+        : '';
+      var metricBadge = (d.metric !== 'Shipments' && d.metric !== 'GP')
+        ? '<span style="font-size:11px;font-weight:700;color:#5B8DEF;background:#EAF1FE;border-radius:5px;padding:2px 7px;">'+s.metricVal.toFixed(2)+' '+esc(s.metricUnit)+'</span>'
+        : '';
+      return '<div class="shipcard" style="border:1px solid #EBEFF5;border-radius:10px;padding:11px 14px;display:flex;flex-direction:column;gap:7px;">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">'
+          +'<span style="font-family:\'DM Mono\',monospace;font-size:12px;font-weight:600;color:#2F6FED;">'+esc(s.shipmentNo)+'</span>'
+          +'<span style="font-size:10.5px;font-weight:700;color:#7C3AED;background:#F1ECFB;border-radius:5px;padding:2px 7px;">'+esc(s.lob)+'</span>'
+        +'</div>'
+        +route
+        +'<div style="font-size:11.5px;color:#64748B;font-weight:500;">'+esc(s.customer || s.salesPerson || '')+'</div>'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid #F2F5F9;padding-top:7px;">'
+          +'<span style="font-size:11px;color:#97A1B2;font-weight:500;">'+dateFmt+'</span>'
+          +'<div style="display:flex;align-items:center;gap:8px;">'
+            + metricBadge
+            +'<span style="font-family:\'DM Mono\',monospace;font-size:12.5px;font-weight:600;color:'+(s.gp>=0?'#15875A':'#DC2626')+';">'+fmtCur(s.gp)+'</span>'
+          +'</div>'
+        +'</div>'
+      +'</div>';
+    }).join('');
+    bodyContent = '<div style="flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px;">'+cards+'</div>';
+  }
+
+  var subtitle = d.loading ? 'Loading…' : (d.count !== undefined ? d.count+' job'+(d.count===1?'':'s')+' contributing' : '');
+
+  var footer = (!d.loading && !d.error && d.rows && d.rows.length > 0)
+    ? '<div style="padding:14px 22px;border-top:1px solid #F0F3F8;display:flex;align-items:center;justify-content:space-between;background:#FAFBFD;">'
+        +'<span style="font-size:12.5px;font-weight:600;color:#5B6678;">Total GP in view</span>'
+        +'<span style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:500;color:#15875A;">'+fmtCur(d.totalGP||0)+'</span>'
+      +'</div>'
+    : '';
+
   return '<div data-act="close" style="position:fixed;inset:0;background:rgba(15,23,40,0.34);z-index:50;display:flex;justify-content:flex-end;animation:ovFade 0.16s ease;">'
     +'<div data-stop="1" style="width:460px;max-width:92vw;height:100%;background:#FFFFFF;display:flex;flex-direction:column;box-shadow:-10px 0 36px rgba(15,23,40,0.14);animation:drwSlide 0.2s cubic-bezier(0.22,1,0.36,1);">'
       +'<div style="padding:20px 22px 16px;border-bottom:1px solid #F0F3F8;">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
           +'<div>'
-            +'<div style="display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#97A1B2;text-transform:uppercase;"><span style="color:#2F6FED;">'+d.entity+'</span><span>·</span><span>'+d.metric+'</span><span>·</span><span>'+d.col+'</span></div>'
-            +'<div style="font-family:\'DM Mono\',monospace;font-size:24px;font-weight:500;color:#15233B;margin-top:7px;letter-spacing:-0.02em;">'+d.valueFmt+'</div>'
-            +'<div style="font-size:11.5px;color:#97A1B2;font-weight:500;margin-top:2px;">'+d.count+' shipments contributing</div>'
+            +'<div style="display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#97A1B2;text-transform:uppercase;"><span style="color:#2F6FED;">'+esc(d.entity)+'</span><span>·</span><span>'+esc(d.metric)+'</span><span>·</span><span>'+esc(d.col)+'</span></div>'
+            +'<div style="font-family:\'DM Mono\',monospace;font-size:24px;font-weight:500;color:#15233B;margin-top:7px;letter-spacing:-0.02em;">'+esc(d.valueFmt)+'</div>'
+            +'<div style="font-size:11.5px;color:#97A1B2;font-weight:500;margin-top:2px;">'+subtitle+'</div>'
           +'</div>'
           +'<button data-act="close" style="border:none;background:#F4F7FB;width:32px;height:32px;border-radius:8px;cursor:pointer;color:#5B6678;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✕</button>'
         +'</div>'
       +'</div>'
-      +'<div style="flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px;">'+ships+'</div>'
-      +'<div style="padding:14px 22px;border-top:1px solid #F0F3F8;display:flex;align-items:center;justify-content:space-between;background:#FAFBFD;"><span style="font-size:12.5px;font-weight:600;color:#5B6678;">Total GP in view</span><span style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:500;color:#15875A;">'+d.totalFmt+'</span></div>'
+      + bodyContent
+      + footer
     +'</div>'
   +'</div>';
 }
@@ -1550,10 +1576,32 @@ function renderKeepTopbar(){
 }
 
 function openDrill(entity, metric, col, valueFmt){
-  var ships=genShipments(entity,metric,col);
-  var total=sum(ships.map(function(s){return s.gpRaw;}));
-  state.drill={entity:entity, metric:metric, col:col, valueFmt:valueFmt, shipments:ships, totalFmt:fmtCur(total), count:ships.length};
+  // col is a month label like "Apr-25", or "FY Total" for the whole year
+  state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null };
   render();
+
+  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col);
+  fetch('/api/mongo-batch'+qs)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (!data.success) {
+        state.drill.loading = false;
+        state.drill.error = data.error || 'Failed to load details.';
+        render();
+        return;
+      }
+      state.drill.loading = false;
+      state.drill.rows = data.rows;
+      state.drill.count = data.count;
+      state.drill.totalMetric = data.totalMetric;
+      state.drill.totalGP = data.totalGP;
+      render();
+    })
+    .catch(function(err){
+      state.drill.loading = false;
+      state.drill.error = 'Could not reach the server.';
+      render();
+    });
 }
 
 document.addEventListener('change', function(ev){
