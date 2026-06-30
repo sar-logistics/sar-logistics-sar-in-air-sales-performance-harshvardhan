@@ -308,6 +308,72 @@ async function computeSalesAggregate(db) {
   };
 }
 
+// In-memory cache for customer aggregate
+let customerCache = null;
+let customerCacheTime = 0;
+
+async function getCustomerAggregate(db) {
+  if (customerCache && (Date.now() - customerCacheTime) < SALES_CACHE_TTL_MS) {
+    return { ...customerCache, cached: true };
+  }
+  const result = await computeCustomerAggregate(db);
+  customerCache = result;
+  customerCacheTime = Date.now();
+  return result;
+}
+
+async function computeCustomerAggregate(db) {
+  // Scoped to Air Export + Air Import only (current business scope)
+  const custMap = {}; // customer name → { shipments, revenue, gp }
+
+  for (const collName of AIR_COLLECTIONS) {
+    const jobs = await db.collection(collName).find(
+      {},
+      { projection: {
+          "Customer": 1,
+          "Billed Revenue (C)": 1,
+          "Actual Profit (J=C-G)": 1,
+        }
+      }
+    ).toArray();
+
+    for (const job of jobs) {
+      const customer = String(job["Customer"] || "").trim();
+      if (!customer) continue;
+
+      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const gp      = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0;
+
+      if (!custMap[customer]) custMap[customer] = { shipments: 0, revenue: 0, gp: 0 };
+      custMap[customer].shipments += 1;
+      custMap[customer].revenue   += revenue;
+      custMap[customer].gp        += gp;
+    }
+  }
+
+  const customers = Object.entries(custMap).map(([name, d]) => ({
+    name,
+    shipments: d.shipments,
+    revenue:   Math.round(d.revenue),
+    gp:        Math.round(d.gp),
+    gpPct:     d.revenue > 0 ? Math.round((d.gp / d.revenue) * 1000) / 10 : 0,
+  }));
+
+  function top10(arr, key) {
+    return [...arr].sort((a, b) => b[key] - a[key]).slice(0, 10);
+  }
+
+  return {
+    success: true,
+    topByShipments: top10(customers, "shipments"),
+    topByRevenue:   top10(customers, "revenue"),
+    topByGP:        top10(customers, "gp"),
+    topByGPPct:     top10(customers.filter(c => c.shipments >= 2), "gpPct"), // filter noise from 1-off jobs
+    totalCustomers: customers.length,
+    pushedAt: new Date().toISOString(),
+  };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -319,7 +385,7 @@ module.exports = async function handler(req, res) {
   if (!action) return res.status(400).json({ error: "action required: jobs | mapping | users | sales" });
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -348,6 +414,11 @@ module.exports = async function handler(req, res) {
 
     if (action === "sales") {
       const result = await getSalesAggregate(db);
+      return res.status(200).json(result);
+    }
+
+    if (action === "customers") {
+      const result = await getCustomerAggregate(db);
       return res.status(200).json(result);
     }
 
