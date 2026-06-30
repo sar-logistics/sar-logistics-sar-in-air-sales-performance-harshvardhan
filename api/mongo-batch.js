@@ -388,7 +388,7 @@ async function getDrillRows(db, entity, metric, month) {
   };
 }
 
-
+async function getSalesAggregate(db, force) {
   if (!force && salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...salesCache, cached: true };
   }
