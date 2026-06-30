@@ -503,13 +503,19 @@ async function computeSalesAggregate(db) {
   const repMeta      = {};
   const unmapped     = {}; // tracks sales person names with no mapping match
 
+  // Cross Sales: any Sales Person not found in mapping_sales_targets gets
+  // grouped under a synthetic "Cross Sales" zone, broken down by Location
+  // (branch) instead of by individual rep.
+  const CROSS_SALES_ZONE = "Cross Sales";
+  const branchMonthData = {}; // branchName → { monthLabel → { gp, ship, tons, teu, lcl } }
+
   for (const collName of JOB_COLLECTIONS) {
     // Fetch every field any classification might need — we don't know which
     // branch a row falls into until we read its LOB, so project broadly.
     const jobs = await db.collection(collName).find(
       {},
       { projection: {
-          "Sales Person": 1, "Shipment No": 1, "Job Date": 1, "LOB": 1,
+          "Sales Person": 1, "Shipment No": 1, "Job Date": 1, "LOB": 1, "Location": 1,
           "Actual Profit (J=C-G)": 1,
           "ETD Loading Port": 1, "ETA Discharge": 1,
           "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
@@ -523,12 +529,6 @@ async function computeSalesAggregate(db) {
       if (!salesPerson) continue;
 
       const mapped = repLookup[salesPerson];
-      if (!mapped) {
-        unmapped[job["Sales Person"]] = (unmapped[job["Sales Person"]] || 0) + 1;
-        continue;
-      }
-
-      const repKey = mapped.displayName + "||" + mapped.zone;
 
       // Classify this row by its own LOB column (or _tab for ISO Tank),
       // NOT by which collection it happens to be stored in — protects
@@ -577,6 +577,23 @@ async function computeSalesAggregate(db) {
         // Only count as LCL(CBM) if the unit is actually CBM (or blank, assumed CBM)
         if (!volUnit || volUnit === "CBM") lcl = vol;
       }
+
+      if (!mapped) {
+        // Unmapped sales person → Cross Sales, grouped by branch (Location)
+        unmapped[job["Sales Person"]] = (unmapped[job["Sales Person"]] || 0) + 1;
+
+        const branch = String(job["Location"] || "Unspecified").trim() || "Unspecified";
+        if (!branchMonthData[branch]) branchMonthData[branch] = {};
+        if (!branchMonthData[branch][monthLabel]) branchMonthData[branch][monthLabel] = { gp: 0, ship: 0, tons: 0, teu: 0, lcl: 0 };
+        branchMonthData[branch][monthLabel].gp   += gp;
+        branchMonthData[branch][monthLabel].ship += 1;
+        branchMonthData[branch][monthLabel].tons += tons;
+        branchMonthData[branch][monthLabel].teu  += teu;
+        branchMonthData[branch][monthLabel].lcl  += lcl;
+        continue;
+      }
+
+      const repKey = mapped.displayName + "||" + mapped.zone;
 
       if (!repMonthData[repKey]) repMonthData[repKey] = {};
       if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, ship: 0, tons: 0, teu: 0, lcl: 0 };
