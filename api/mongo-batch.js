@@ -374,6 +374,53 @@ async function computeCustomerAggregate(db) {
   };
 }
 
+// In-memory cache for usage analytics
+let usageCache = null;
+let usageCacheTime = 0;
+
+async function getUsageAnalytics(db) {
+  if (usageCache && (Date.now() - usageCacheTime) < SALES_CACHE_TTL_MS) {
+    return { ...usageCache, cached: true };
+  }
+  const result = await computeUsageAnalytics(db);
+  usageCache = result;
+  usageCacheTime = Date.now();
+  return result;
+}
+
+async function computeUsageAnalytics(db) {
+  const users = await db.collection("users").find({}).toArray();
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const userRows = users.map((u, i) => ({
+    index:       i + 1,
+    name:        u.name || "",
+    email:       u.email || "",
+    role:        u.role || "user",
+    totalLogins: u.loginCount || 0,
+    lastLogin:   u.lastLogin ? u.lastLogin.toISOString() : null,
+    isActive:    u.isActive !== false,
+  }));
+
+  // Sort by total logins descending, matching the reference screenshot
+  userRows.sort((a, b) => b.totalLogins - a.totalLogins);
+  userRows.forEach((u, i) => { u.index = i + 1; });
+
+  const totalUsers   = userRows.length;
+  const activeUsers  = userRows.filter(u => u.isActive).length;
+  const loggedIn7Day = userRows.filter(u => u.lastLogin && new Date(u.lastLogin) >= sevenDaysAgo).length;
+
+  return {
+    success: true,
+    totalUsers,
+    activeUsers,
+    loggedIn7Day,
+    users: userRows,
+    pushedAt: new Date().toISOString(),
+  };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -385,7 +432,7 @@ module.exports = async function handler(req, res) {
   if (!action) return res.status(400).json({ error: "action required: jobs | mapping | users | sales" });
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -419,6 +466,11 @@ module.exports = async function handler(req, res) {
 
     if (action === "customers") {
       const result = await getCustomerAggregate(db);
+      return res.status(200).json(result);
+    }
+
+    if (action === "usage") {
+      const result = await getUsageAnalytics(db);
       return res.status(200).json(result);
     }
 
