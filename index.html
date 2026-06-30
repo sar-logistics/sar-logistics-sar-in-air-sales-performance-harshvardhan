@@ -393,6 +393,7 @@ function grandEntity(){
     name:'Grand Total', initials:'GT', avatarBg:'oklch(0.5 0.14 262)', isGrand:true, zone:'',
     ship: months26.map(function(_,i){return sum(repsRaw.map(function(r){return r.ship[i]||0;}));}),
     gp:   months26.map(function(_,i){return sum(repsRaw.map(function(r){return r.gp[i]  ||0;}));}),
+    tons: months26.map(function(_,i){return sum(repsRaw.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
     tank: months26.map(function(){return 0;}),
     tgt:  sum(repsRaw.map(function(r){return r.tgt;}))
   };
@@ -417,6 +418,7 @@ function zoneEntity(zoneName){
     isZone: true, zone: zoneName,
     ship: months26.map(function(_,i){ return sum(zReps.map(function(r){ return r.ship[i]||0; })); }),
     gp:   months26.map(function(_,i){ return sum(zReps.map(function(r){ return r.gp[i]  ||0; })); }),
+    tons: months26.map(function(_,i){ return sum(zReps.map(function(r){ return (r.tons&&r.tons[i])||0; })); }),
     tank: months26.map(function(){ return 0; }),
     tgt:  zData.monthlyTarget || sum(zReps.map(function(r){ return r.tgt; }))
   };
@@ -433,7 +435,7 @@ function repEntity(r){
     name: r.name, initials: initials(r.name),
     avatarBg: 'oklch(0.6 0.12 ' + r.hue + ')',
     isRep: true, zone: r.zone,
-    ship: r.ship, gp: r.gp, tank: r.tank, tgt: r.tgt
+    ship: r.ship, gp: r.gp, tons: r.tons || months26.map(function(){return 0;}), tank: r.tank, tgt: r.tgt
   };
 }
 
@@ -643,6 +645,7 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
     if(type==='int'){ if(v){val=v.toLocaleString('en-US');}else{val='\u2014';isDash=true;} }
     else if(type==='cur'){ val=fmtCur(v); }
     else if(type==='pct'){ val=v+'%'; color=v>=100?'#15875A':'#D64545'; }
+    else if(type==='tons'){ if(v){val=v.toFixed(2)+' t';}else{val='\u2014';isDash=true;} }
     else { val='\u2014'; isDash=true; }
     if(isDash) color='#C7CEDA';
     var isFY=i===0;
@@ -701,7 +704,8 @@ function tableRows(){
     rows.push(metric('Shipments', 0, 'int', '#15233B', e.ship, sum(e.ship), 'ship', repInfo));
 
     if (shipOpen) {
-      rows.push(metric('TEUs (Ocean)', 1, 'int', '#5B8DEF', teus, sum(teus), false));
+      rows.push(metric('Tons (Air)',         1, 'tons', '#5B8DEF', e.tons, sum(e.tons), false));
+      rows.push(metric('TEUs (Ocean)',       1, 'int',  '#5B8DEF', teus, sum(teus), false));
       rows.push(metric('LCL (Ocean in CBM)', 1, 'dash', '#9AA4B2', lcl, 0, false));
     }
 
