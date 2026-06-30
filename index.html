@@ -395,7 +395,7 @@ function grandEntity(){
     gp:   months26.map(function(_,i){return sum(repsRaw.map(function(r){return r.gp[i]  ||0;}));}),
     tons: months26.map(function(_,i){return sum(repsRaw.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
     tank: months26.map(function(){return 0;}),
-    tgt:  sum(repsRaw.map(function(r){return r.tgt;}))
+    tgt:  sum(zonesRaw.map(function(z){return z.monthlyTarget||0;}))
   };
 }
 
@@ -638,11 +638,14 @@ function buildSummaryCells(e, colLabels){
     };
   });
 }
-function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, colLabels){
+function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, colLabels, noTarget){
   var series=[fy].concat(monthVals);
   return series.map(function(v,i){
     var val, color=baseColor, isDash=false;
-    if(type==='int'){ if(v){val=v.toLocaleString('en-US');}else{val='\u2014';isDash=true;} }
+    if(noTarget && (type==='pct' || (type==='cur' && metricLabel==='Target'))){
+      val='\u2014'; isDash=true;
+    }
+    else if(type==='int'){ if(v){val=v.toLocaleString('en-US');}else{val='\u2014';isDash=true;} }
     else if(type==='cur'){ val=fmtCur(v); }
     else if(type==='pct'){ val=v+'%'; color=v>=100?'#15875A':'#D64545'; }
     else if(type==='tons'){ if(v){val=v.toFixed(2)+' t';}else{val='\u2014';isDash=true;} }
@@ -679,12 +682,14 @@ function tableRows(){
       var isShip = toggleType === 'ship';
       var isOpen = isShip ? shipOpen : false;
       var arrowChar = isShip ? (isOpen ? '◄ ' : '► ') : '';
+      // Individual reps have no real target data — show dash for Target/Achievement rows
+      var noTarget = isRep && (label === 'Target' || label === 'Achievement %');
       return {
         type:'metric', label:label, padLeft:(52+indent*18)+'px', labelColor:color,
         labelWeight:indent?500:600, labelStyle:indent?'italic':'normal',
         caret:arrowChar, toggleType:toggleType||false, entityName:e.name,
         repInfo:repInfo||null,
-        cells:buildCells(fy, vals, type, color, e.name, label, colLabels)
+        cells:buildCells(fy, vals, type, color, e.name, label, colLabels, noTarget)
       };
     }
 
