@@ -111,13 +111,27 @@ const JOB_COLLECTIONS = [
 // Tons metric is calculated only from Air Export/Import (per current scope)
 const AIR_COLLECTIONS = new Set(["jobs_air_export", "jobs_air_import"]);
 
-const FY_MONTHS    = ["Jan-26","Feb-26","Mar-26","Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26","Oct-26","Nov-26","Dec-26"];
+// Indian Fiscal Year 2026 runs Apr 2025 → Mar 2026
+const FY_MONTHS = [
+  "Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
+  "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"
+];
 const MONTH_NAMES  = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function zoneHue(zone) {
   let h = 0;
   for (let i = 0; i < zone.length; i++) h = (h * 31 + zone.charCodeAt(i)) & 0xffff;
   return h % 360;
+}
+
+// Normalizes a sales person name for matching: strips "| CODE" suffixes,
+// extra whitespace, and lowercases. "Pankaj Kumar | INZ03" → "pankaj kumar"
+function normalizeName(name) {
+  return String(name || "")
+    .split("|")[0]
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
@@ -141,7 +155,7 @@ async function computeSalesAggregate(db) {
   const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
   const repLookup = {};
   for (const row of mappingRows) {
-    const key = String(row["Sales Rep Name"] || "").toLowerCase().trim();
+    const key = normalizeName(row["Sales Rep Name"]);
     if (!key) continue;
     repLookup[key] = {
       displayName:   String(row["Display Name"] || row["Sales Rep Name"] || "").trim(),
@@ -167,6 +181,7 @@ async function computeSalesAggregate(db) {
   // 3. Aggregate job data per rep per month
   const repMonthData = {};
   const repMeta      = {};
+  const unmapped     = {}; // tracks sales person names with no mapping match
 
   for (const collName of JOB_COLLECTIONS) {
     const isAir = AIR_COLLECTIONS.has(collName);
@@ -180,11 +195,14 @@ async function computeSalesAggregate(db) {
     ).toArray();
 
     for (const job of jobs) {
-      const salesPerson = String(job["Sales Person"] || "").toLowerCase().trim();
+      const salesPerson = normalizeName(job["Sales Person"]);
       if (!salesPerson) continue;
 
       const mapped = repLookup[salesPerson];
-      if (!mapped) continue;
+      if (!mapped) {
+        unmapped[job["Sales Person"]] = (unmapped[job["Sales Person"]] || 0) + 1;
+        continue;
+      }
 
       const repKey = mapped.displayName + "||" + mapped.zone;
 
@@ -228,12 +246,23 @@ async function computeSalesAggregate(db) {
   // 4. Shape into repsRaw
   const activeMonths = FY_MONTHS.filter(m => Object.values(repMonthData).some(d => d[m]));
 
+  // Count reps per zone so zone target can be split evenly across them
+  const repsPerZone = {};
+  for (const meta of Object.values(repMeta)) {
+    repsPerZone[meta.zone] = (repsPerZone[meta.zone] || 0) + 1;
+  }
+
   const repsRaw = [];
   for (const [repKey, monthData] of Object.entries(repMonthData)) {
     const meta = repMeta[repKey];
     const gp   = activeMonths.map(m => Math.round(monthData[m]?.gp || 0));
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
     const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
+
+    // Target rolls up from Zone target only, split evenly across reps in that zone
+    const zoneMonthlyTarget = zoneTargets[meta.zone]?.monthlyTarget || 0;
+    const repCount = repsPerZone[meta.zone] || 1;
+    const repTarget = Math.round(zoneMonthlyTarget / repCount);
 
     repsRaw.push({
       name:  meta.displayName,
@@ -243,7 +272,7 @@ async function computeSalesAggregate(db) {
       hue:   zoneHue(meta.zone),
       gp, ship, tons,
       tank:  activeMonths.map(() => 0),
-      tgt:   Math.round(meta.monthlyTarget),
+      tgt:   repTarget,
     });
   }
 
@@ -277,6 +306,9 @@ async function computeSalesAggregate(db) {
     months:   activeMonths,
     repsRaw,
     zones:    Object.values(zonesMap),
+    unmapped: Object.entries(unmapped)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count })),
     pushedAt: new Date().toISOString(),
   };
 }
