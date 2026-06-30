@@ -61,15 +61,25 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    const now = new Date();
+
     await db.collection(COLLECTION_USERS).updateOne(
       { email },
       {
         $set: {
-          lastLogin: new Date(),
+          lastLogin: now,
           ...(picture ? { photoUrl: picture } : {}),
         },
+        $inc: { loginCount: 1 },
       }
     );
+
+    // Log this login event for activity history (used by Usage Analytics)
+    await db.collection("login_events").insertOne({
+      email,
+      name: user.name,
+      timestamp: now,
+    });
 
     console.log("✅ Auth success:", email, "| role:", user.role);
     return res.status(200).json({
