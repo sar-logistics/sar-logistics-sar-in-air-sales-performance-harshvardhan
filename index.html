@@ -390,7 +390,7 @@ function fetchUsageData(callback) {
     });
 }
 
-var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:32.50, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackRating:0, feedbackSent:false, shipOpen:{}, drill:null };
+var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:32.50, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null };
 
 /* ====================== HELPERS ====================== */
 function fmtCur(v){
@@ -1165,10 +1165,24 @@ function leaderboard(){
 
 function feedbackModal(){
   if(!state.feedbackOpen) return '';
-  var stars = [1,2,3,4,5].map(function(n){
-    var filled = n <= state.feedbackRating;
-    return '<span data-act="setRating" data-val="'+n+'" style="font-size:22px;cursor:pointer;color:'+(filled?'#F59E0B':'#CBD5E1')+';transition:color 0.1s;">★</span>';
+
+  var reportOptions = [
+    'Sales Performance Dashboard',
+    'Tradelane Insights',
+    'Customer Insights',
+    'Agent Insights',
+    'Operation Pendency',
+    'Finance Pendency',
+    'General'
+  ];
+  var selectedReport = state.feedbackReport || 'Sales Performance Dashboard';
+  var optionsHtml = '<option value="">Select report...</option>' + reportOptions.map(function(r){
+    return '<option value="'+esc(r)+'"'+(r===selectedReport?' selected':'')+'>'+esc(r)+'</option>';
   }).join('');
+
+  var userName  = (currentUser && currentUser.name)  || '';
+  var userEmail = (currentUser && currentUser.email) || '';
+
   var body = state.feedbackSent
     ? '<div style="padding:28px 24px;text-align:center;">'
         +'<div style="font-size:32px;margin-bottom:12px;">🎉</div>'
@@ -1176,31 +1190,40 @@ function feedbackModal(){
         +'<div style="font-size:12.5px;color:#64748B;">Your feedback has been submitted.</div>'
         +'<button data-act="feedbackClose" style="margin-top:18px;border:none;background:#2563EB;color:#fff;border-radius:7px;padding:8px 24px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Close</button>'
       +'</div>'
-    : '<div style="padding:20px 22px;">'
-        +'<div style="font-size:14px;font-weight:700;color:#15233B;margin-bottom:4px;">Share your feedback</div>'
-        +'<div style="font-size:11.5px;color:#64748B;margin-bottom:16px;">Help us improve SAR_IN - Air dashboard</div>'
-        +'<div style="margin-bottom:14px;">'
-          +'<div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px;">How would you rate your experience?</div>'
-          +'<div style="display:flex;gap:4px;">'+stars+'</div>'
+    : '<div style="padding:22px 24px;">'
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">'
+          +'<div>'
+            +'<div style="font-size:10.5px;font-weight:700;letter-spacing:0.04em;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Name</div>'
+            +'<input id="feedback-name" type="text" value="'+esc(userName)+'" style="width:100%;border:1px solid #E2E8F0;border-radius:7px;padding:8px 10px;font-size:12.5px;font-family:inherit;outline:none;color:#15233B;background:#F8FAFC;" readonly>'
+          +'</div>'
+          +'<div>'
+            +'<div style="font-size:10.5px;font-weight:700;letter-spacing:0.04em;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Email</div>'
+            +'<input id="feedback-email" type="text" value="'+esc(userEmail)+'" style="width:100%;border:1px solid #E2E8F0;border-radius:7px;padding:8px 10px;font-size:12.5px;font-family:inherit;outline:none;color:#15233B;background:#F8FAFC;" readonly>'
+          +'</div>'
         +'</div>'
         +'<div style="margin-bottom:16px;">'
-          +'<div style="font-size:11px;font-weight:600;color:#374151;margin-bottom:6px;">Comments</div>'
-          +'<textarea id="feedback-text" placeholder="What do you like or what can be improved?" style="width:100%;height:80px;border:1px solid #E2E8F0;border-radius:7px;padding:8px 10px;font-size:12px;font-family:inherit;resize:none;outline:none;color:#15233B;" >'+state.feedbackText+'</textarea>'
+          +'<div style="font-size:10.5px;font-weight:700;letter-spacing:0.04em;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Report <span style="color:#DC2626;">*</span></div>'
+          +'<select id="feedback-report" style="width:100%;border:1px solid #E2E8F0;border-radius:7px;padding:8px 10px;font-size:12.5px;font-family:inherit;outline:none;color:#15233B;background:#fff;cursor:pointer;">'+optionsHtml+'</select>'
         +'</div>'
-        +'<div style="display:flex;justify-content:flex-end;gap:8px;">'
-          +'<button data-act="feedbackClose" style="border:1px solid #E2E8F0;background:#FFFFFF;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:600;cursor:pointer;color:#374151;font-family:inherit;">Cancel</button>'
-          +'<button data-act="feedbackSubmit" style="border:none;background:#2563EB;color:#fff;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Submit</button>'
+        +'<div style="margin-bottom:6px;">'
+          +'<div style="font-size:10.5px;font-weight:700;letter-spacing:0.04em;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Feedback <span style="color:#DC2626;">*</span></div>'
+          +'<textarea id="feedback-text" placeholder="Describe your feedback..." style="width:100%;height:90px;border:1px solid #E2E8F0;border-radius:7px;padding:9px 10px;font-size:12.5px;font-family:inherit;resize:vertical;outline:none;color:#15233B;">'+esc(state.feedbackText)+'</textarea>'
+        +'</div>'
+        +(state.feedbackError ? '<div style="font-size:11px;color:#DC2626;font-weight:600;margin-top:6px;">'+esc(state.feedbackError)+'</div>' : '')
+        +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:16px;border-top:1px solid #F1F5F9;">'
+          +'<button data-act="feedbackClose" style="border:1px solid #E2E8F0;background:#FFFFFF;border-radius:7px;padding:8px 18px;font-size:12.5px;font-weight:600;cursor:pointer;color:#374151;font-family:inherit;">Cancel</button>'
+          +'<button data-act="feedbackSubmit" style="border:none;background:#2563EB;color:#fff;border-radius:7px;padding:8px 18px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">Send Feedback</button>'
         +'</div>'
       +'</div>';
 
   return '<div data-act="feedbackClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.4);z-index:300;display:flex;align-items:center;justify-content:center;animation:ovFade 0.15s ease;">'
-    +'<div data-stop="1" style="background:#FFFFFF;border-radius:12px;box-shadow:0 20px 60px rgba(15,23,40,0.18);width:380px;max-width:94vw;overflow:hidden;animation:drwSlide 0.2s cubic-bezier(0.22,1,0.36,1);">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #F1F5F9;">'
-        +'<div style="display:flex;align-items:center;gap:8px;">'
-          +'<div style="width:28px;height:28px;background:#EFF4FF;border-radius:7px;display:flex;align-items:center;justify-content:center;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>'
-          +'<span style="font-size:13px;font-weight:700;color:#15233B;">Feedback</span>'
+    +'<div data-stop="1" style="background:#FFFFFF;border-radius:12px;box-shadow:0 20px 60px rgba(15,23,40,0.18);width:460px;max-width:94vw;overflow:hidden;animation:drwSlide 0.2s cubic-bezier(0.22,1,0.36,1);">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:18px 24px;border-bottom:1px solid #F1F5F9;">'
+        +'<div>'
+          +'<div style="font-size:15px;font-weight:700;color:#15233B;">Send Feedback</div>'
+          +'<div style="font-size:11.5px;color:#94A3B8;font-weight:500;margin-top:2px;">SAR Thailand Sales Performance Dashboard</div>'
         +'</div>'
-        +'<button data-act="feedbackClose" style="border:none;background:#F1F5F9;width:26px;height:26px;border-radius:6px;cursor:pointer;color:#64748B;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>'
+        +'<button data-act="feedbackClose" style="border:none;background:transparent;width:26px;height:26px;border-radius:6px;cursor:pointer;color:#94A3B8;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✕</button>'
       +'</div>'
       +body
     +'</div>'
@@ -1270,9 +1293,29 @@ document.addEventListener('click', function(ev){
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
   else if(act==='rateCommit'){ var v=parseFloat(document.getElementById('rate-input').value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
   else if(act==='feedbackOpen'){ ev.stopPropagation(); state.feedbackOpen=true; state.feedbackSent=false; state.feedbackText=''; state.feedbackRating=0; render(); }
-  else if(act==='feedbackClose'){ if(ev.target.closest('[data-stop]')&&!el.matches('[data-act="feedbackClose"]')) return; state.feedbackOpen=false; render(); }
-  else if(act==='setRating'){ ev.stopPropagation(); state.feedbackRating=parseInt(el.getAttribute('data-val')); render(); }
-  else if(act==='feedbackSubmit'){ ev.stopPropagation(); var ta=document.getElementById('feedback-text'); if(ta) state.feedbackText=ta.value; state.feedbackSent=true; render(); }
+  else if(act==='feedbackClose'){
+    if(ev.target.closest('[data-stop]')&&!el.matches('[data-act="feedbackClose"]')) return;
+    state.feedbackOpen=false;
+    state.feedbackSent=false;
+    state.feedbackText='';
+    state.feedbackError='';
+    state.feedbackReport='Sales Performance Dashboard';
+    render();
+  }
+  else if(act==='feedbackSubmit'){
+    ev.stopPropagation();
+    var ta=document.getElementById('feedback-text');
+    var sel=document.getElementById('feedback-report');
+    var txt = ta ? ta.value.trim() : '';
+    var report = sel ? sel.value : '';
+    if(!report){ state.feedbackError='Please select a report.'; render(); return; }
+    if(!txt){ state.feedbackError='Please describe your feedback.'; render(); return; }
+    state.feedbackText=txt;
+    state.feedbackReport=report;
+    state.feedbackError='';
+    state.feedbackSent=true;
+    render();
+  }
   else if(act==='toggleViewDrop'){ ev.stopPropagation(); state.viewDropOpen=!state.viewDropOpen; render(); }
   else if(act==='setView'){ ev.stopPropagation(); state.reportView=el.getAttribute('data-val'); state.viewDropOpen=false; render(); }
   else if(act==='cur'){ ev.stopPropagation(); ev.preventDefault(); state.currency=el.getAttribute('data-cur'); render(); }
