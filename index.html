@@ -443,12 +443,12 @@ function updateUserField(email, fields, callback){
     });
 }
 
-var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:32.50, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'' };
+var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'' };
 
 /* ====================== HELPERS ====================== */
 function fmtCur(v){
-  var rate = state.currency==='THB'?32.5:1;
-  var sym = state.currency==='THB'?'\u0E3F':'$';
+  var rate = state.currency==='INR' ? state.rate : 1;
+  var sym  = state.currency==='INR' ? '\u20B9' : '$';
   return sym + Math.round(v*rate).toLocaleString('en-US');
 }
 function initials(name){return name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();}
@@ -682,7 +682,7 @@ function topbar(){
     +'</div>'
     // ── Currency toggle ──
     +'<div style="display:flex;align-items:center;background:#EEF2F8;border-radius:6px;padding:2px;gap:1px;">'
-      +'<button data-act="cur" data-cur="THB" style="border:none;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:5px;'+seg(state.currency==='THB')+'">THB</button>'
+      +'<button data-act="cur" data-cur="INR" style="border:none;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:5px;'+seg(state.currency==='INR')+'">INR</button>'
       +'<button data-act="cur" data-cur="USD" style="border:none;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:5px;'+seg(state.currency==='USD')+'">USD</button>'
     +'</div>'
     // ── Rate (click to edit) ──
@@ -1051,7 +1051,7 @@ function tableRows(){
         type:'metric', label:label, padLeft:(52+indent*18)+'px', labelColor:color,
         labelWeight:indent?500:600, labelStyle:indent?'italic':'normal',
         caret:arrowChar, toggleType:toggleType||false, entityName:e.name,
-        repInfo:repInfo||null,
+        repInfo:repInfo||null, rowBg: groupBg, isZoneBlock: isZone, isGrandBlock: isGrand,
         cells:buildCells(fy, vals, type, color, e.name, label, colLabels, noTarget)
       };
     }
@@ -1087,19 +1087,48 @@ function tableRows(){
 
 function salesTable(M){
   var colLabels=['FY Total'].concat(months26);
+  var FY_COL_LEFT = 185+140; // sticky offset for the FY Total column
   var head='<tr>'
-    +'<th style="position:sticky;left:0;z-index:3;background:#F8FAFC;text-align:left;padding:6px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid #CBD5E1;width:185px;min-width:185px;border-right:1px solid #E2E8F0;">Sales Rep</th><th style="position:sticky;left:185px;z-index:3;background:#F8FAFC;text-align:left;padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid #CBD5E1;width:140px;min-width:140px;border-right:1px solid #E2E8F0;">Metric</th>'
-    + colLabels.map(function(l,i){
-      return '<th style="text-align:right;padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:'+(i===0?'#C7891E':'#64748B')+';text-transform:uppercase;border-bottom:2px solid #CBD5E1;background:'+(i===0?'#FFFBF0':'transparent')+';white-space:nowrap;">'+l+'</th>';
+    +'<th style="position:sticky;left:0;z-index:3;background:#F8FAFC;text-align:left;padding:6px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid #CBD5E1;width:185px;min-width:185px;border-right:1px solid #E2E8F0;">Zones/Sales Rep</th>'
+    +'<th style="position:sticky;left:185px;z-index:3;background:#F8FAFC;text-align:left;padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid #CBD5E1;width:140px;min-width:140px;border-right:1px solid #E2E8F0;">Metrics</th>'
+    +'<th style="position:sticky;left:'+FY_COL_LEFT+'px;z-index:3;text-align:right;padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#C7891E;text-transform:uppercase;border-bottom:2px solid #CBD5E1;background:#FFFBF0;white-space:nowrap;border-right:2px solid #E8D4A0;">Grand Total</th>'
+    + colLabels.slice(1).map(function(l){
+      return '<th style="text-align:right;padding:6px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid #CBD5E1;background:transparent;white-space:nowrap;">'+l+'</th>';
     }).join('')
   +'</tr>';
 
-  var body=tableRows().map(function(row){
+  // Pre-compute rowspan groups: count how many rows belong to each zone/grand/rep block
+  // so the name cell can be merged and vertically centered for that block.
+  var allRows = tableRows();
+  var blockRowSpans = []; // same length as allRows; null if not first row of block, else span count
+  var i = 0;
+  while (i < allRows.length) {
+    if (allRows[i].repInfo) {
+      var j = i + 1;
+      while (j < allRows.length && !allRows[j].repInfo) j++;
+      blockRowSpans[i] = j - i;
+      for (var k = i+1; k < j; k++) blockRowSpans[k] = 0; // merged away
+      i = j;
+    } else {
+      blockRowSpans[i] = 1;
+      i++;
+    }
+  }
+
+  var body = allRows.map(function(row, idx){
     var ri = row.repInfo;
-    var rowBg = ri ? ri.groupBg : '#FFFFFF';
-    var mcells = row.cells.map(function(c){
-      return '<td class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'" style="text-align:right;padding:5px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+c.bg+';border-left:'+c.borderLeft+';white-space:nowrap;">'+c.val+'</td>';
-    }).join('');
+    var rowBg = row.rowBg || (ri ? ri.groupBg : '#FFFFFF');
+    var isZoneRow  = row.isZoneBlock;
+    var isGrandRow = row.isGrandBlock;
+    var span = blockRowSpans[idx];
+
+    var allCells = row.cells.map(function(c, ci){
+      var isFY = ci === 0;
+      var stickyStyle = isFY ? ('position:sticky;left:'+FY_COL_LEFT+'px;z-index:1;border-right:2px solid #E8D4A0;') : '';
+      var cellBg = isFY ? (rowBg !== '#FFFFFF' ? rowBg : '#FFFBF0') : (rowBg !== '#FFFFFF' ? rowBg : c.bg);
+      return '<td class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'" style="'+stickyStyle+'text-align:right;padding:5px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+cellBg+';border-left:'+(isFY?'0':c.borderLeft)+';white-space:nowrap;">'+c.val+'</td>';
+    });
+    var mcells = allCells.join('');
 
     var isShipRow = row.toggleType === 'ship';
     var arrowSvg  = row.caret.trim() === '◄'
@@ -1117,30 +1146,26 @@ function salesTable(M){
     var actAttr  = isShipRow ? ' data-act="shipToggle" data-name="'+esc(row.entityName)+'"' : '';
     var labelCell = '<div style="display:flex;align-items:center;"'+actAttr+'>'+labelContent+'</div>';
 
-    // Zone row: bold purple-tinted header, no avatar indent
-    var isZoneRow  = ri && ri.isZone;
-    var isGrandRow = ri && ri.isGrand;
-    var topBorder  = (isZoneRow || isGrandRow) ? 'border-top:2px solid #CBD5E1;' : (ri ? 'border-top:2px solid #E2E8F0;' : 'border-top:1px solid #F1F5F9;');
+    var topBorder = (span > 0) ? ((isZoneRow || isGrandRow) ? 'border-top:2px solid #CBD5E1;' : 'border-top:2px solid #E2E8F0;') : 'border-top:0;';
 
-    // Name cell
-    var nameCell;
-    if (ri) {
-      var avatarEl;
-      if (isZoneRow) {
-        // Zone: diamond/zone icon instead of circle avatar
-        avatarEl = '<div style="width:22px;height:22px;border-radius:5px;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
-      } else if (isGrandRow) {
-        avatarEl = '<div style="width:22px;height:22px;border-radius:5px;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
+    // Name cell — only rendered on the first row of a block, with rowspan
+    // covering the full block height, vertically centered.
+    var nameCell = '';
+    if (span > 0) {
+      if (ri) {
+        var avatarEl;
+        if (isZoneRow || isGrandRow) {
+          avatarEl = '<div style="width:22px;height:22px;border-radius:5px;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
+        } else {
+          avatarEl = '<div style="width:22px;height:22px;border-radius:50%;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
+        }
+        var nameLabel = isZoneRow
+          ? '<div><div style="font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#7C3AED;text-transform:uppercase;line-height:1;">Zone</div><div style="font-size:11.5px;font-weight:700;color:#15233B;white-space:nowrap;">'+ri.name+'</div></div>'
+          : '<div style="font-size:11.5px;font-weight:'+ri.nameWeight+';white-space:nowrap;color:#15233B;">'+ri.name+'</div>';
+        nameCell = '<td rowspan="'+span+'" style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:1px solid #CBD5E1;width:185px;min-width:185px;vertical-align:middle;text-align:'+(isZoneRow?'center':'left')+';"><div style="display:flex;align-items:center;justify-content:'+(isZoneRow?'center':'flex-start')+';gap:7px;">'+avatarEl+nameLabel+'</div></td>';
       } else {
-        avatarEl = '<div style="width:22px;height:22px;border-radius:50%;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
+        nameCell = '<td rowspan="'+span+'" style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:0;width:185px;min-width:185px;"></td>';
       }
-      // Zone label shows "ZONE" eyebrow
-      var nameLabel = isZoneRow
-        ? '<div><div style="font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#7C3AED;text-transform:uppercase;line-height:1;">Zone</div><div style="font-size:11.5px;font-weight:700;color:#15233B;white-space:nowrap;">'+ri.name+'</div></div>'
-        : '<div style="font-size:11.5px;font-weight:'+ri.nameWeight+';white-space:nowrap;color:#15233B;">'+ri.name+'</div>';
-      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:1px solid #CBD5E1;width:185px;min-width:185px;"><div style="display:flex;align-items:center;gap:7px;">'+avatarEl+nameLabel+'</div></td>';
-    } else {
-      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:0;width:185px;min-width:185px;"></td>';
     }
 
     return '<tr style="background:'+rowBg+';border-bottom:1px solid #E2E8F0;'+topBorder+'">'
