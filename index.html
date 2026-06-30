@@ -1114,7 +1114,7 @@ function salesTable(M){
   var head='<tr>'
     +'<th style="position:sticky;left:0;z-index:3;background:#EEF2F8;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:185px;min-width:185px;">Zones/Sales Rep</th>'
     +'<th style="position:sticky;left:185px;z-index:3;background:#EEF2F8;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">Metrics</th>'
-    +'<th style="position:sticky;left:'+FY_COL_LEFT+'px;z-index:3;text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#FCF3DA;white-space:nowrap;border-right:2px solid #D9B45C;">Grand Total</th>'
+    +'<th style="position:sticky;left:'+FY_COL_LEFT+'px;z-index:3;text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#FCF3DA;white-space:nowrap;border-left:2px solid '+BORDER_STRONG+';border-right:2px solid #D9B45C;">Grand Total</th>'
     + colLabels.slice(1).map(function(l){
       return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#EEF2F8;white-space:nowrap;">'+l+'</th>';
     }).join('')
@@ -1169,7 +1169,8 @@ function salesTable(M){
       var stickyStyle = isFY ? ('position:sticky;left:'+FY_COL_LEFT+'px;z-index:2;') : '';
       var cellBg = isFY ? (rowBg !== '#FFFFFF' ? rowBg : '#FCF9EE') : (rowBg !== '#FFFFFF' ? rowBg : c.bg);
       var rBorder = isFY ? '2px solid #D9B45C' : ('1px solid '+BORDER);
-      return '<td class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'" style="'+stickyStyle+'text-align:right;padding:6px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+cellBg+';border-right:'+rBorder+';white-space:nowrap;">'+c.val+'</td>';
+      var lBorder = isFY ? 'border-left:2px solid '+BORDER_STRONG+';' : '';
+      return '<td class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'" style="'+stickyStyle+lBorder+'text-align:right;padding:6px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+cellBg+';border-right:'+rBorder+';white-space:nowrap;">'+c.val+'</td>';
     });
     var mcells = allCells.join('');
 
