@@ -345,6 +345,9 @@ var customerData = null; // { topByShipments, topByRevenue, topByGP, topByGPPct,
 var customerDataReady = false;
 var usageData = null; // { totalUsers, activeUsers, loggedIn7Day, users }
 var usageDataReady = false;
+var orgData = null; // { hierarchy, directReports, support, totalUsers }
+var orgDataReady = false;
+var orgEditTarget = null; // email of user currently being edited, or null
 
 function fetchLiveData(callback, force){
   fetch('/api/mongo-batch?action=sales' + (force ? '&force=1' : ''))
@@ -407,7 +410,40 @@ function fetchUsageData(callback, force){
     });
 }
 
-var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:32.50, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null };
+function fetchOrgData(callback, force){
+  fetch('/api/mongo-batch?action=org' + (force ? '&force=1' : ''))
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.success) {
+        orgData = data;
+        orgDataReady = true;
+        console.log('✅ Org data:', data.totalUsers, 'users');
+      }
+      if (callback) callback();
+    })
+    .catch(function(e){
+      console.warn('⚠️ Org data failed:', e.message);
+      if (callback) callback();
+    });
+}
+
+function updateUserField(email, fields, callback){
+  fetch('/api/mongo-batch?action=updateUser', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ email: email }, fields))
+  })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (callback) callback(data);
+    })
+    .catch(function(e){
+      console.warn('⚠️ Update user failed:', e.message);
+      if (callback) callback({ success:false, error: e.message });
+    });
+}
+
+var state = { page:'sales', currency:'USD', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:32.50, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'' };
 
 /* ====================== HELPERS ====================== */
 function fmtCur(v){
@@ -589,7 +625,7 @@ function sidebar(){
       +'<div style="font-size:9.5px;font-weight:700;letter-spacing:0.1em;color:#B0BAC8;padding:14px 8px 6px 8px;text-transform:uppercase;">Admin</div>'
       +'<div style="display:flex;flex-direction:column;gap:1px;">'
         +navItem('Usage Analytics',state.page==='usage',IC.line,'page','usage')
-        +navItem('Teams',false,IC.people)
+        +navItem('Teams',state.page==='teams',IC.people,'page','teams')
         +navItem('Admin Panel',false,IC.sliders)
       +'</div>'
     +'</nav>'
@@ -749,9 +785,11 @@ function usageKpiCard(value, label, color){
 function roleBadge(role){
   var r = String(role||'').toLowerCase();
   var bg = '#EAF1FE', color = '#2563EB';
-  if (r.indexOf('regional') >= 0) { bg = '#FEF3E2'; color = '#C26A12'; }
-  else if (r.indexOf('sales') >= 0) { bg = '#F1F5F9'; color = '#475569'; }
-  else if (r.indexOf('admin') >= 0) { bg = '#EAF1FE'; color = '#2563EB'; }
+  if (r.indexOf('regional') >= 0) { bg = '#F1ECFB'; color = '#7A4FC0'; }
+  else if (r.indexOf('zonal') >= 0) { bg = '#EAF1FE'; color = '#2563EB'; }
+  else if (r.indexOf('sales') >= 0) { bg = '#E3F4EF'; color = '#138A6E'; }
+  else if (r.indexOf('hr') >= 0) { bg = '#F7ECFB'; color = '#B26AC9'; }
+  else if (r.indexOf('admin') >= 0) { bg = '#FEE4E2'; color = '#D64545'; }
   return '<span style="background:'+bg+';color:'+color+';font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:5px;white-space:nowrap;">'+esc(role)+'</span>';
 }
 
@@ -826,6 +864,128 @@ function usagePage(){
   +'</div>';
 }
 
+/* ====================== TEAMS / ORG CHART ====================== */
+function avatarHueFor(name){
+  var h = 0;
+  for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return h % 360;
+}
+
+function orgCard(person, opts){
+  opts = opts || {};
+  var initials = person.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+  var hue = avatarHueFor(person.name);
+  var isYou = currentUser && currentUser.email && person.email.toLowerCase() === currentUser.email.toLowerCase();
+  var nameDisplay = person.name.length > 18 ? person.name.slice(0,16)+'…' : person.name;
+  var borderStyle = isYou ? 'border:2px solid #2563EB;' : 'border:1px solid #E7ECF3;';
+
+  var reportLine = (opts.reportCount !== undefined)
+    ? '<div style="font-size:10.5px;color:#94A3B8;font-weight:500;margin-top:4px;">'+opts.reportCount+' report'+(opts.reportCount===1?'':'s')+'</div>'
+    : '';
+
+  return '<div style="background:#FFFFFF;'+borderStyle+'border-radius:10px;padding:'+(opts.compact?'10px 12px':'14px 16px')+';display:flex;align-items:flex-start;gap:'+(opts.compact?'8px':'12px')+';min-width:'+(opts.minWidth||'200px')+';position:relative;">'
+    +'<div style="width:'+(opts.compact?'32px':'40px')+';height:'+(opts.compact?'32px':'40px')+';border-radius:50%;background:oklch(0.55 0.13 '+hue+');color:#fff;font-size:'+(opts.compact?'11px':'13px')+';font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+initials+'</div>'
+    +'<div style="flex:1;min-width:0;">'
+      +'<div style="font-size:'+(opts.compact?'12px':'13px')+';font-weight:700;color:#15233B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(person.name)+'">'+esc(nameDisplay)+'</div>'
+      +'<div style="margin-top:5px;">'+roleBadge(person.role)+'</div>'
+      + reportLine
+    +'</div>'
+    +'<button data-act="orgEditOpen" data-email="'+esc(person.email)+'" style="border:1px solid #E2E8F0;background:#FFFFFF;width:24px;height:24px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#64748B;flex-shrink:0;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
+  +'</div>';
+}
+
+function teamsPage(){
+  if (!orgDataReady) {
+    return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'
+      +'<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">'
+        +'<div class="login-spinner" style="width:24px;height:24px;border-width:3px;"></div>'
+        +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading org chart…</div>'
+      +'</div>'
+    +'</div>';
+  }
+
+  var d = orgData;
+
+  var hierarchyCards = d.hierarchy.map(function(p){
+    return '<div style="display:flex;flex-direction:column;align-items:center;">'
+      + orgCard(p, { reportCount: p.reportCount })
+    +'</div>';
+  }).join('<div style="width:1px;background:#E2E8F0;height:24px;margin:0 auto;"></div>');
+
+  var directCards = d.directReports.map(function(p){
+    return orgCard(p, { compact:true, minWidth:'180px' });
+  }).join('');
+
+  var supportCards = d.support.map(function(p){
+    return orgCard(p, { compact:true, minWidth:'0' });
+  }).join('');
+
+  return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
+    +'<div>'
+      +'<span style="font-size:13.5px;font-weight:700;color:#15233B;">Org Chart</span>'
+      +'<span style="font-size:11px;color:#94A3B8;font-weight:500;margin-left:8px;">'+d.totalUsers+' users · '+d.hierarchy.length+' in hierarchy · '+d.support.length+' support</span>'
+    +'</div>'
+  +'</div>'
+  +'<div style="display:flex;gap:16px;align-items:flex-start;">'
+    +'<div style="flex:1;min-width:0;">'
+      +'<div style="display:flex;flex-direction:column;align-items:center;gap:0;margin-bottom:18px;">'
+        + hierarchyCards
+      +'</div>'
+      +(directCards
+        ? '<div style="border-top:1px solid #E2E8F0;padding-top:16px;display:flex;gap:12px;flex-wrap:wrap;">'+directCards+'</div>'
+        : '')
+    +'</div>'
+    +'<div style="width:230px;flex-shrink:0;">'
+      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.06em;color:#94A3B8;text-transform:uppercase;margin-bottom:10px;">Support Roles</div>'
+      +'<div style="display:flex;flex-direction:column;gap:8px;">'+supportCards+'</div>'
+    +'</div>'
+  +'</div>';
+}
+
+function orgEditModal(){
+  if (!orgEditTarget || !orgDataReady) return '';
+
+  var allPeople = orgData.hierarchy.concat(orgData.directReports).concat(orgData.support);
+  var person = allPeople.find(function(p){ return p.email === orgEditTarget; });
+  if (!person) return '';
+
+  var roleOptions = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
+  var roleOptsHtml = roleOptions.map(function(r){
+    return '<option value="'+esc(r)+'"'+(r===person.role?' selected':'')+'>'+esc(r)+'</option>';
+  }).join('');
+
+  var managerCandidates = orgData.hierarchy.filter(function(p){ return p.email !== person.email; });
+  var managerOptsHtml = '<option value="">None</option>' + managerCandidates.map(function(m){
+    return '<option value="'+esc(m.email)+'"'+(m.email===person.reportsTo?' selected':'')+'>'+esc(m.name)+'</option>';
+  }).join('');
+
+  return '<div data-act="orgEditClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.4);z-index:300;display:flex;align-items:center;justify-content:center;animation:ovFade 0.15s ease;">'
+    +'<div data-stop="1" style="background:#FFFFFF;border-radius:12px;box-shadow:0 20px 60px rgba(15,23,40,0.18);width:380px;max-width:92vw;overflow:hidden;animation:drwSlide 0.2s cubic-bezier(0.22,1,0.36,1);">'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #F1F5F9;">'
+        +'<div>'
+          +'<div style="font-size:14px;font-weight:700;color:#15233B;">Edit Team Member</div>'
+          +'<div style="font-size:11px;color:#94A3B8;font-weight:500;margin-top:2px;">'+esc(person.name)+'</div>'
+        +'</div>'
+        +'<button data-act="orgEditClose" style="border:none;background:transparent;width:24px;height:24px;cursor:pointer;color:#94A3B8;font-size:15px;">✕</button>'
+      +'</div>'
+      +'<div style="padding:20px 22px;">'
+        +'<div style="margin-bottom:14px;">'
+          +'<div style="font-size:10.5px;font-weight:700;letter-spacing:0.04em;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Role</div>'
+          +'<select id="org-edit-role" style="width:100%;border:1px solid #E2E8F0;border-radius:7px;padding:8px 10px;font-size:12.5px;font-family:inherit;outline:none;color:#15233B;background:#fff;cursor:pointer;">'+roleOptsHtml+'</select>'
+        +'</div>'
+        +'<div style="margin-bottom:6px;">'
+          +'<div style="font-size:10.5px;font-weight:700;letter-spacing:0.04em;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Reports To</div>'
+          +'<select id="org-edit-reportsto" style="width:100%;border:1px solid #E2E8F0;border-radius:7px;padding:8px 10px;font-size:12.5px;font-family:inherit;outline:none;color:#15233B;background:#fff;cursor:pointer;">'+managerOptsHtml+'</select>'
+        +'</div>'
+        +(state.orgEditError ? '<div style="font-size:11px;color:#DC2626;font-weight:600;margin-top:8px;">'+esc(state.orgEditError)+'</div>' : '')
+        +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:16px;border-top:1px solid #F1F5F9;">'
+          +'<button data-act="orgEditClose" style="border:1px solid #E2E8F0;background:#FFFFFF;border-radius:7px;padding:8px 16px;font-size:12.5px;font-weight:600;cursor:pointer;color:#374151;font-family:inherit;">Cancel</button>'
+          +'<button data-act="orgEditSave" data-email="'+esc(person.email)+'" style="border:none;background:#2563EB;color:#fff;border-radius:7px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">Save Changes</button>'
+        +'</div>'
+      +'</div>'
+    +'</div>'
+  +'</div>';
+}
 
 function buildSummaryCells(e, colLabels){
   var gpSeries=[sum(e.gp)].concat(e.gp);
@@ -1262,8 +1422,9 @@ function render(){
   document.getElementById('topbar-slot').innerHTML=topbar();
   mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='usage' ? usagePage()
+    : state.page==='teams' ? teamsPage()
     : kpiRow(M)+(state.page==='leaderboard'?leaderboard():salesTable(M));
-  document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal();
+  document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
 }
 function renderKeepTopbar(){
@@ -1274,9 +1435,10 @@ function renderKeepTopbar(){
   var scrollTop=mainEl?mainEl.scrollTop:0;
   if(mainEl) mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='usage' ? usagePage()
+    : state.page==='teams' ? teamsPage()
     : kpiRow(M)+(state.page==='leaderboard'?leaderboard():salesTable(M));
   var drawerEl=document.getElementById('drawer-slot');
-  if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal();
+  if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
 }
 
@@ -1303,7 +1465,8 @@ document.addEventListener('click', function(ev){
   // [data-stop] modal box, closest('[data-act]') would otherwise walk
   // up to that wrapper and incorrectly trigger close. Guard against it:
   var stopEl = ev.target.closest('[data-stop]');
-  if(stopEl && el.getAttribute('data-act')==='feedbackClose' && ev.target !== el){
+  var actName = el.getAttribute('data-act');
+  if(stopEl && (actName==='feedbackClose' || actName==='orgEditClose') && ev.target !== el){
     return; // click was inside the modal box, not on the close button/overlay itself
   }
 
@@ -1317,6 +1480,9 @@ document.addEventListener('click', function(ev){
     }
     if(state.page==='usage' && !usageDataReady){
       fetchUsageData(function(){ render(); });
+    }
+    if(state.page==='teams' && !orgDataReady){
+      fetchOrgData(function(){ render(); });
     }
   }
   else if(act==='refreshData'){
@@ -1342,6 +1508,43 @@ document.addEventListener('click', function(ev){
     fetchLiveData(done, true);
     if(customerDataReady){ pending++; fetchCustomerData(done, true); }
     if(usageDataReady){ pending++; fetchUsageData(done, true); }
+    if(orgDataReady){ pending++; fetchOrgData(done, true); }
+  }
+  else if(act==='orgEditOpen'){
+    ev.stopPropagation();
+    orgEditTarget = el.getAttribute('data-email');
+    state.orgEditError='';
+    render();
+  }
+  else if(act==='orgEditClose'){
+    if(ev.target.closest('[data-stop]')&&!el.matches('[data-act="orgEditClose"]')) return;
+    orgEditTarget = null;
+    state.orgEditError='';
+    render();
+  }
+  else if(act==='orgEditSave'){
+    ev.stopPropagation();
+    var email = el.getAttribute('data-email');
+    var roleSel = document.getElementById('org-edit-role');
+    var reportsToSel = document.getElementById('org-edit-reportsto');
+    var newRole = roleSel ? roleSel.value : '';
+    var newReportsTo = reportsToSel ? reportsToSel.value : '';
+
+    if(!newRole){ state.orgEditError='Please select a role.'; render(); return; }
+
+    el.disabled = true;
+    el.textContent = 'Saving...';
+
+    updateUserField(email, { role:newRole, reportsTo:newReportsTo }, function(result){
+      if(!result.success){
+        state.orgEditError = result.error || 'Failed to save changes.';
+        render();
+        return;
+      }
+      orgEditTarget = null;
+      state.orgEditError='';
+      fetchOrgData(function(){ render(); }, true);
+    });
   }
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
   else if(act==='rateCommit'){ var v=parseFloat(document.getElementById('rate-input').value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
