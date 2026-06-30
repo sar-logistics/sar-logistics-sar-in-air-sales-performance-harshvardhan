@@ -117,7 +117,23 @@ function zoneHue(zone) {
   return h % 360;
 }
 
+// In-memory cache — survives across warm Lambda invocations (same container)
+let salesCache = null;
+let salesCacheTime = 0;
+const SALES_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 async function getSalesAggregate(db) {
+  if (salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
+    return { ...salesCache, cached: true };
+  }
+
+  const result = await computeSalesAggregate(db);
+  salesCache = result;
+  salesCacheTime = Date.now();
+  return result;
+}
+
+async function computeSalesAggregate(db) {
   // 1. Load sales rep mapping
   const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
   const repLookup = {};
@@ -265,6 +281,7 @@ module.exports = async function handler(req, res) {
       const { records, clearFirst = true } = req.body || {};
       if (!records) return res.status(400).json({ error: "records required" });
       const { summary, errors } = await batchInsertJobs(db, records, clearFirst);
+      salesCache = null; // invalidate cache — fresh data was just pushed
       return res.status(200).json({
         success: true, action: "jobs", summary,
         totalInserted: Object.values(summary).reduce((s, n) => s + n, 0),
