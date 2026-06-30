@@ -1187,11 +1187,11 @@ function salesTable(M){
       if (isZoneRow) {
         var zCollapsed = state.zoneOpen[blockEntity] === false;
         var chevSvg = zCollapsed
-          ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>'
-          : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
-        zoneToggle = '<div data-act="zoneToggle" data-zone="'+esc(blockEntity)+'" style="width:16px;height:16px;border-radius:4px;background:#F1ECFB;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+chevSvg+'</div>';
+          ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>'
+          : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+        zoneToggle = '<div data-act="zoneToggle" data-zone="'+esc(blockEntity)+'" style="width:18px;height:18px;border-radius:5px;background:#7C3AED;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;margin-left:auto;box-shadow:0 1px 3px rgba(124,79,194,0.35);">'+chevSvg+'</div>';
       }
-      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:1px solid #CBD5E1;width:185px;min-width:185px;text-align:left;"><div style="display:flex;align-items:center;justify-content:flex-start;gap:7px;">'+zoneToggle+avatarEl+nameLabel+'</div></td>';
+      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:1px solid #CBD5E1;width:185px;min-width:185px;text-align:left;"><div style="display:flex;align-items:center;justify-content:flex-start;gap:7px;">'+avatarEl+nameLabel+zoneToggle+'</div></td>';
     } else {
       nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:1px solid #CBD5E1;width:185px;min-width:185px;"></td>';
     }
