@@ -443,7 +443,7 @@ function updateUserField(email, fields, callback){
     });
 }
 
-var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'' };
+var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{} };
 
 /* ====================== HELPERS ====================== */
 function fmtCur(v){
@@ -541,9 +541,12 @@ function entities(){
   var list = [grandEntity()];
   getZones().forEach(function(z){
     list.push(zoneEntity(z));
-    repsRaw.filter(function(r){ return r.zone === z; }).forEach(function(r){
-      list.push(repEntity(r));
-    });
+    var isCollapsed = state.zoneOpen[z] === false; // default open unless explicitly collapsed
+    if (!isCollapsed) {
+      repsRaw.filter(function(r){ return r.zone === z; }).forEach(function(r){
+        list.push(repEntity(r));
+      });
+    }
   });
   return list;
 }
@@ -1097,21 +1100,25 @@ function salesTable(M){
     }).join('')
   +'</tr>';
 
-  // Pre-compute rowspan groups: count how many rows belong to each zone/grand/rep block
-  // so the name cell can be merged and vertically centered for that block.
   var allRows = tableRows();
-  var blockRowSpans = []; // same length as allRows; null if not first row of block, else span count
-  var i = 0;
-  while (i < allRows.length) {
-    if (allRows[i].repInfo) {
-      var j = i + 1;
-      while (j < allRows.length && !allRows[j].repInfo) j++;
-      blockRowSpans[i] = j - i;
-      for (var k = i+1; k < j; k++) blockRowSpans[k] = 0; // merged away
-      i = j;
-    } else {
-      blockRowSpans[i] = 1;
-      i++;
+
+  // Pre-compute block boundaries: for each row, find which row index within
+  // its block is the "middle" row — that's where we render the name label
+  // (instead of using <td rowspan>, which breaks position:sticky in browsers).
+  var blockMiddleIdx = []; // same length as allRows; the idx of the middle row of this row's block
+  {
+    var bi = 0;
+    while (bi < allRows.length) {
+      if (allRows[bi].repInfo) {
+        var bj = bi + 1;
+        while (bj < allRows.length && !allRows[bj].repInfo) bj++;
+        var mid = bi + Math.floor((bj - bi - 1) / 2);
+        for (var bk = bi; bk < bj; bk++) blockMiddleIdx[bk] = mid;
+        bi = bj;
+      } else {
+        blockMiddleIdx[bi] = bi;
+        bi++;
+      }
     }
   }
 
@@ -1120,13 +1127,14 @@ function salesTable(M){
     var rowBg = row.rowBg || (ri ? ri.groupBg : '#FFFFFF');
     var isZoneRow  = row.isZoneBlock;
     var isGrandRow = row.isGrandBlock;
-    var span = blockRowSpans[idx];
+    var isFirstOfBlock = !!ri; // first row of a block always carries repInfo
+    var isMiddleOfBlock = (blockMiddleIdx[idx] === idx);
 
     var allCells = row.cells.map(function(c, ci){
       var isFY = ci === 0;
-      var stickyStyle = isFY ? ('position:sticky;left:'+FY_COL_LEFT+'px;z-index:1;border-right:2px solid #E8D4A0;') : '';
+      var stickyStyle = isFY ? ('position:sticky;left:'+FY_COL_LEFT+'px;z-index:2;') : '';
       var cellBg = isFY ? (rowBg !== '#FFFFFF' ? rowBg : '#FFFBF0') : (rowBg !== '#FFFFFF' ? rowBg : c.bg);
-      return '<td class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'" style="'+stickyStyle+'text-align:right;padding:5px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+cellBg+';border-left:'+(isFY?'0':c.borderLeft)+';white-space:nowrap;">'+c.val+'</td>';
+      return '<td class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'" style="'+stickyStyle+'text-align:right;padding:5px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+cellBg+';border-left:'+(isFY?'2px solid #E8D4A0':c.borderLeft)+';white-space:nowrap;">'+c.val+'</td>';
     });
     var mcells = allCells.join('');
 
@@ -1146,31 +1154,38 @@ function salesTable(M){
     var actAttr  = isShipRow ? ' data-act="shipToggle" data-name="'+esc(row.entityName)+'"' : '';
     var labelCell = '<div style="display:flex;align-items:center;"'+actAttr+'>'+labelContent+'</div>';
 
-    var topBorder = (span > 0) ? ((isZoneRow || isGrandRow) ? 'border-top:2px solid #CBD5E1;' : 'border-top:2px solid #E2E8F0;') : 'border-top:0;';
+    var topBorder = isFirstOfBlock ? ((isZoneRow || isGrandRow) ? 'border-top:2px solid #CBD5E1;' : 'border-top:2px solid #E2E8F0;') : 'border-top:0;';
 
-    // Name cell — only rendered on the first row of a block, with rowspan
-    // covering the full block height, vertically centered.
-    var nameCell = '';
-    if (span > 0) {
-      if (ri) {
-        var avatarEl;
-        if (isZoneRow || isGrandRow) {
-          avatarEl = '<div style="width:22px;height:22px;border-radius:5px;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
-        } else {
-          avatarEl = '<div style="width:22px;height:22px;border-radius:50%;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
-        }
-        var nameLabel = isZoneRow
-          ? '<div><div style="font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#7C3AED;text-transform:uppercase;line-height:1;">Zone</div><div style="font-size:11.5px;font-weight:700;color:#15233B;white-space:nowrap;">'+ri.name+'</div></div>'
-          : '<div style="font-size:11.5px;font-weight:'+ri.nameWeight+';white-space:nowrap;color:#15233B;">'+ri.name+'</div>';
-        nameCell = '<td rowspan="'+span+'" style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:1px solid #CBD5E1;width:185px;min-width:185px;vertical-align:middle;text-align:'+(isZoneRow?'center':'left')+';"><div style="display:flex;align-items:center;justify-content:'+(isZoneRow?'center':'flex-start')+';gap:7px;">'+avatarEl+nameLabel+'</div></td>';
+    // Name cell — rendered (non-empty) only on the vertical-middle row of
+    // its block, but every row in the block still gets a <td> with matching
+    // background so the column reads as one continuous merged block visually.
+    var nameCell;
+    if (isMiddleOfBlock && ri) {
+      var avatarEl;
+      if (isZoneRow || isGrandRow) {
+        avatarEl = '<div style="width:22px;height:22px;border-radius:5px;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
       } else {
-        nameCell = '<td rowspan="'+span+'" style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:0;width:185px;min-width:185px;"></td>';
+        avatarEl = '<div style="width:22px;height:22px;border-radius:50%;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
       }
+      var nameLabel = isZoneRow
+        ? '<div><div style="font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#7C3AED;text-transform:uppercase;line-height:1;">Zone</div><div style="font-size:11.5px;font-weight:700;color:#15233B;white-space:nowrap;">'+ri.name+'</div></div>'
+        : '<div style="font-size:11.5px;font-weight:'+ri.nameWeight+';white-space:nowrap;color:#15233B;">'+ri.name+'</div>';
+      var zoneToggle = '';
+      if (isZoneRow) {
+        var zCollapsed = state.zoneOpen[row.entityName] === false;
+        var chevSvg = zCollapsed
+          ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>'
+          : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+        zoneToggle = '<div data-act="zoneToggle" data-zone="'+esc(row.entityName)+'" style="width:16px;height:16px;border-radius:4px;background:#F1ECFB;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+chevSvg+'</div>';
+      }
+      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:1px solid #CBD5E1;width:185px;min-width:185px;text-align:left;"><div style="display:flex;align-items:center;justify-content:flex-start;gap:7px;">'+zoneToggle+avatarEl+nameLabel+'</div></td>';
+    } else {
+      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:1px solid #CBD5E1;width:185px;min-width:185px;"></td>';
     }
 
     return '<tr style="background:'+rowBg+';border-bottom:1px solid #E2E8F0;'+topBorder+'">'
       + nameCell
-      + '<td style="position:sticky;left:185px;background:'+rowBg+';padding:5px 10px;white-space:nowrap;z-index:1;border-right:1px solid #CBD5E1;width:140px;min-width:140px;">'+labelCell+'</td>'
+      + '<td style="position:sticky;left:185px;background:'+rowBg+';padding:5px 10px;white-space:nowrap;z-index:2;border-right:1px solid #CBD5E1;width:140px;min-width:140px;">'+labelCell+'</td>'
       + mcells
     +'</tr>';
   }).join('');
@@ -1601,6 +1616,7 @@ document.addEventListener('click', function(ev){
   else if(act==='setView'){ ev.stopPropagation(); state.reportView=el.getAttribute('data-val'); state.viewDropOpen=false; render(); }
   else if(act==='cur'){ ev.stopPropagation(); ev.preventDefault(); state.currency=el.getAttribute('data-cur'); render(); }
   else if(act==='shipToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.shipOpen[n]=!state.shipOpen[n]; render(); }
+  else if(act==='zoneToggle'){ ev.stopPropagation(); var zn=el.getAttribute('data-zone'); state.zoneOpen[zn] = (state.zoneOpen[zn]===false) ? true : false; render(); }
   else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
   else if(act==='close'){ if(ev.target.closest('[data-stop]') && !el.matches('[data-act="close"]')) return; state.drill=null; render(); }
 });
