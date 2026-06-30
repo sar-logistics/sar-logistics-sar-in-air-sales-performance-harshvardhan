@@ -257,7 +257,138 @@ let salesCache = null;
 let salesCacheTime = 0;
 const SALES_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-async function getSalesAggregate(db, force) {
+// ── DRILL-DOWN: real job rows behind a clicked table cell ──────────
+// entity: "Grand Total" | zone name | rep display name
+// metric: "Shipments" | "GP" | "Tons (Air)" | "TEUs (Ocean)" | "LCL (Ocean in CBM)"
+// month: e.g. "Apr-25", or "FY Total" for the whole year
+async function getDrillRows(db, entity, metric, month) {
+  // 1. Load sales rep mapping so we can resolve entity → which Sales Person names to match
+  const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
+  const repsByZone = {};      // zone → [normalizedSalesPersonName, ...]
+  const salesPersonByDisplay = {}; // displayName → normalizedSalesPersonName
+  for (const row of mappingRows) {
+    const rawName = row["Sales Rep Name"];
+    const norm = normalizeName(rawName);
+    if (!norm) continue;
+    const zone = String(row["Zone"] || "Unassigned").trim();
+    const displayName = String(row["Display Name"] || rawName || "").trim();
+    if (!repsByZone[zone]) repsByZone[zone] = [];
+    repsByZone[zone].push(norm);
+    salesPersonByDisplay[displayName] = norm;
+  }
+
+  // Figure out which normalized sales-person-names are relevant to this entity
+  let relevantNames = null; // null = no filter (Grand Total)
+  if (entity !== "Grand Total") {
+    if (repsByZone[entity]) {
+      relevantNames = new Set(repsByZone[entity]); // it's a zone
+    } else if (salesPersonByDisplay[entity]) {
+      relevantNames = new Set([salesPersonByDisplay[entity]]); // it's a rep
+    } else {
+      relevantNames = new Set(); // unknown entity — match nothing
+    }
+  }
+
+  const isFYTotal = month === "FY Total";
+
+  const matchedRows = [];
+
+  for (const collName of JOB_COLLECTIONS) {
+    const rows = await db.collection(collName).find(
+      {},
+      { projection: {
+          "Shipment No": 1, "Sales Person": 1, "Job Date": 1, "LOB": 1,
+          "Customer": 1, "Carrier": 1, "Loading Port": 1, "Discharge Port": 1,
+          "Actual Profit (J=C-G)": 1, "Billed Revenue (C)": 1,
+          "ETD Loading Port": 1, "ETA Discharge": 1,
+          "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
+          "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
+        }
+      }
+    ).toArray();
+
+    for (const job of rows) {
+      const normPerson = normalizeName(job["Sales Person"]);
+      if (!normPerson) continue;
+      if (relevantNames && !relevantNames.has(normPerson)) continue;
+
+      const cls = classifyRow(job, collName);
+
+      // Metric-specific row filtering — only include rows that actually
+      // contribute to the metric that was clicked
+      if (metric === "Tons (Air)" && !isAirRow(cls)) continue;
+      if ((metric === "TEUs (Ocean)" || metric === "LCL (Ocean in CBM)") && !hasTeuLclRow(cls)) continue;
+
+      const dateCol = getDateColumnFor(cls);
+      const rawDate = job[dateCol] || job["Job Date"];
+      if (!rawDate) continue;
+      const d = new Date(rawDate);
+      if (isNaN(d.getTime())) continue;
+
+      const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
+      if (!FY_MONTHS.includes(monthLabel)) continue;
+      if (!isFYTotal && monthLabel !== month) continue;
+
+      // Compute the metric value this specific row contributes
+      let metricVal = 0;
+      let metricUnit = "";
+      if (metric === "Shipments") {
+        metricVal = 1; metricUnit = "job";
+      } else if (metric === "GP") {
+        metricVal = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0; metricUnit = "currency";
+      } else if (metric === "Tons (Air)") {
+        const rawWeight = parseFloat(job["Chargeable Weight"] || 0) || 0;
+        const unit = String(job["Chargeable Weight Unit"] || "").toLowerCase().trim();
+        metricVal = (unit === "ton" || unit === "tons" || unit === "mt") ? rawWeight
+                  : (unit === "lb" || unit === "lbs") ? rawWeight * 0.000453592
+                  : rawWeight / 1000;
+        metricUnit = "t";
+      } else if (metric === "TEUs (Ocean)") {
+        metricVal = parseFloat(job["Container TEU"] || 0) || 0; metricUnit = "TEU";
+      } else if (metric === "LCL (Ocean in CBM)") {
+        const vol = parseFloat(job["Volume"] || 0) || 0;
+        const volUnit = String(job["Volume Unit"] || "").toUpperCase().trim();
+        metricVal = (!volUnit || volUnit === "CBM") ? vol : 0;
+        metricUnit = "m³";
+      }
+
+      // For metrics other than Shipments/GP, skip rows that contribute zero
+      // (e.g. a Sea row with no Container TEU when viewing TEUs)
+      if (metric !== "Shipments" && metric !== "GP" && metricVal === 0) continue;
+
+      matchedRows.push({
+        shipmentNo: job["Shipment No"] || "—",
+        salesPerson: job["Sales Person"] || "",
+        customer: job["Customer"] || "",
+        carrier: job["Carrier"] || "",
+        origin: job["Loading Port"] || "",
+        destination: job["Discharge Port"] || "",
+        lob: cls.kind + (cls.direction ? " " + cls.direction : ""),
+        date: d.toISOString(),
+        gp: parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0,
+        metricVal,
+        metricUnit,
+      });
+    }
+  }
+
+  // Sort newest first
+  matchedRows.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const totalMetric = matchedRows.reduce((s, r) => s + r.metricVal, 0);
+  const totalGP = matchedRows.reduce((s, r) => s + r.gp, 0);
+
+  return {
+    success: true,
+    entity, metric, month,
+    count: matchedRows.length,
+    totalMetric,
+    totalGP,
+    rows: matchedRows.slice(0, 200), // cap payload size
+  };
+}
+
+
   if (!force && salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...salesCache, cached: true };
   }
@@ -587,7 +718,7 @@ module.exports = async function handler(req, res) {
   if (!action) return res.status(400).json({ error: "action required: jobs | mapping | users | sales" });
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org", "lobCheck"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org", "lobCheck", "drill"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -649,6 +780,17 @@ module.exports = async function handler(req, res) {
 
     if (action === "org") {
       const result = await getOrgChart(db);
+      return res.status(200).json(result);
+    }
+
+    if (action === "drill") {
+      const entity = req.query?.entity || req.body?.entity;
+      const metric = req.query?.metric || req.body?.metric;
+      const month  = req.query?.month  || req.body?.month;
+      if (!entity || !metric || !month) {
+        return res.status(400).json({ error: "entity, metric, and month are required." });
+      }
+      const result = await getDrillRows(db, entity, metric, month);
       return res.status(200).json(result);
     }
 
