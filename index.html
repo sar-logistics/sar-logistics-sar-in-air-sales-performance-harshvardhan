@@ -1310,11 +1310,30 @@ function drawer(){
 
   var subtitle = d.loading ? 'Loading…' : (d.count !== undefined ? d.count+' job'+(d.count===1?'':'s')+' contributing' : '');
 
+  function footerLabelAndValue(){
+    var m = d.totalMetric || 0;
+    if (d.metric === 'Shipments') {
+      return { label: 'Total Shipments in view', value: Math.round(m).toLocaleString('en-US') };
+    } else if (d.metric === 'GP') {
+      return { label: 'Total GP in view', value: fmtCur(m) };
+    } else if (d.metric === 'Tons (Air)') {
+      return { label: 'Total Tons (Air) in view', value: m.toFixed(2)+' t' };
+    } else if (d.metric === 'TEUs (Ocean)') {
+      return { label: 'Total TEUs in view', value: m.toFixed(2) };
+    } else if (d.metric === 'LCL (Ocean in CBM)') {
+      return { label: 'Total LCL in view', value: m.toFixed(2)+' m³' };
+    }
+    return { label: 'Total in view', value: m.toFixed(2) };
+  }
+
   var footer = (!d.loading && !d.error && d.rows && d.rows.length > 0)
-    ? '<div style="padding:12px 22px;border-top:1px solid #F0F3F8;display:flex;align-items:center;justify-content:space-between;background:#FAFBFD;flex-shrink:0;">'
-        +'<span style="font-size:12.5px;font-weight:600;color:#5B6678;">Total GP in view</span>'
-        +'<span style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:500;color:#15875A;">'+fmtCur(d.totalGP||0)+'</span>'
-      +'</div>'
+    ? (function(){
+        var fv = footerLabelAndValue();
+        return '<div style="padding:12px 22px;border-top:1px solid #F0F3F8;display:flex;align-items:center;justify-content:space-between;background:#FAFBFD;flex-shrink:0;">'
+          +'<span style="font-size:12.5px;font-weight:600;color:#5B6678;">'+fv.label+'</span>'
+          +'<span style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:500;color:#15875A;">'+fv.value+'</span>'
+        +'</div>';
+      })()
     : '';
 
   return '<div data-act="close" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:32px;animation:ovFade 0.16s ease;">'
