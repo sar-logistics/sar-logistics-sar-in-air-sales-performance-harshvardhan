@@ -102,7 +102,73 @@ async function batchUpsertUsers(db, users) {
   return results;
 }
 
-// ── ACTION: sales (read-only aggregation) ─────────────────────────
+// ── ACTION: org (read-only org chart) ─────────────────────────────
+async function getOrgChart(db) {
+  const users = await db.collection("users").find({}).toArray();
+
+  var people = users.map(function(u){
+    return {
+      email:     u.email || "",
+      name:      u.name  || "",
+      role:      u.role  || "user",
+      reportsTo: (u.reportsTo || "").toLowerCase().trim(),
+      isActive:  u.isActive !== false,
+    };
+  });
+
+  // Roles considered part of the management hierarchy chain (vertical org chart)
+  var HIERARCHY_ROLES = new Set(["regional manager", "zonal manager", "manager"]);
+  // Roles shown as flat "support" cards on the side, not in the vertical chain
+  var SUPPORT_ROLES = new Set(["admin", "hr"]);
+
+  var byEmail = {};
+  people.forEach(function(p){ byEmail[p.email.toLowerCase()] = p; });
+
+  function isHierarchyRole(role){
+    return HIERARCHY_ROLES.has(String(role||"").toLowerCase().trim());
+  }
+  function isSupportRole(role){
+    return SUPPORT_ROLES.has(String(role||"").toLowerCase().trim());
+  }
+
+  var hierarchy = people.filter(function(p){ return isHierarchyRole(p.role); });
+  var directReports = people.filter(function(p){ return !isHierarchyRole(p.role) && !isSupportRole(p.role); });
+  var support = people.filter(function(p){ return isSupportRole(p.role); });
+
+  // Count direct reports for each hierarchy person (by reportsTo email match)
+  hierarchy.forEach(function(h){
+    h.reportCount = people.filter(function(p){
+      return p.reportsTo && byEmail[p.reportsTo] && byEmail[p.reportsTo].email.toLowerCase() === h.email.toLowerCase();
+    }).length;
+  });
+
+  return {
+    success: true,
+    totalUsers: people.length,
+    hierarchy: hierarchy,       // vertical chain: Regional/Zonal Managers
+    directReports: directReports, // flat row under hierarchy: Sales Reps etc.
+    support: support,           // side panel: Admin/HR
+    pushedAt: new Date().toISOString(),
+  };
+}
+
+async function updateUserFields(db, email, fields) {
+  if (!email) return { error: "email is required" };
+  var allowed = {};
+  if (fields.role !== undefined)      allowed.role      = fields.role;
+  if (fields.reportsTo !== undefined) allowed.reportsTo = String(fields.reportsTo || "").toLowerCase().trim();
+  if (Object.keys(allowed).length === 0) return { error: "No valid fields to update" };
+  allowed.updatedAt = new Date();
+
+  var result = await db.collection("users").updateOne(
+    { email: email.toLowerCase().trim() },
+    { $set: allowed }
+  );
+  if (result.matchedCount === 0) return { error: "User not found" };
+  return { updated: true };
+}
+
+
 const JOB_COLLECTIONS = [
   "jobs_sea_export", "jobs_sea_import", "jobs_air_export", "jobs_air_import",
   "jobs_isotank_export", "jobs_isotank_import", "jobs_general", "jobs_road",
@@ -432,7 +498,7 @@ module.exports = async function handler(req, res) {
   if (!action) return res.status(400).json({ error: "action required: jobs | mapping | users | sales" });
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -474,6 +540,18 @@ module.exports = async function handler(req, res) {
     if (action === "usage") {
       const result = await getUsageAnalytics(db, forceRefresh);
       return res.status(200).json(result);
+    }
+
+    if (action === "org") {
+      const result = await getOrgChart(db);
+      return res.status(200).json(result);
+    }
+
+    if (action === "updateUser") {
+      const { email, role, reportsTo } = req.body || {};
+      const result = await updateUserFields(db, email, { role, reportsTo });
+      if (result.error) return res.status(400).json({ error: result.error });
+      return res.status(200).json({ success: true, ...result });
     }
 
     if (action === "jobs") {
