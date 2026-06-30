@@ -266,7 +266,10 @@ async function getDrillRows(db, entity, metric, month) {
   const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
   const repsByZone = {};      // zone → [normalizedSalesPersonName, ...]
   const salesPersonByDisplay = {}; // displayName → normalizedSalesPersonName
-  const allMappedNames = new Set(); // every normalized sales-person-name with a mapping entry
+  const allMappedNames = new Set();
+  // Keep the RAW (non-normalized) Sales Person strings too, so we can push
+  // a $in filter to MongoDB itself instead of pulling every row into memory.
+  const rawNamesByNorm = {}; // normalizedName → [raw variant 1, raw variant 2, ...]
   for (const row of mappingRows) {
     const rawName = row["Sales Rep Name"];
     const norm = normalizeName(rawName);
@@ -277,45 +280,75 @@ async function getDrillRows(db, entity, metric, month) {
     repsByZone[zone].push(norm);
     salesPersonByDisplay[displayName] = norm;
     allMappedNames.add(norm);
+    if (!rawNamesByNorm[norm]) rawNamesByNorm[norm] = [];
+    rawNamesByNorm[norm].push(String(rawName || "").trim());
   }
 
   // Figure out which normalized sales-person-names are relevant to this entity.
   // Grand Total still only includes MAPPED reps — matching computeSalesAggregate's
   // behavior of excluding unmapped Sales Person rows — so totals line up exactly
   // with what's shown in the main table.
-  let relevantNames;
+  let relevantNorms;
   if (entity === "Grand Total") {
-    relevantNames = allMappedNames;
+    relevantNorms = allMappedNames;
   } else if (repsByZone[entity]) {
-    relevantNames = new Set(repsByZone[entity]); // it's a zone
+    relevantNorms = new Set(repsByZone[entity]);
   } else if (salesPersonByDisplay[entity]) {
-    relevantNames = new Set([salesPersonByDisplay[entity]]); // it's a rep
+    relevantNorms = new Set([salesPersonByDisplay[entity]]);
   } else {
-    relevantNames = new Set(); // unknown entity — match nothing
+    relevantNorms = new Set();
   }
 
+  // Build a regex-free $in list of raw Sales Person strings the DB query can use.
+  // This drastically cuts the rows MongoDB returns over the wire, instead of
+  // fetching every row in every collection and filtering in JS.
+  const relevantRawNames = [];
+  relevantNorms.forEach(norm => {
+    (rawNamesByNorm[norm] || []).forEach(raw => relevantRawNames.push(raw));
+  });
+
   const isFYTotal = month === "FY Total";
+  const isAirMetric = metric === "Tons (Air)";
+  const isTeuLclMetric = metric === "TEUs (Ocean)" || metric === "LCL (Ocean in CBM)";
+
+  // Skip collections entirely if they can never match this metric —
+  // ISO Tank/Sea collections never produce Tons, Air collections never
+  // produce TEU/LCL (this mirrors classifyRow but short-circuits at the
+  // collection level before even querying, where the answer is certain).
+  const relevantCollections = JOB_COLLECTIONS.filter(collName => {
+    if (isAirMetric) return collName.includes("air");
+    if (isTeuLclMetric) return collName.includes("sea") || collName.includes("isotank");
+    return true; // Shipments / GP — every collection is relevant
+  });
+
+  const baseProjection = {
+    "Shipment No": 1, "Sales Person": 1, "Job Date": 1, "LOB": 1,
+    "Customer": 1, "Carrier": 1, "Loading Port": 1, "Discharge Port": 1,
+    "Actual Profit (J=C-G)": 1, "Billed Revenue (C)": 1,
+    "ETD Loading Port": 1, "ETA Discharge": 1,
+    "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
+    "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
+  };
+
+  // Run all collection queries in parallel instead of sequentially —
+  // this is the single biggest speed win, since 10 sequential round-trips
+  // to MongoDB is far slower than 10 concurrent ones.
+  const queryPromises = relevantCollections.map(collName => {
+    const filter = relevantRawNames.length > 0
+      ? { "Sales Person": { $in: relevantRawNames } }
+      : { "Sales Person": { $in: [] } }; // no mapped reps match — return nothing
+    return db.collection(collName).find(filter, { projection: baseProjection }).toArray()
+      .then(rows => ({ collName, rows }));
+  });
+
+  const resultsByCollection = await Promise.all(queryPromises);
 
   const matchedRows = [];
 
-  for (const collName of JOB_COLLECTIONS) {
-    const rows = await db.collection(collName).find(
-      {},
-      { projection: {
-          "Shipment No": 1, "Sales Person": 1, "Job Date": 1, "LOB": 1,
-          "Customer": 1, "Carrier": 1, "Loading Port": 1, "Discharge Port": 1,
-          "Actual Profit (J=C-G)": 1, "Billed Revenue (C)": 1,
-          "ETD Loading Port": 1, "ETA Discharge": 1,
-          "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
-          "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
-        }
-      }
-    ).toArray();
-
+  for (const { collName, rows } of resultsByCollection) {
     for (const job of rows) {
       const normPerson = normalizeName(job["Sales Person"]);
-      if (!normPerson) continue;
-      if (!relevantNames.has(normPerson)) continue;
+      if (!normPerson || !relevantNorms.has(normPerson)) continue;
 
       const cls = classifyRow(job, collName);
 
@@ -397,6 +430,7 @@ async function getSalesAggregate(db, force) {
   if (!force && salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...salesCache, cached: true };
   }
+
 
   const result = await computeSalesAggregate(db);
   salesCache = result;
