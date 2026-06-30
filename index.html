@@ -273,6 +273,23 @@ function loadingScreen() {
   +'</div>';
 }
 
+function showRefreshOverlay() {
+  if (document.getElementById('refresh-overlay')) return; // already showing
+  var ov = document.createElement('div');
+  ov.id = 'refresh-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(244,247,251,0.75);z-index:400;display:flex;align-items:center;justify-content:center;animation:ovFade 0.15s ease;';
+  ov.innerHTML = '<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:12px;box-shadow:0 12px 40px rgba(15,23,40,0.14);padding:28px 36px;display:flex;flex-direction:column;align-items:center;gap:14px;">'
+    +'<div class="login-spinner" style="width:26px;height:26px;border-width:3px;"></div>'
+    +'<div style="font-size:12.5px;color:#374151;font-weight:600;">Refreshing data from MongoDB…</div>'
+  +'</div>';
+  document.body.appendChild(ov);
+}
+
+function hideRefreshOverlay() {
+  var ov = document.getElementById('refresh-overlay');
+  if (ov) ov.remove();
+}
+
 function patchSidebarUser(initials, name, role, photoUrl) {
   // Called after render() builds the sidebar
   setTimeout(function() {
@@ -1308,10 +1325,12 @@ document.addEventListener('click', function(ev){
     var icon = document.getElementById('refresh-icon');
     if(btn) btn.disabled = true;
     if(icon){ icon.style.animation = 'spin 0.8s linear infinite'; }
+    showRefreshOverlay();
 
     function finishRefresh(){
       if(btn) btn.disabled = false;
       if(icon){ icon.style.animation = ''; }
+      hideRefreshOverlay();
       render();
     }
 
