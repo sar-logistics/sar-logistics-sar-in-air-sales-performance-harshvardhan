@@ -1276,8 +1276,19 @@ document.addEventListener('change', function(ev){
   else if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
 });
 document.addEventListener('click', function(ev){
-  var el=ev.target.closest('[data-act]');
+  var el = ev.target.closest('[data-act]');
   if(!el) return;
+
+  // Overlay close buttons (feedbackClose, drawer backdrop, etc.) use
+  // event delegation on a full-screen wrapper div. If the actual click
+  // landed on an inner form control (select/textarea/input) inside the
+  // [data-stop] modal box, closest('[data-act]') would otherwise walk
+  // up to that wrapper and incorrectly trigger close. Guard against it:
+  var stopEl = ev.target.closest('[data-stop]');
+  if(stopEl && el.getAttribute('data-act')==='feedbackClose' && ev.target !== el){
+    return; // click was inside the modal box, not on the close button/overlay itself
+  }
+
   var act=el.getAttribute('data-act');
   if(act==='page'){
     ev.stopPropagation(); ev.preventDefault();
@@ -1292,7 +1303,7 @@ document.addEventListener('click', function(ev){
   }
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
   else if(act==='rateCommit'){ var v=parseFloat(document.getElementById('rate-input').value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
-  else if(act==='feedbackOpen'){ ev.stopPropagation(); state.feedbackOpen=true; state.feedbackSent=false; state.feedbackText=''; state.feedbackRating=0; render(); }
+  else if(act==='feedbackOpen'){ ev.stopPropagation(); state.feedbackOpen=true; state.feedbackSent=false; state.feedbackText=''; render(); }
   else if(act==='feedbackClose'){
     if(ev.target.closest('[data-stop]')&&!el.matches('[data-act="feedbackClose"]')) return;
     state.feedbackOpen=false;
