@@ -266,6 +266,7 @@ async function getDrillRows(db, entity, metric, month) {
   const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
   const repsByZone = {};      // zone → [normalizedSalesPersonName, ...]
   const salesPersonByDisplay = {}; // displayName → normalizedSalesPersonName
+  const allMappedNames = new Set(); // every normalized sales-person-name with a mapping entry
   for (const row of mappingRows) {
     const rawName = row["Sales Rep Name"];
     const norm = normalizeName(rawName);
@@ -275,18 +276,22 @@ async function getDrillRows(db, entity, metric, month) {
     if (!repsByZone[zone]) repsByZone[zone] = [];
     repsByZone[zone].push(norm);
     salesPersonByDisplay[displayName] = norm;
+    allMappedNames.add(norm);
   }
 
-  // Figure out which normalized sales-person-names are relevant to this entity
-  let relevantNames = null; // null = no filter (Grand Total)
-  if (entity !== "Grand Total") {
-    if (repsByZone[entity]) {
-      relevantNames = new Set(repsByZone[entity]); // it's a zone
-    } else if (salesPersonByDisplay[entity]) {
-      relevantNames = new Set([salesPersonByDisplay[entity]]); // it's a rep
-    } else {
-      relevantNames = new Set(); // unknown entity — match nothing
-    }
+  // Figure out which normalized sales-person-names are relevant to this entity.
+  // Grand Total still only includes MAPPED reps — matching computeSalesAggregate's
+  // behavior of excluding unmapped Sales Person rows — so totals line up exactly
+  // with what's shown in the main table.
+  let relevantNames;
+  if (entity === "Grand Total") {
+    relevantNames = allMappedNames;
+  } else if (repsByZone[entity]) {
+    relevantNames = new Set(repsByZone[entity]); // it's a zone
+  } else if (salesPersonByDisplay[entity]) {
+    relevantNames = new Set([salesPersonByDisplay[entity]]); // it's a rep
+  } else {
+    relevantNames = new Set(); // unknown entity — match nothing
   }
 
   const isFYTotal = month === "FY Total";
@@ -310,7 +315,7 @@ async function getDrillRows(db, entity, metric, month) {
     for (const job of rows) {
       const normPerson = normalizeName(job["Sales Person"]);
       if (!normPerson) continue;
-      if (relevantNames && !relevantNames.has(normPerson)) continue;
+      if (!relevantNames.has(normPerson)) continue;
 
       const cls = classifyRow(job, collName);
 
