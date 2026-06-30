@@ -326,6 +326,8 @@ var zonesRaw = [];
 var dataReady = false;
 var customerData = null; // { topByShipments, topByRevenue, topByGP, topByGPPct, totalCustomers }
 var customerDataReady = false;
+var usageData = null; // { totalUsers, activeUsers, loggedIn7Day, users }
+var usageDataReady = false;
 
 function fetchLiveData(callback) {
   fetch('/api/mongo-batch?action=sales')
@@ -367,6 +369,23 @@ function fetchCustomerData(callback) {
     })
     .catch(function(e){
       console.warn('⚠️ Customer data failed:', e.message);
+      if (callback) callback();
+    });
+}
+
+function fetchUsageData(callback) {
+  fetch('/api/mongo-batch?action=usage')
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.success) {
+        usageData = data;
+        usageDataReady = true;
+        console.log('✅ Usage data:', data.totalUsers, 'users');
+      }
+      if (callback) callback();
+    })
+    .catch(function(e){
+      console.warn('⚠️ Usage data failed:', e.message);
       if (callback) callback();
     });
 }
@@ -552,7 +571,7 @@ function sidebar(){
       +'</div>'
       +'<div style="font-size:9.5px;font-weight:700;letter-spacing:0.1em;color:#B0BAC8;padding:14px 8px 6px 8px;text-transform:uppercase;">Admin</div>'
       +'<div style="display:flex;flex-direction:column;gap:1px;">'
-        +navItem('Usage Analytics',false,IC.line)
+        +navItem('Usage Analytics',state.page==='usage',IC.line,'page','usage')
         +navItem('Teams',false,IC.people)
         +navItem('Admin Panel',false,IC.sliders)
       +'</div>'
@@ -698,6 +717,94 @@ function customerPage(){
     + horizontalBarPanel('Top 10 Customers by Revenue',   d.topByRevenue,   'revenue',   fmtCur, '#0891B2')
     + horizontalBarPanel('Top 10 Customers by GP',        d.topByGP,        'gp',        fmtCur, '#059669')
     + horizontalBarPanel('Top 10 Customers by GP%',       d.topByGPPct,     'gpPct',     fmtPct, '#7C3AED')
+  +'</div>';
+}
+
+/* ====================== USAGE ANALYTICS ====================== */
+function usageKpiCard(value, label, color){
+  return '<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;padding:22px;text-align:center;">'
+    +'<div style="font-family:\'DM Mono\',monospace;font-size:34px;font-weight:800;color:'+color+';line-height:1;margin-bottom:6px;">'+value+'</div>'
+    +'<div style="font-size:11px;font-weight:600;letter-spacing:0.04em;color:#64748B;text-transform:uppercase;">'+label+'</div>'
+  +'</div>';
+}
+
+function roleBadge(role){
+  var r = String(role||'').toLowerCase();
+  var bg = '#EAF1FE', color = '#2563EB';
+  if (r.indexOf('regional') >= 0) { bg = '#FEF3E2'; color = '#C26A12'; }
+  else if (r.indexOf('sales') >= 0) { bg = '#F1F5F9'; color = '#475569'; }
+  else if (r.indexOf('admin') >= 0) { bg = '#EAF1FE'; color = '#2563EB'; }
+  return '<span style="background:'+bg+';color:'+color+';font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:5px;white-space:nowrap;">'+esc(role)+'</span>';
+}
+
+function fmtLastLogin(iso){
+  if (!iso) return '—';
+  var d = new Date(iso);
+  var dd = String(d.getDate()).padStart(2,'0');
+  var mm = String(d.getMonth()+1).padStart(2,'0');
+  var yyyy = d.getFullYear();
+  var hh = String(d.getHours()).padStart(2,'0');
+  var min = String(d.getMinutes()).padStart(2,'0');
+  return dd+'/'+mm+'/'+yyyy+', '+hh+':'+min;
+}
+
+function usagePage(){
+  if (!usageDataReady) {
+    return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'
+      +'<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">'
+        +'<div class="login-spinner" style="width:24px;height:24px;border-width:3px;"></div>'
+        +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading usage analytics…</div>'
+      +'</div>'
+    +'</div>';
+  }
+
+  var d = usageData;
+  var maxLogins = Math.max.apply(null, d.users.map(function(u){ return u.totalLogins; })) || 1;
+
+  var rows = d.users.map(function(u){
+    var initials = u.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+    var avatarHue = 0;
+    for (var i = 0; i < u.name.length; i++) avatarHue = (avatarHue * 31 + u.name.charCodeAt(i)) & 0xffff;
+    avatarHue = avatarHue % 360;
+    var barPct = Math.max(2, (u.totalLogins / maxLogins) * 100);
+    var isYou = currentUser && currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase();
+
+    return '<tr style="border-bottom:1px solid #F1F5F9;">'
+      +'<td style="padding:11px 14px;font-size:11px;color:#94A3B8;font-weight:600;">'+u.index+'</td>'
+      +'<td style="padding:11px 14px;"><div style="display:flex;align-items:center;gap:9px;">'
+        +'<div style="width:26px;height:26px;border-radius:50%;background:oklch(0.55 0.13 '+avatarHue+');color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+initials+'</div>'
+        +'<span style="font-size:12px;font-weight:600;color:#15233B;">'+esc(u.name)+'</span>'
+        +(isYou ? '<span style="background:#ECFDF5;border:1px solid #A7F3D0;color:#15875A;font-size:9.5px;font-weight:700;padding:1px 7px;border-radius:10px;">You</span>' : '')
+      +'</div></td>'
+      +'<td style="padding:11px 14px;font-size:11.5px;color:#64748B;font-family:\'DM Mono\',monospace;">'+esc(u.email)+'</td>'
+      +'<td style="padding:11px 14px;">'+roleBadge(u.role)+'</td>'
+      +'<td style="padding:11px 14px;"><div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;">'
+        +'<div style="width:70px;background:#F1F5F9;border-radius:3px;height:5px;overflow:hidden;"><div style="background:#2563EB;height:100%;width:'+barPct+'%;border-radius:3px;"></div></div>'
+        +'<span style="font-family:\'DM Mono\',monospace;font-size:12.5px;font-weight:700;color:#15233B;width:24px;text-align:right;">'+u.totalLogins+'</span>'
+      +'</div></td>'
+      +'<td style="padding:11px 14px;font-size:11px;color:#64748B;font-family:\'DM Mono\',monospace;white-space:nowrap;">'+fmtLastLogin(u.lastLogin)+'</td>'
+      +'<td style="padding:11px 14px;"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:'+(u.isActive?'#15875A':'#94A3B8')+';"><span style="width:6px;height:6px;border-radius:50%;background:'+(u.isActive?'#15875A':'#CBD5E1')+';display:inline-block;"></span>'+(u.isActive?'Active':'Inactive')+'</span></td>'
+    +'</tr>';
+  }).join('');
+
+  return '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px;">'
+    + usageKpiCard(d.totalUsers, 'Total Users', '#2563EB')
+    + usageKpiCard(d.activeUsers, 'Active Users', '#15875A')
+    + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
+  +'</div>'
+  +'<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;overflow:hidden;">'
+    +'<table style="width:100%;border-collapse:collapse;">'
+      +'<thead><tr style="background:#F8FAFC;border-bottom:2px solid #E2E8F0;">'
+        +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">#</th>'
+        +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Name</th>'
+        +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Email</th>'
+        +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Role</th>'
+        +'<th style="text-align:right;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Total Logins</th>'
+        +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Last Login</th>'
+        +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Status</th>'
+      +'</tr></thead>'
+      +'<tbody>'+rows+'</tbody>'
+    +'</table>'
   +'</div>';
 }
 
@@ -1113,6 +1220,7 @@ function render(){
   // Update only topbar, main content, drawer — sidebar untouched
   document.getElementById('topbar-slot').innerHTML=topbar();
   mainEl.innerHTML = state.page==='customers' ? customerPage()
+    : state.page==='usage' ? usagePage()
     : kpiRow(M)+(state.page==='leaderboard'?leaderboard():salesTable(M));
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
@@ -1124,6 +1232,7 @@ function renderKeepTopbar(){
   var mainEl=document.getElementById('main-slot');
   var scrollTop=mainEl?mainEl.scrollTop:0;
   if(mainEl) mainEl.innerHTML = state.page==='customers' ? customerPage()
+    : state.page==='usage' ? usagePage()
     : kpiRow(M)+(state.page==='leaderboard'?leaderboard():salesTable(M));
   var drawerEl=document.getElementById('drawer-slot');
   if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal();
@@ -1153,6 +1262,9 @@ document.addEventListener('click', function(ev){
     render();
     if(state.page==='customers' && !customerDataReady){
       fetchCustomerData(function(){ render(); });
+    }
+    if(state.page==='usage' && !usageDataReady){
+      fetchUsageData(function(){ render(); });
     }
   }
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
