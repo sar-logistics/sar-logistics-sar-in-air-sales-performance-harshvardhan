@@ -1105,7 +1105,13 @@ function salesTable(M){
   // Pre-compute block boundaries: for each row, find which row index within
   // its block is the "middle" row — that's where we render the name label
   // (instead of using <td rowspan>, which breaks position:sticky in browsers).
-  var blockMiddleIdx = []; // same length as allRows; the idx of the middle row of this row's block
+  // Also carry the block's repInfo/flags forward to every row in the block,
+  // since only the first row of a block actually has repInfo set.
+  var blockMiddleIdx = [];
+  var blockRepInfo   = [];
+  var blockIsZone    = [];
+  var blockIsGrand   = [];
+  var blockEntityName = [];
   {
     var bi = 0;
     while (bi < allRows.length) {
@@ -1113,7 +1119,13 @@ function salesTable(M){
         var bj = bi + 1;
         while (bj < allRows.length && !allRows[bj].repInfo) bj++;
         var mid = bi + Math.floor((bj - bi - 1) / 2);
-        for (var bk = bi; bk < bj; bk++) blockMiddleIdx[bk] = mid;
+        for (var bk = bi; bk < bj; bk++) {
+          blockMiddleIdx[bk]   = mid;
+          blockRepInfo[bk]     = allRows[bi].repInfo;
+          blockIsZone[bk]      = allRows[bi].isZoneBlock;
+          blockIsGrand[bk]     = allRows[bi].isGrandBlock;
+          blockEntityName[bk]  = allRows[bi].entityName;
+        }
         bi = bj;
       } else {
         blockMiddleIdx[bi] = bi;
@@ -1123,18 +1135,19 @@ function salesTable(M){
   }
 
   var body = allRows.map(function(row, idx){
-    var ri = row.repInfo;
+    var ri = blockRepInfo[idx] || row.repInfo;
     var rowBg = row.rowBg || (ri ? ri.groupBg : '#FFFFFF');
-    var isZoneRow  = row.isZoneBlock;
-    var isGrandRow = row.isGrandBlock;
-    var isFirstOfBlock = !!ri; // first row of a block always carries repInfo
+    var isZoneRow  = blockIsZone[idx]  || row.isZoneBlock;
+    var isGrandRow = blockIsGrand[idx] || row.isGrandBlock;
+    var blockEntity = blockEntityName[idx] || row.entityName;
+    var isFirstOfBlock = !!row.repInfo; // literal first row of a block always carries repInfo
     var isMiddleOfBlock = (blockMiddleIdx[idx] === idx);
 
     var allCells = row.cells.map(function(c, ci){
       var isFY = ci === 0;
       var stickyStyle = isFY ? ('position:sticky;left:'+FY_COL_LEFT+'px;z-index:2;') : '';
       var cellBg = isFY ? (rowBg !== '#FFFFFF' ? rowBg : '#FFFBF0') : (rowBg !== '#FFFFFF' ? rowBg : c.bg);
-      return '<td class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'" style="'+stickyStyle+'text-align:right;padding:5px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+cellBg+';border-left:'+(isFY?'2px solid #E8D4A0':c.borderLeft)+';white-space:nowrap;">'+c.val+'</td>';
+      return '<td class="dcell" data-act="drill" data-entity="'+esc(c.entity)+'" data-metric="'+esc(c.metric)+'" data-col="'+esc(c.col)+'" data-val="'+esc(c.drillVal)+'" style="'+stickyStyle+'text-align:right;padding:5px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:'+c.weight+';color:'+c.color+';background:'+cellBg+';border-left:'+(isFY?'0':c.borderLeft)+';border-right:'+(isFY?'2px solid #E8D4A0':'0')+';white-space:nowrap;">'+c.val+'</td>';
     });
     var mcells = allCells.join('');
 
@@ -1172,11 +1185,11 @@ function salesTable(M){
         : '<div style="font-size:11.5px;font-weight:'+ri.nameWeight+';white-space:nowrap;color:#15233B;">'+ri.name+'</div>';
       var zoneToggle = '';
       if (isZoneRow) {
-        var zCollapsed = state.zoneOpen[row.entityName] === false;
+        var zCollapsed = state.zoneOpen[blockEntity] === false;
         var chevSvg = zCollapsed
           ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>'
           : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
-        zoneToggle = '<div data-act="zoneToggle" data-zone="'+esc(row.entityName)+'" style="width:16px;height:16px;border-radius:4px;background:#F1ECFB;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+chevSvg+'</div>';
+        zoneToggle = '<div data-act="zoneToggle" data-zone="'+esc(blockEntity)+'" style="width:16px;height:16px;border-radius:4px;background:#F1ECFB;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+chevSvg+'</div>';
       }
       nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:5px 12px;z-index:2;border-right:1px solid #CBD5E1;width:185px;min-width:185px;text-align:left;"><div style="display:flex;align-items:center;justify-content:flex-start;gap:7px;">'+zoneToggle+avatarEl+nameLabel+'</div></td>';
     } else {
