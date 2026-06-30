@@ -292,7 +292,8 @@ module.exports = async function handler(req, res) {
   if (!action) return res.status(400).json({ error: "action required: jobs | mapping | users | sales" });
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  if (action !== "sales" && req.method !== "POST") {
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug"]);
+  if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
 
