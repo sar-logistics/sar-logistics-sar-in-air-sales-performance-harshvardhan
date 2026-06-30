@@ -96,6 +96,10 @@
 
 <script>
 /* ====================== AUTH ====================== */
+// Bump this whenever aggregation/data logic changes — invalidates all
+// existing browser caches instantly, even though MongoDB data itself
+// hasn't changed (so the meta-timestamp check alone wouldn't catch it).
+var CACHE_VERSION = 'v2';
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -247,7 +251,7 @@ function checkForFreshData(cached, callback) {
 
 function getCachedSalesData() {
   try {
-    var raw = localStorage.getItem('sar_sales_cache');
+    var raw = localStorage.getItem('sar_sales_cache_' + CACHE_VERSION);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch (e) { return null; }
@@ -256,7 +260,7 @@ function getCachedSalesData() {
 function setCachedSalesData(data) {
   try {
     data._cachedAt = Date.now();
-    localStorage.setItem('sar_sales_cache', JSON.stringify(data));
+    localStorage.setItem('sar_sales_cache_' + CACHE_VERSION, JSON.stringify(data));
   } catch (e) { /* storage full or unavailable — ignore */ }
 }
 
