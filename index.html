@@ -192,26 +192,33 @@ function showDashboard() {
   setTimeout(function() {
     loginScreen.style.display = 'none';
     appEl.style.display = 'flex';
-
-    // Show skeleton render immediately then load live data
-    render();
+    appEl.innerHTML = loadingScreen();
 
     if (currentUser) {
       var ini = currentUser.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
       var roleLabel = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
-      patchSidebarUser(ini, currentUser.name, roleLabel, currentUser.photoUrl);
+      // Defer sidebar patch until after real render
+      window._pendingUserPatch = { ini: ini, name: currentUser.name, role: roleLabel, photoUrl: currentUser.photoUrl };
     }
 
-    // Fetch live data and re-render
+    // Fetch live data, THEN render the real dashboard — never render with empty data
     fetchLiveData(function() {
       render();
-      if (currentUser) {
-        var ini2 = currentUser.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
-        var roleLabel2 = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
-        patchSidebarUser(ini2, currentUser.name, roleLabel2, currentUser.photoUrl);
+      if (window._pendingUserPatch) {
+        var p = window._pendingUserPatch;
+        patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
       }
     });
   }, 260);
+}
+
+function loadingScreen() {
+  return '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:#F4F7FB;">'
+    +'<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">'
+      +'<div class="login-spinner" style="width:28px;height:28px;border-width:3px;"></div>'
+      +'<div style="font-size:12.5px;color:#64748B;font-weight:600;">Loading sales performance data…</div>'
+    +'</div>'
+  +'</div>';
 }
 
 function patchSidebarUser(initials, name, role, photoUrl) {
