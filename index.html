@@ -1202,10 +1202,10 @@ function salesTable(M){
     var labelCell = '<div style="display:flex;align-items:center;"'+actAttr+'>'+labelContent+'</div>';
 
     // Block separators are noticeably darker/thicker than regular row dividers.
-    // Rep-to-rep boundaries inside a zone get a clearly darker line too,
-    // so each sales rep's block is visually distinguishable from the next.
+    // Zone/Grand boundaries use a solid line; rep-to-rep boundaries inside a
+    // zone use a dashed line, so people can tell zone breaks from rep breaks at a glance.
     var topBorder = isFirstOfBlock
-      ? ((isZoneRow || isGrandRow) ? 'border-top:2px solid '+BORDER_STRONG+';' : 'border-top:1.5px solid #9AA6B8;')
+      ? ((isZoneRow || isGrandRow) ? 'border-top:2px solid '+BORDER_STRONG+';' : 'border-top:1.5px dashed #9AA6B8;')
       : 'border-top:1px solid #EEF1F6;';
 
     // Name cell — rendered (non-empty) only on the vertical-middle row of
