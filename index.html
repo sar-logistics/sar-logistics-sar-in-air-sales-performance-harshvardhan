@@ -1109,11 +1109,11 @@ function tableRows(){
 function salesTable(M){
   var colLabels=['FY Total'].concat(months26);
   var FY_COL_LEFT = 185+140; // sticky offset for the FY Total column
-  var BORDER = '#B8C2D4';      // main grid border — darker, more visible
-  var BORDER_STRONG = '#94A3B8'; // block separators — even darker
+  var BORDER = '#D5DCE6';      // main grid border — softened
+  var BORDER_STRONG = '#B0BAC8'; // block separators — still distinct but lighter
   var head='<tr>'
-    +'<th style="position:sticky;left:0;z-index:3;background:#EEF2F8;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';width:185px;min-width:185px;">Zones/Sales Rep</th>'
-    +'<th style="position:sticky;left:185px;z-index:3;background:#EEF2F8;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">Metrics</th>'
+    +'<th style="position:sticky;left:0;z-index:3;background:#EEF2F8;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:185px;min-width:185px;">Zones/Sales Rep</th>'
+    +'<th style="position:sticky;left:185px;z-index:3;background:#EEF2F8;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">Metrics</th>'
     +'<th style="position:sticky;left:'+FY_COL_LEFT+'px;z-index:3;text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#FCF3DA;white-space:nowrap;border-right:2px solid #D9B45C;">Grand Total</th>'
     + colLabels.slice(1).map(function(l){
       return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#EEF2F8;white-space:nowrap;">'+l+'</th>';
@@ -1191,9 +1191,8 @@ function salesTable(M){
 
     // Block separators are noticeably darker/thicker than regular row dividers
     var topBorder = isFirstOfBlock
-      ? ((isZoneRow || isGrandRow) ? 'border-top:3px solid '+BORDER_STRONG+';' : 'border-top:2px solid #CBD5E1;')
-      : 'border-top:1px solid #E7ECF3;';
-    var bottomBorder = isLastRowOverall ? '' : '';
+      ? ((isZoneRow || isGrandRow) ? 'border-top:2px solid '+BORDER_STRONG+';' : 'border-top:1px solid '+BORDER+';')
+      : 'border-top:1px solid #EEF1F6;';
 
     // Name cell — rendered (non-empty) only on the vertical-middle row of
     // its block, but every row in the block still gets a <td> with matching
@@ -1217,20 +1216,20 @@ function salesTable(M){
           : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
         zoneToggle = '<div data-act="zoneToggle" data-zone="'+esc(blockEntity)+'" style="width:18px;height:18px;border-radius:5px;background:#7C3AED;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;margin-left:auto;box-shadow:0 1px 3px rgba(124,79,194,0.35);">'+chevSvg+'</div>';
       }
-      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;border-right:1px solid '+BORDER+';width:185px;min-width:185px;text-align:left;"><div style="display:flex;align-items:center;justify-content:flex-start;gap:7px;">'+avatarEl+nameLabel+zoneToggle+'</div></td>';
+      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;width:185px;min-width:185px;text-align:left;"><div style="display:flex;align-items:center;justify-content:flex-start;gap:7px;">'+avatarEl+nameLabel+zoneToggle+'</div></td>';
     } else {
-      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;border-right:1px solid '+BORDER+';width:185px;min-width:185px;"></td>';
+      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;width:185px;min-width:185px;"></td>';
     }
 
     return '<tr style="background:'+rowBg+';border-bottom:1px solid #E7ECF3;'+topBorder+'">'
       + nameCell
-      + '<td style="position:sticky;left:185px;background:'+rowBg+';padding:6px 10px;white-space:nowrap;z-index:2;border-right:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">'+labelCell+'</td>'
+      + '<td style="position:sticky;left:185px;background:'+rowBg+';padding:6px 10px;white-space:nowrap;z-index:2;width:140px;min-width:140px;">'+labelCell+'</td>'
       + mcells
     +'</tr>';
   }).join('');
 
-  return '<div style="background:#FFFFFF;border:1.5px solid '+BORDER_STRONG+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.10);overflow:hidden;">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:2px solid '+BORDER_STRONG+';background:#F8FAFC;flex-wrap:wrap;gap:12px;">'
+  return '<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);overflow:hidden;">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid '+BORDER+';background:#F8FAFC;flex-wrap:wrap;gap:12px;">'
       +'<div>'
         +'<span style="font-size:12.5px;font-weight:700;color:#15233B;">Sales Performance</span>'
         +'<span style="font-size:11px;color:#64748B;font-weight:500;margin-left:8px;">Monthly · '+state.currency+'</span>'
