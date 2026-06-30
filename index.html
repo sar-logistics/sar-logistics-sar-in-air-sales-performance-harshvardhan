@@ -1106,6 +1106,17 @@ function tableRows(){
   return rows;
 }
 
+function allZonesToggleButton(){
+  var zones = getZones();
+  if (zones.length === 0) return '';
+  var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
+  var label = anyExpanded ? 'Collapse All' : 'Expand All';
+  var icon = anyExpanded
+    ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>'
+    : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+  return '<button data-act="toggleAllZones" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F1ECFB;border:1px solid #D9C7F2;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;color:#7C3AED;cursor:pointer;">'+icon+label+'</button>';
+}
+
 function salesTable(M){
   var colLabels=['FY Total'].concat(months26);
   var FY_COL_LEFT = 185+140; // sticky offset for the FY Total column
@@ -1231,9 +1242,10 @@ function salesTable(M){
 
   return '<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);overflow:hidden;">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid '+BORDER+';background:#F8FAFC;flex-wrap:wrap;gap:12px;">'
-      +'<div>'
+      +'<div style="display:flex;align-items:center;gap:10px;">'
         +'<span style="font-size:12.5px;font-weight:700;color:#15233B;">Sales Performance</span>'
-        +'<span style="font-size:11px;color:#64748B;font-weight:500;margin-left:8px;">Monthly · '+state.currency+'</span>'
+        +'<span style="font-size:11px;color:#64748B;font-weight:500;">Monthly · '+state.currency+'</span>'
+        +allZonesToggleButton()
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:12px;">'
         +'<span style="font-size:12px;color:#94A3B8;font-weight:500;">Jan-26 – Jun-26</span>'
@@ -1656,6 +1668,14 @@ document.addEventListener('click', function(ev){
   else if(act==='cur'){ ev.stopPropagation(); ev.preventDefault(); state.currency=el.getAttribute('data-cur'); render(); }
   else if(act==='shipToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.shipOpen[n]=!state.shipOpen[n]; render(); }
   else if(act==='zoneToggle'){ ev.stopPropagation(); var zn=el.getAttribute('data-zone'); state.zoneOpen[zn] = (state.zoneOpen[zn]===false) ? true : false; render(); }
+  else if(act==='toggleAllZones'){
+    ev.stopPropagation();
+    var zones = getZones();
+    var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
+    var newVal = anyExpanded ? false : true; // if any open, collapse all; else expand all
+    zones.forEach(function(z){ state.zoneOpen[z] = newVal; });
+    render();
+  }
   else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
   else if(act==='close'){ if(ev.target.closest('[data-stop]') && !el.matches('[data-act="close"]')) return; state.drill=null; render(); }
 });
