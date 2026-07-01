@@ -255,9 +255,7 @@ function showDashboard() {
       repsRaw   = cached.repsRaw;
       zonesRaw  = cached.zones || [];
       months26  = cached.months || months26;
-      // Always sync dateFrom/dateTo to the actual available months span
-      state.dateFrom = months26[0];
-      state.dateTo   = months26[months26.length - 1];
+      syncDateRangeToData();
       dataReady = true;
       render();
     } else {
@@ -406,9 +404,7 @@ function fetchLiveData(callback, force){
         repsRaw   = data.repsRaw;
         zonesRaw  = data.zones  || [];
         months26  = data.months || months26;
-        // Auto-set date range to full available span on first load
-        state.dateFrom = months26[0];
-        state.dateTo   = months26[months26.length - 1];
+        syncDateRangeToData();
         dataReady = true;
         setCachedSalesData({ repsRaw: repsRaw, zones: zonesRaw, months: months26 });
         console.log('✅ Live data:', repsRaw.length, 'reps,', zonesRaw.length, 'zones');
@@ -545,13 +541,41 @@ function heat(ratio){
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 
 /* ====================== DERIVED MODEL ====================== */
+// Single source of truth for which month indices are currently visible.
+// Every function that renders data calls this — nothing else should compute
+// a month range independently.
 function filteredMonthIndices(){
+  if (!months26 || months26.length === 0) return [];
   var fi = months26.indexOf(state.dateFrom);
   var ti = months26.indexOf(state.dateTo);
-  if (fi < 0 || ti < 0) return months26.map(function(_,i){return i;}); // all
+  // If either bound isn't found (e.g. state hasn't been synced yet), show all
+  if (fi < 0 && ti < 0) return months26.map(function(_,i){ return i; });
+  if (fi < 0) fi = 0;
+  if (ti < 0) ti = months26.length - 1;
+  if (fi > ti) { var tmp = fi; fi = ti; ti = tmp; } // swap if inverted
   var idx = [];
   for (var i = fi; i <= ti; i++) idx.push(i);
   return idx;
+}
+
+// Helper: the actual month labels for the current filter
+function filteredMonths(){
+  return filteredMonthIndices().map(function(i){ return months26[i]; });
+}
+
+// Sync state.dateFrom / state.dateTo to the actual available months.
+// Call this whenever months26 changes (API load, cache load).
+function syncDateRangeToData(){
+  if (!months26 || months26.length === 0) return;
+  // Only override if current values aren't valid in the new months26
+  var fiOk = months26.indexOf(state.dateFrom) >= 0;
+  var tiOk = months26.indexOf(state.dateTo)   >= 0;
+  if (!fiOk) state.dateFrom = months26[0];
+  if (!tiOk) state.dateTo   = months26[months26.length - 1];
+  // Also ensure from <= to
+  var fi = months26.indexOf(state.dateFrom);
+  var ti = months26.indexOf(state.dateTo);
+  if (fi > ti) { state.dateTo = months26[months26.length - 1]; }
 }
 
 function model(){
@@ -795,19 +819,6 @@ function kpiRow(M){
   var idxs = filteredMonthIndices();
   var n = idxs.length || 1;
 
-  // Filter months to the current date range selection — this is what makes
-  // the sparkline reflect the same window as the topbar filter controls.
-  // For non-Custom views, use a sensible default slice based on reportView.
-  var filteredMonths = (function(){
-    var from = state.dateFrom, to = state.dateTo;
-    var filtered = months26.filter(function(m){
-      var fi = months26.indexOf(from), ti = months26.indexOf(to), mi = months26.indexOf(m);
-      if (fi < 0 || ti < 0) return true; // fallback: show all if dates not found
-      return mi >= fi && mi <= ti;
-    });
-    return filtered.length > 0 ? filtered : months26;
-  })();
-
   // Build sparkline SVG with area fill — matches the reference card style exactly
   function sparkline(data, color){
     if (!data || data.length < 2) return '';
@@ -866,14 +877,13 @@ function kpiRow(M){
 
   var achColor = M.achGrand >= 100 ? '#0A7E53' : M.achGrand < 0 ? '#C0392B' : '#0D2B5E';
 
-  var shipData  = filteredMonths.map(function(m){ var i=months26.indexOf(m); return i>=0 ? repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0) : 0; });
-  var teuData   = filteredMonths.map(function(m){ var i=months26.indexOf(m); return i>=0 ? repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0) : 0; });
-  var tonsData  = filteredMonths.map(function(m){ var i=months26.indexOf(m); return i>=0 ? repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0) : 0; });
-  var gpData    = filteredMonths.map(function(m){ var i=months26.indexOf(m); return i>=0 ? repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0) : 0; });
-  var tgtData   = filteredMonths.map(function(){ return M.tgtGrand / (filteredMonths.length||1); });
-  var achData   = filteredMonths.map(function(m){
-    var i = months26.indexOf(m); if (i < 0) return 0;
-    var gp  = repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0);
+  var shipData  = idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); });
+  var teuData   = idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); });
+  var tonsData  = idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0); });
+  var gpData    = idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0); });
+  var tgtData   = idxs.map(function(){ return M.tgtGrand / n; });
+  var achData   = idxs.map(function(idx_inner){
+    var gp  = repsRaw.reduce(function(s,r){return s+(r.gp[idx_inner]||0);},0);
     var tgt = repsRaw.reduce(function(s,r){return s+r.tgt;},0);
     return tgt > 0 ? Math.round(gp/tgt*100) : 0;
   });
@@ -1224,9 +1234,7 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
 }
 
 function tableRows(){
-  var _fmi = filteredMonthIndices();
-  var _fm  = _fmi.map(function(i){return months26[i];});
-  var colLabels = ['FY Total'].concat(_fm);
+  var colLabels = ['FY Total'].concat(filteredMonths());
   var ents = entities();
   var rows = [];
 
@@ -1303,9 +1311,7 @@ function allZonesToggleButton(){
 }
 
 function salesTable(M){
-  var _fmi2 = filteredMonthIndices();
-  var _fm2  = _fmi2.map(function(i){return months26[i];});
-  var colLabels=['FY Total'].concat(_fm2);
+  var colLabels=['FY Total'].concat(filteredMonths());
   var FY_COL_LEFT = 185+140; // sticky offset for the FY Total column
   var BORDER = '#D5DCE6';      // main grid border — softened
   var BORDER_STRONG = '#B0BAC8'; // block separators — still distinct but lighter
@@ -1807,8 +1813,8 @@ function openDrill(entity, metric, col, valueFmt){
 
 document.addEventListener('change', function(ev){
   var el=ev.target;
-  if(el.getAttribute('data-act')==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.value; renderKeepTopbar(); }
-  else if(el.getAttribute('data-act')==='setTo'){ ev.stopPropagation(); state.dateTo=el.value; renderKeepTopbar(); }
+  if(el.getAttribute('data-act')==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.value; render(); }
+  else if(el.getAttribute('data-act')==='setTo'){ ev.stopPropagation(); state.dateTo=el.value; render(); }
   else if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
 });
 document.addEventListener('click', function(ev){
