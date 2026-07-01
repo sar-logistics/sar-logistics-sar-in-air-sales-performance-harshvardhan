@@ -819,13 +819,9 @@ function kpiRow(M){
 
   function deltaEl(pct, label){
     if (pct === null) return '<div style="height:16px;"></div>';
-    var up = pct >= 0;
-    var c  = up ? '#0A7E53' : '#C0392B';
-    var arrow = up
-      ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>'
-      : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    var up = pct > 0;
+    var c  = up ? '#0A7E53' : pct < 0 ? '#C0392B' : '#6B82A0';
     return '<div style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:'+c+';">'
-      +arrow
       +'<span>'+(up?'+':'')+pct+'%</span>'
       +'<span style="color:#6B82A0;font-weight:600;">'+label+'</span>'
     +'</div>';
