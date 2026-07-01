@@ -1940,25 +1940,33 @@ document.addEventListener('click', function(ev){
     var v = el.getAttribute('data-val');
     state.reportView = v;
     state.viewDropOpen = false;
-    // Auto-set a sensible date window for each view mode
     var allM = months26;
-    var last = allM[allM.length-1];
+    var last  = allM[allM.length - 1];
     var first = allM[0];
-    if (v === 'Monthly') {
-      // Keep whatever the user had, or default to last 6 months
-      var fi = allM.indexOf(state.dateFrom), ti = allM.indexOf(state.dateTo);
-      if (fi < 0 || ti < 0 || fi > ti) {
-        state.dateTo   = last;
-        state.dateFrom = allM[Math.max(0, allM.length - 6)];
-      }
-    } else if (v === 'Yearly') {
-      state.dateFrom = first; state.dateTo = last;
+    var len   = allM.length;
+
+    // Each view ALWAYS sets a specific window — never silently keeps the old
+    // range, which caused the "looks the same" glitch when switching views.
+    if (v === 'Weekly') {
+      // Show last 1 month only (closest to a weekly granularity with monthly data)
+      state.dateFrom = last;
+      state.dateTo   = last;
+    } else if (v === 'Monthly') {
+      // Show last 6 months (or full data if less than 6 months available)
+      state.dateFrom = allM[Math.max(0, len - 6)];
+      state.dateTo   = last;
     } else if (v === 'Quarterly') {
-      state.dateTo = last; state.dateFrom = allM[Math.max(0, allM.length - 3)];
-    } else if (v === 'Weekly') {
-      state.dateTo = last; state.dateFrom = allM[Math.max(0, allM.length - 1)];
+      // Show last 3 months
+      state.dateFrom = allM[Math.max(0, len - 3)];
+      state.dateTo   = last;
+    } else if (v === 'Yearly') {
+      // Show full available data span
+      state.dateFrom = first;
+      state.dateTo   = last;
+    } else if (v === 'Custom') {
+      // Keep current selection — user will adjust manually
+      syncDateRangeToData(); // ensure bounds are valid
     }
-    // Custom: leave dateFrom/dateTo as-is so user keeps their selection
     render();
   }
   else if(act==='cur'){ ev.stopPropagation(); ev.preventDefault(); state.currency=el.getAttribute('data-cur'); render(); }
