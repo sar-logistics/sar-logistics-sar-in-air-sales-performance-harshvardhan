@@ -9,43 +9,92 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
+  /* ── Design tokens — derived from SAR's navy blue brand ── */
+  :root {
+    --navy:      #0D2B5E;   /* SAR primary navy — sidebar bg, key text */
+    --navy-mid:  #1A3F7A;   /* sidebar hover / active bg */
+    --navy-light:#224A8F;   /* sidebar active strong */
+    --accent:    #1D5FCC;   /* call-to-action blue */
+    --accent-dim:#2D6FDF;   /* lighter hover state */
+    --surface:   #F4F7FB;   /* page background */
+    --card:      #FFFFFF;
+    --ink:       #0D2B5E;   /* primary text — SAR navy */
+    --ink-mid:   #3C5275;
+    --ink-soft:  #6B82A0;
+    --border:    #D9E3EE;
+    --border-light: #EAF0F8;
+  }
+
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;}
-  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:#F4F7FB;color:#15233B;-webkit-font-smoothing:antialiased;}
+  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--surface);color:var(--ink);-webkit-font-smoothing:antialiased;}
   a{text-decoration:none;}
   button{font-family:inherit;}
-  ::-webkit-scrollbar{width:10px;height:10px;}
-  ::-webkit-scrollbar-thumb{background:#D5DEEA;border-radius:8px;border:2px solid transparent;background-clip:content-box;}
-  ::-webkit-scrollbar-thumb:hover{background:#BFCBDC;background-clip:content-box;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#C8D5E4;border-radius:8px;border:2px solid transparent;background-clip:content-box;}
+  ::-webkit-scrollbar-thumb:hover{background:#AABCCE;background-clip:content-box;}
 
-    @keyframes drwSlide{from{transform:translateX(36px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+  @keyframes drwSlide{from{transform:translateX(36px);opacity:0;}to{transform:translateX(0);opacity:1;}}
   @keyframes ovFade{from{opacity:0;}to{opacity:1;}}
   @keyframes fadeUp{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
   @keyframes spin{to{transform:rotate(360deg);}}
-  .navlink:hover{background:#F4F7FB;}
+
+  .navlink:hover{background:rgba(255,255,255,0.08) !important;}
   .btnq:hover{border-color:#C9D4E2 !important;}
   .sumrow{cursor:pointer;}
   .sumrow:hover td{filter:brightness(0.985);}
   .dcell{cursor:pointer;}
-  .dcell:hover{background:#E9F1FF !important;}
+  .dcell:hover{background:#E4EDFF !important;}
   .shipcard:hover{border-color:#C9D4E2 !important;background:#FCFDFF;}
 
   /* ── Login screen ── */
-  #login-screen{position:fixed;inset:0;background:#F4F7FB;display:flex;align-items:center;justify-content:center;z-index:1000;animation:ovFade 0.3s ease;}
-  .login-card{background:#FFFFFF;border:1px solid #E2E8F0;border-radius:16px;box-shadow:0 4px 32px rgba(20,35,59,0.10);width:380px;max-width:92vw;padding:36px 32px 32px;animation:fadeUp 0.4s cubic-bezier(0.22,1,0.36,1);}
-  .login-logo{width:40px;height:40px;border-radius:10px;background:#2F6FED;display:flex;align-items:center;justify-content:center;margin-bottom:20px;}
-  .login-title{font-size:20px;font-weight:800;color:#15233B;letter-spacing:-0.02em;margin-bottom:4px;}
-  .login-subtitle{font-size:12.5px;color:#64748B;font-weight:500;margin-bottom:28px;line-height:1.5;}
-  .google-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;background:#FFFFFF;border:1.5px solid #E2E8F0;border-radius:9px;padding:11px 20px;font-size:13px;font-weight:600;color:#15233B;cursor:pointer;font-family:inherit;transition:border-color 0.15s,box-shadow 0.15s;}
-  .google-btn:hover{border-color:#2F6FED;box-shadow:0 0 0 3px rgba(47,111,237,0.08);}
-  .google-btn:active{background:#F8FAFC;}
+  #login-screen{
+    position:fixed;inset:0;
+    background:linear-gradient(135deg, var(--navy) 0%, #163980 55%, #1D5FCC 100%);
+    display:flex;align-items:center;justify-content:center;
+    z-index:1000;animation:ovFade 0.3s ease;
+  }
+  .login-card{
+    background:#FFFFFF;border:none;
+    border-radius:18px;
+    box-shadow:0 24px 64px rgba(10,22,50,0.36);
+    width:400px;max-width:92vw;
+    padding:40px 36px 32px;
+    animation:fadeUp 0.4s cubic-bezier(0.22,1,0.36,1);
+  }
+  .login-logo-wrap{display:flex;justify-content:center;margin-bottom:28px;}
+  .login-logo-wrap img{height:52px;width:auto;}
+  .login-divider-label{
+    display:flex;align-items:center;gap:10px;
+    font-size:10.5px;font-weight:600;color:#9AAFC8;
+    letter-spacing:0.06em;text-transform:uppercase;
+    margin:24px 0;
+  }
+  .login-divider-label::before,.login-divider-label::after{
+    content:'';flex:1;height:1px;background:#E8EFF8;
+  }
+  .login-title{font-size:18px;font-weight:800;color:var(--navy);letter-spacing:-0.02em;margin-bottom:4px;text-align:center;}
+  .login-subtitle{font-size:12px;color:#6B82A0;font-weight:500;margin-bottom:28px;line-height:1.6;text-align:center;}
+  .google-btn{
+    width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+    background:#FFFFFF;border:1.5px solid #D9E3EE;border-radius:10px;
+    padding:12px 20px;font-size:13px;font-weight:600;color:var(--navy);
+    cursor:pointer;font-family:inherit;transition:border-color 0.15s,box-shadow 0.15s,background 0.1s;
+  }
+  .google-btn:hover{border-color:var(--accent);box-shadow:0 0 0 3px rgba(29,95,204,0.1);background:#FAFCFF;}
+  .google-btn:active{background:#F3F7FF;}
   .google-btn:disabled{opacity:0.55;cursor:not-allowed;border-color:#E2E8F0;box-shadow:none;}
   .login-error{display:none;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:9px 12px;font-size:11.5px;color:#B91C1C;font-weight:500;margin-top:14px;line-height:1.5;}
   .login-error.show{display:block;}
-  .login-divider{height:1px;background:#F1F5F9;margin:24px 0;}
-  .login-footer{font-size:11px;color:#94A3B8;font-weight:500;text-align:center;line-height:1.6;}
-  .login-spinner{width:16px;height:16px;border:2px solid #E2E8F0;border-top-color:#2F6FED;border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0;}
-  .login-badge{display:inline-flex;align-items:center;gap:5px;background:#EAF7EF;border:1px solid #C9EAD6;border-radius:20px;padding:3px 8px;font-size:10.5px;font-weight:700;color:#15875A;margin-bottom:16px;}
+  .login-footer{font-size:11px;color:#9AAFC8;font-weight:500;text-align:center;line-height:1.7;}
+  .login-spinner{width:16px;height:16px;border:2px solid #D9E3EE;border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;flex-shrink:0;}
+  .login-badge{
+    display:inline-flex;align-items:center;gap:5px;
+    background:#EAF7EF;border:1px solid #C9EAD6;
+    border-radius:20px;padding:3px 8px;
+    font-size:10.5px;font-weight:700;color:#15875A;
+    margin-bottom:14px;
+  }
   .g-logo{flex-shrink:0;}
 </style>
 </head>
@@ -54,20 +103,18 @@
 <!-- ── Login Screen ── -->
 <div id="login-screen">
   <div class="login-card">
-    <!-- Logo -->
-    <div class="login-logo">
-      <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
-        <rect x="4" y="18" width="6" height="10" rx="1.5" fill="white"/>
-        <rect x="13" y="12" width="6" height="16" rx="1.5" fill="white"/>
-        <rect x="22" y="6" width="6" height="22" rx="1.5" fill="white"/>
-      </svg>
+    <!-- SAR Logo -->
+    <div class="login-logo-wrap">
+      <img id="login-sar-logo" src="" alt="SAR — Connecting Continents" />
     </div>
     <!-- Live badge -->
-    <div class="login-badge">
-      <span style="width:5px;height:5px;border-radius:50%;background:#1FAE6A;display:inline-block;"></span>
-      FY 26 · Live Dashboard
+    <div style="display:flex;justify-content:center;margin-bottom:14px;">
+      <div class="login-badge">
+        <span style="width:5px;height:5px;border-radius:50%;background:#1FAE6A;display:inline-block;"></span>
+        FY 26 · FY 27 · Live Dashboard
+      </div>
     </div>
-    <div class="login-title">SAR_IN – Air Sales</div>
+    <div class="login-title">SAR Sales Performance</div>
     <div class="login-subtitle">Sign in with your SAR Google Workspace account to access the sales performance dashboard.</div>
 
     <!-- Google Sign-In button -->
@@ -84,10 +131,10 @@
     <!-- Error message -->
     <div class="login-error" id="login-error"></div>
 
-    <div class="login-divider"></div>
+    <div class="login-divider-label">Restricted Access</div>
     <div class="login-footer">
       Access is restricted to authorised SAR team members.<br>
-      Contact <strong style="color:#374151;">Harshvardhan Rawat</strong> to request access.
+      Contact <strong style="color:#3C5275;">Harshvardhan Rawat</strong> to request access.
     </div>
   </div>
 </div>
@@ -95,6 +142,8 @@
 <div id="app" style="display:none;height:100vh;width:100%;overflow:hidden;flex-direction:row;"></div>
 
 <script>
+var SAR_LOGO_URI = 'data:image/png;base64,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';
+
 /* ====================== AUTH ====================== */
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
@@ -291,33 +340,22 @@ function hideRefreshOverlay() {
 }
 
 function patchSidebarUser(initials, name, role, photoUrl) {
-  // Called after render() builds the sidebar
+  // Called after render() builds the sidebar — uses stable IDs now
   setTimeout(function() {
-    var aside = document.querySelector('aside');
-    if (!aside) return;
-    // Update the bottom avatar + name in sidebar footer
-    var footer = aside.querySelector('div[style*="border-top"]');
-    if (footer) {
-      var avatarEl = footer.querySelector('div[style*="border-radius:50%"]');
-      if (avatarEl) {
-        if (photoUrl) {
-          avatarEl.innerHTML = '';
-          avatarEl.style.overflow = 'hidden';
-          avatarEl.style.padding = '0';
-          avatarEl.innerHTML = '<img src="'+photoUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />';
-        } else {
-          avatarEl.textContent = initials;
-        }
+    var avatarEl = document.getElementById('sidebar-avatar');
+    if (avatarEl) {
+      if (photoUrl) {
+        avatarEl.innerHTML = '<img src="'+photoUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" />';
+        avatarEl.style.padding = '0';
+        avatarEl.style.overflow = 'hidden';
+      } else {
+        avatarEl.textContent = initials;
       }
     }
-    // Update the header name/role
-    var header = aside.querySelector('div[style*="border-bottom"]');
-    if (header) {
-      var nameEl = header.querySelector('div[style*="font-size:13.5px"]');
-      if (nameEl) nameEl.textContent = 'SAR_IN – Air';
-      var roleEl = header.querySelector('div[style*="font-size:10.5px"]');
-      if (roleEl) roleEl.textContent = name + ' · ' + role;
-    }
+    var nameEl = document.getElementById('sidebar-name');
+    if (nameEl) nameEl.textContent = name || 'SAR_IN – Air';
+    var roleEl = document.getElementById('sidebar-subrole');
+    if (roleEl) roleEl.textContent = name + ' · ' + role;
   }, 50);
 }
 
@@ -581,7 +619,10 @@ function entities(){
 /* ====================== DRILL-DOWN ====================== */
 /* ====================== SIDEBAR ====================== */
 function navItem(label, active, svg, actType, actVal, disabled){
-  var st = active ? 'color:#2F6FED;background:#EAF1FE;font-weight:600;' : (disabled?'color:#B0BAC8;font-weight:500;cursor:default;':'color:#5B6678;font-weight:500;');
+  var st = active
+    ? 'color:#FFFFFF;background:rgba(255,255,255,0.14);font-weight:600;'
+    : (disabled ? 'color:rgba(255,255,255,0.25);font-weight:500;cursor:default;'
+                : 'color:rgba(255,255,255,0.6);font-weight:500;');
   var act = actType ? ' data-act="'+actType+'" data-val="'+actVal+'"' : '';
   return '<a href="#" class="navlink"'+act+' style="display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:12px;'+st+'">'+svg+label+'</a>';
 }
@@ -600,37 +641,39 @@ var IC = {
 function sidebar(){
   var now = new Date();
   var ts = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0')+':'+now.getSeconds().toString().padStart(2,'0');
-  return '<aside style="width:220px;flex-shrink:0;background:#FFFFFF;border-right:1px solid #E7ECF3;display:flex;flex-direction:column;height:100%;">'
-    +'<div style="padding:14px 16px 12px 16px;display:flex;align-items:center;gap:9px;border-bottom:1px solid #F0F3F8;">'
-      +'<div style="width:32px;height:32px;border-radius:8px;background:#2F6FED;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
-        +'<svg width="22" height="22" viewBox="0 0 32 32" fill="none"><rect x="4" y="18" width="6" height="10" rx="1.5" fill="white"/><rect x="13" y="12" width="6" height="16" rx="1.5" fill="white"/><rect x="22" y="6" width="6" height="22" rx="1.5" fill="white"/></svg>'
-      +'</div>'
-      +'<div style="line-height:1.25;">'
-        +'<div style="font-size:13.5px;font-weight:700;letter-spacing:-0.01em;color:#15233B;">SAR_IN - Air</div>'
-        +'<div style="font-size:10.5px;color:#8B97A8;font-weight:500;">Harshvardhan Rawat · Admin</div>'
-      +'</div>'
+
+  return '<aside style="width:232px;flex-shrink:0;background:#0D2B5E;display:flex;flex-direction:column;height:100%;">'
+    // ── Logo header
+    +'<div style="padding:18px 18px 16px;border-bottom:1px solid rgba(255,255,255,0.08);">'
+      +'<img src="'+SAR_LOGO_URI+'" alt="SAR" style="height:38px;width:auto;filter:brightness(0) invert(1);display:block;margin-bottom:8px;" />'
+      +'<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.45);letter-spacing:0.06em;text-transform:uppercase;" id="sidebar-subrole">Harshvardhan Rawat · Admin</div>'
     +'</div>'
-    +'<nav style="flex:1;overflow-y:auto;padding:10px 8px;overscroll-behavior:contain;">'
-      +'<div style="font-size:9.5px;font-weight:700;letter-spacing:0.1em;color:#B0BAC8;padding:0 8px 6px 8px;text-transform:uppercase;">Reports</div>'
+    // ── Nav
+    +'<nav style="flex:1;overflow-y:auto;padding:10px 10px;overscroll-behavior:contain;">'
+      +'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:6px 8px 5px;text-transform:uppercase;">Reports</div>'
       +'<div style="display:flex;flex-direction:column;gap:1px;">'
         +navItem('Sales Performance',state.page==='sales',IC.bar,'page','sales')
         +navItem('Tradelane Insights',false,IC.route,'','',true)
         +navItem('Customer Insights',state.page==='customers',IC.person,'page','customers')
         +navItem('Agent Insights',false,IC.headset,'','',true)
-        +'<div style="height:1px;background:#E7ECF3;margin:8px 10px;"></div>'
+        +'<div style="height:1px;background:rgba(255,255,255,0.07);margin:7px 6px;"></div>'
         +navItem('Operation Pendency',false,IC.clip)
         +navItem('Finance Pendency',false,IC.dollar)
       +'</div>'
-      +'<div style="font-size:9.5px;font-weight:700;letter-spacing:0.1em;color:#B0BAC8;padding:14px 8px 6px 8px;text-transform:uppercase;">Admin</div>'
+      +'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>'
       +'<div style="display:flex;flex-direction:column;gap:1px;">'
         +navItem('Usage Analytics',state.page==='usage',IC.line,'page','usage')
         +navItem('Teams',state.page==='teams',IC.people,'page','teams')
         +navItem('Admin Panel',false,IC.sliders)
       +'</div>'
     +'</nav>'
-    +'<div style="padding:10px 14px;border-top:1px solid #F0F3F8;display:flex;align-items:center;gap:8px;">'
-      +'<div style="width:26px;height:26px;border-radius:50%;background:oklch(0.6 0.12 255);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">HR</div>'
-      +'<div style="font-size:10px;color:#8B97A8;font-weight:500;line-height:1.4;">Updated '+ts+'<br><span style="color:#15875A;">● Synced</span></div>'
+    // ── Footer user row
+    +'<div style="padding:10px 14px 12px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:9px;">'
+      +'<div id="sidebar-avatar" style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.18);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1.5px solid rgba(255,255,255,0.25);">HR</div>'
+      +'<div style="min-width:0;">'
+        +'<div id="sidebar-name" style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">SAR_IN – Air</div>'
+        +'<div style="font-size:9.5px;color:rgba(255,255,255,0.4);font-weight:500;">Updated '+ts+' <span style="color:#3DD68C;">●</span> Synced</div>'
+      +'</div>'
     +'</div>'
   +'</aside>';
 }
@@ -1786,6 +1829,10 @@ document.addEventListener('click', function(e){ if(state.viewDropOpen && !e.targ
 
 // Initialise Google auth once GSI library is ready
 window.addEventListener('load', function() {
+  // Set SAR logo on login screen immediately
+  var loginLogo = document.getElementById('login-sar-logo');
+  if (loginLogo) loginLogo.src = SAR_LOGO_URI;
+
   var interval = setInterval(function() {
     if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
       clearInterval(interval);
