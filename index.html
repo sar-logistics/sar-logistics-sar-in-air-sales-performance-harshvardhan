@@ -491,7 +491,11 @@ function updateUserField(email, fields, callback){
     });
 }
 
-var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{} };
+var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{},
+  weeklyMonth: null,      // which month is selected in Weekly view
+  selectedQuarter: 'Q1',  // Q1/Q2/Q3/Q4 in Quarterly view
+  yearType: 'Financial'   // 'Financial' (Apr-Mar) or 'Calendar' (Jan-Dec) in Yearly view
+};
 
 /* ====================== HELPERS ====================== */
 function fmtCur(v){
@@ -546,13 +550,52 @@ function esc(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').re
 // a month range independently.
 function filteredMonthIndices(){
   if (!months26 || months26.length === 0) return [];
+  var v = state.reportView;
+
+  // Weekly: show the single selected month
+  if (v === 'Weekly') {
+    var wi = months26.indexOf(state.weeklyMonth || months26[months26.length-1]);
+    return wi >= 0 ? [wi] : [months26.length - 1];
+  }
+
+  // Quarterly: map Q1-Q4 to FY months (Apr-Jun, Jul-Sep, Oct-Dec, Jan-Mar)
+  if (v === 'Quarterly') {
+    var qMonths = {
+      'Q1': ['Apr-25','May-25','Jun-25','Apr-26','May-26','Jun-26'],
+      'Q2': ['Jul-25','Aug-25','Sep-25','Jul-26','Aug-26','Sep-26'],
+      'Q3': ['Oct-25','Nov-25','Dec-25','Oct-26','Nov-26','Dec-26'],
+      'Q4': ['Jan-26','Feb-26','Mar-26','Jan-27','Feb-27','Mar-27']
+    };
+    var qList = qMonths[state.selectedQuarter] || [];
+    return months26.reduce(function(acc, m, i){
+      if (qList.indexOf(m) >= 0) acc.push(i);
+      return acc;
+    }, []);
+  }
+
+  // Yearly: Financial (Apr-Mar) or Calendar (Jan-Dec)
+  if (v === 'Yearly') {
+    if (state.yearType === 'Calendar') {
+      // Jan-Dec of any year present in months26
+      return months26.reduce(function(acc, m, i){
+        var mo = m.split('-')[0];
+        var calMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        if (calMonths.indexOf(mo) >= 0) acc.push(i);
+        return acc;
+      }, []);
+    } else {
+      // Financial Year Apr-Mar — all months
+      return months26.map(function(_,i){ return i; });
+    }
+  }
+
+  // Monthly / Custom: use dateFrom → dateTo range
   var fi = months26.indexOf(state.dateFrom);
   var ti = months26.indexOf(state.dateTo);
-  // If either bound isn't found (e.g. state hasn't been synced yet), show all
   if (fi < 0 && ti < 0) return months26.map(function(_,i){ return i; });
   if (fi < 0) fi = 0;
   if (ti < 0) ti = months26.length - 1;
-  if (fi > ti) { var tmp = fi; fi = ti; ti = tmp; } // swap if inverted
+  if (fi > ti) { var tmp = fi; fi = ti; ti = tmp; }
   var idx = [];
   for (var i = fi; i <= ti; i++) idx.push(i);
   return idx;
@@ -567,15 +610,16 @@ function filteredMonths(){
 // Call this whenever months26 changes (API load, cache load).
 function syncDateRangeToData(){
   if (!months26 || months26.length === 0) return;
-  // Only override if current values aren't valid in the new months26
   var fiOk = months26.indexOf(state.dateFrom) >= 0;
   var tiOk = months26.indexOf(state.dateTo)   >= 0;
   if (!fiOk) state.dateFrom = months26[0];
   if (!tiOk) state.dateTo   = months26[months26.length - 1];
-  // Also ensure from <= to
   var fi = months26.indexOf(state.dateFrom);
   var ti = months26.indexOf(state.dateTo);
   if (fi > ti) { state.dateTo = months26[months26.length - 1]; }
+  if (!state.weeklyMonth || months26.indexOf(state.weeklyMonth) < 0) {
+    state.weeklyMonth = months26[months26.length - 1];
+  }
 }
 
 function model(){
@@ -781,22 +825,72 @@ function topbar(){
           +'</div>'
           : '')
       +'</div>'
-      // Date range pill — only shown for Monthly and Custom views
-      // Monthly: two month pickers that filter the sparklines + table
-      // Custom: same but labelled differently
-      // Weekly/Quarterly/Yearly: hidden (those views aren't yet wired to data)
-      +(state.reportView === 'Monthly' || state.reportView === 'Custom'
-        ? '<div style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 15px;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
-          +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7C93B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
-          +'<select data-act="setFrom" style="background:transparent;border:none;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;color:#0D2B5E;outline:none;">'
-            +months26.map(function(m){ return '<option value="'+m+'"'+(state.dateFrom===m?' selected':'')+'>'+m+'</option>'; }).join('')
-          +'</select>'
-          +'<span style="color:#B7C4D9;font-weight:600;">–</span>'
-          +'<select data-act="setTo" style="background:transparent;border:none;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;color:#0D2B5E;outline:none;">'
-            +months26.map(function(m){ return '<option value="'+m+'"'+(state.dateTo===m?' selected':'')+'>'+m+'</option>'; }).join('')
-          +'</select>'
-        +'</div>'
-        : '')
+      // ── View-specific date selector ──────────────────────────────────────
+      +(function(){
+        var v = state.reportView;
+        var ps = pillShadow;
+
+        // Shared dropdown pill builder
+        function dropPill(label, iconSvg, content){
+          return '<div style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 15px;flex-shrink:0;white-space:nowrap;box-shadow:'+ps+';">'
+            +iconSvg
+            +content
+          +'</div>';
+        }
+
+        var calIcon = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7C93B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>';
+        var chevron = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;"><path d="M6 9l6 6 6-6"/></svg>';
+
+        function styledSelect(act, val, options){
+          return '<select data-act="'+act+'" style="background:transparent;border:none;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;color:#0D2B5E;outline:none;appearance:none;-webkit-appearance:none;padding-right:4px;">'
+            +options.map(function(o){
+              return '<option value="'+o.val+'"'+(o.val===val?' selected':'')+'>'+o.label+'</option>';
+            }).join('')
+          +'</select>'+chevron;
+        }
+
+        if (v === 'Monthly' || v === 'Custom') {
+          // From → To month pickers
+          var fromOpts = months26.map(function(m){return{val:m,label:m};});
+          var toOpts   = months26.map(function(m){return{val:m,label:m};});
+          return dropPill('', calIcon,
+            styledSelect('setFrom', state.dateFrom, fromOpts)
+            +'<span style="color:#B7C4D9;font-weight:600;margin:0 2px;">–</span>'
+            +styledSelect('setTo', state.dateTo, toOpts)
+          );
+        }
+
+        if (v === 'Weekly') {
+          // Single month picker — which month's data to show
+          var wOpts = months26.map(function(m){return{val:m,label:m};});
+          return '<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#9AAFC8;text-transform:uppercase;white-space:nowrap;flex-shrink:0;">MONTH</span>'
+            +dropPill('', calIcon, styledSelect('setWeeklyMonth', state.weeklyMonth||months26[months26.length-1], wOpts));
+        }
+
+        if (v === 'Quarterly') {
+          // Q1 / Q2 / Q3 / Q4 selector — Financial Year quarters
+          var qOpts = [
+            {val:'Q1', label:'Q1  Apr – Jun'},
+            {val:'Q2', label:'Q2  Jul – Sep'},
+            {val:'Q3', label:'Q3  Oct – Dec'},
+            {val:'Q4', label:'Q4  Jan – Mar'},
+          ];
+          return '<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#9AAFC8;text-transform:uppercase;white-space:nowrap;flex-shrink:0;">QUARTER</span>'
+            +dropPill('', calIcon, styledSelect('setQuarter', state.selectedQuarter, qOpts));
+        }
+
+        if (v === 'Yearly') {
+          // Financial Year vs Calendar Year toggle
+          var ytOpts = [
+            {val:'Financial', label:'Financial Year  (Apr – Mar)'},
+            {val:'Calendar',  label:'Calendar Year  (Jan – Dec)'},
+          ];
+          return '<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#9AAFC8;text-transform:uppercase;white-space:nowrap;flex-shrink:0;">YEAR TYPE</span>'
+            +dropPill('', calIcon, styledSelect('setYearType', state.yearType, ytOpts));
+        }
+
+        return ''; // fallback
+      })()
       // Currency toggle — sliding thumb, not an instant colour swap
       +'<div style="position:relative;display:flex;align-items:center;background:#FFFFFF;border-radius:999px;padding:4px;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';width:104px;">'
         +'<div style="position:absolute;top:4px;left:'+(state.currency==='USD'?'50%':'4px')+';width:calc(50% - 4px);height:calc(100% - 8px);background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border-radius:999px;transition:left 0.28s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 2px 6px '+BRAND_A2+'45;"></div>'
@@ -1815,6 +1909,9 @@ document.addEventListener('change', function(ev){
   var el=ev.target;
   if(el.getAttribute('data-act')==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.value; render(); }
   else if(el.getAttribute('data-act')==='setTo'){ ev.stopPropagation(); state.dateTo=el.value; render(); }
+  else if(el.getAttribute('data-act')==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.value; render(); }
+  else if(el.getAttribute('data-act')==='setQuarter'){ ev.stopPropagation(); state.selectedQuarter=el.value; render(); }
+  else if(el.getAttribute('data-act')==='setYearType'){ ev.stopPropagation(); state.yearType=el.value; render(); }
   else if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
 });
 document.addEventListener('click', function(ev){
@@ -1945,27 +2042,18 @@ document.addEventListener('click', function(ev){
     var first = allM[0];
     var len   = allM.length;
 
-    // Each view ALWAYS sets a specific window — never silently keeps the old
-    // range, which caused the "looks the same" glitch when switching views.
+    // Each view ALWAYS sets a specific window — never silently keeps the old range.
     if (v === 'Weekly') {
-      // Show last 1 month only (closest to a weekly granularity with monthly data)
-      state.dateFrom = last;
-      state.dateTo   = last;
+      state.weeklyMonth = allM[len - 1];
     } else if (v === 'Monthly') {
-      // Show last 6 months (or full data if less than 6 months available)
       state.dateFrom = allM[Math.max(0, len - 6)];
       state.dateTo   = last;
     } else if (v === 'Quarterly') {
-      // Show last 3 months
-      state.dateFrom = allM[Math.max(0, len - 3)];
-      state.dateTo   = last;
+      state.selectedQuarter = 'Q1';
     } else if (v === 'Yearly') {
-      // Show full available data span
-      state.dateFrom = first;
-      state.dateTo   = last;
+      state.yearType = 'Financial';
     } else if (v === 'Custom') {
-      // Keep current selection — user will adjust manually
-      syncDateRangeToData(); // ensure bounds are valid
+      syncDateRangeToData();
     }
     render();
   }
