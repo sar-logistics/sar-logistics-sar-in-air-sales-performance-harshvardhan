@@ -1173,9 +1173,9 @@ function kpiRow(M){
   // Trend colour: green if last value > first, red if down, neutral blue if flat
   function trendColor(data){
     if (!data || data.length < 2) return BRAND_A1;
-    var first = data[0], last = data[data.length-1];
-    if (last > first) return '#1D9E6F';
-    if (last < first) return '#D94F4F';
+    var last = data[data.length-1], prev = data[data.length-2];
+    if (last > prev) return '#1D9E6F';
+    if (last < prev) return '#D94F4F';
     return BRAND_A1;
   }
 
