@@ -1145,10 +1145,12 @@ function kpiRow(M){
     var uid = sparkUid;
     var W = 120, H = 36, pad = 2;
     var max = Math.max.apply(null, data), min = Math.min.apply(null, data);
-    var range = (max - min) || 1;
+    var isFlat = max === min;
+    var range = isFlat ? 1 : (max - min);
     var pts = data.map(function(v, i){
       var x = pad + i * ((W - 2*pad) / (data.length - 1));
-      var y = (H - pad) - ((v - min) / range) * (H - 2*pad);
+      // Flat data: render line at 60% height so it looks like a calm line, not a bottom edge
+      var y = isFlat ? (H * 0.6) : ((H - pad) - ((v - min) / range) * (H - 2*pad));
       return {x: parseFloat(x.toFixed(1)), y: parseFloat(y.toFixed(1)), v: v, label: (labels && labels[i]) || '', fmt: fmt};
     });
     var ptsStr = pts.map(function(p){ return p.x+','+p.y; }).join(' ');
@@ -1273,7 +1275,7 @@ function kpiRow(M){
     { label:'ACHIEVEMENT',     value: noData ? '—' : M.achGrand+'%',                                   delta:null, deltaLabel: noData ? 'No data' : 'vs target', data:achData, spark:trendColor(achData), vcolor: noData ? '#9AAFC8' : achColor, fmt:fmtPct },
   ];
 
-  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px;">'
+  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:14px;">'
     + kpis.map(function(k){
       var spark = sparkline(k.data, k.spark, pointLabels, k.fmt);
       return '<div class="kpi-card" style="background:#FFFFFF;border:1.5px solid #D8E1F0;border-radius:16px;padding:14px 14px 0 14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);overflow:visible;transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;display:flex;flex-direction:column;">'
