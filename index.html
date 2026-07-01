@@ -255,6 +255,9 @@ function showDashboard() {
       repsRaw   = cached.repsRaw;
       zonesRaw  = cached.zones || [];
       months26  = cached.months || months26;
+      // Always sync dateFrom/dateTo to the actual available months span
+      state.dateFrom = months26[0];
+      state.dateTo   = months26[months26.length - 1];
       dataReady = true;
       render();
     } else {
