@@ -908,23 +908,24 @@ function topbar(){
 
   // Reusable pill shadow — this is what lifts each control off the backdrop
   var pillShadow = '0 1px 2px rgba(13,43,94,0.06),0 1px 1px rgba(13,43,94,0.04)';
+  var pillBorder = '1.5px solid #D8E1F0';
 
   return '<header style="flex-shrink:0;background:#FFFFFF;border-bottom:1px solid #EDF1F8;position:relative;z-index:20;">'
 
     // ── ROW 1: Live Data / Feedback / Sign Out — right-aligned, raised pills ──
     +'<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:9px 20px 8px;background:linear-gradient(180deg,#F9FBFE,#F4F7FC);">'
-      +'<div style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:5px 13px 5px 11px;font-size:11px;font-weight:700;color:#0A7E53;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+',0 0 0 1px rgba(34,197,116,0.14);">'
+      +'<div style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:5px 13px 5px 11px;font-size:11px;font-weight:700;color:#0A7E53;flex-shrink:0;white-space:nowrap;border:1.5px solid #D5E8D4;box-shadow:'+pillShadow+',0 0 0 1px rgba(34,197,116,0.14);">'
         +'<span style="width:6px;height:6px;border-radius:50%;background:#22C574;display:inline-block;box-shadow:0 0 0 3px rgba(34,197,116,0.18);flex-shrink:0;"></span>Live Data'
       +'</div>'
-      +'<button data-act="feedbackOpen" class="btnq" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border:none;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#3C5275;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Feedback</button>'
-      +'<button class="btnq" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border:none;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#3C5275;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign Out</button>'
+      +'<button data-act="feedbackOpen" class="btnq" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border:none;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#3C5275;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;flex-shrink:0;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Feedback</button>'
+      +'<button class="btnq" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border:none;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#3C5275;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;flex-shrink:0;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign Out</button>'
     +'</div>'
 
     // ── ROW 2: View / Dates / Currency / Rate / Filters / Refresh ──
     +'<div style="display:flex;align-items:center;gap:10px;padding:10px 20px 14px;overflow:visible;background:linear-gradient(180deg,#F9FBFE,#F2F6FB);">'
       // Report View dropdown — pill with icon, dropdown uses fixed position to escape overflow:auto clipping
       +'<div style="position:relative;display:inline-block;flex-shrink:0;">'
-        +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;box-shadow:'+pillShadow+';'+(state.viewDropOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+pillShadow+';':'')+'">'
+        +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';'+(state.viewDropOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+pillShadow+';':'')+'">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+(state.viewDropOpen?'#1D5FCC':'#7C93B8')+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
           +state.reportView+' View'
           +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;transition:transform 0.2s;'+(state.viewDropOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
@@ -949,7 +950,7 @@ function topbar(){
 
         // Shared dropdown pill builder
         function dropPill(label, iconSvg, content){
-          return '<div style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 15px;flex-shrink:0;white-space:nowrap;box-shadow:'+ps+';">'
+          return '<div style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 15px;flex-shrink:0;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';">'
             +iconSvg
             +content
           +'</div>';
@@ -970,7 +971,7 @@ function topbar(){
           var fromOpen = state.fromDropOpen;
           var toOpen   = state.toDropOpen;
           var fromBtn  = '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleFromDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(fromOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+            +'<div data-act="toggleFromDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(fromOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
               +calIcon
               +'<span style="pointer-events:none;">'+state.dateFrom+'</span>'
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(fromOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
@@ -987,7 +988,7 @@ function topbar(){
               :'')
           +'</div>';
           var toBtn = '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleToDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(toOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+            +'<div data-act="toggleToDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(toOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
               +calIcon
               +'<span style="pointer-events:none;">'+state.dateTo+'</span>'
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(toOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
@@ -1012,7 +1013,7 @@ function topbar(){
           var wCurrent = state.weeklyMonth||months26[months26.length-1];
           var wOpen = state.weeklyDropOpen;
           return '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleWeeklyDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(wOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+            +'<div data-act="toggleWeeklyDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(wOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
               +calIcon
               +'<span style="pointer-events:none;">'+wCurrent+'</span>'
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(wOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
@@ -1038,7 +1039,7 @@ function topbar(){
           var qyrOpen = state.qyrDropOpen;
           var qyrLabels = {'FY26':'FY 2025-26','FY27':'FY 2026-27'};
           var qyrPill = '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleQyrDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(qyrOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+            +'<div data-act="toggleQyrDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(qyrOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
               +calIcon
               +'<span style="pointer-events:none;">'+qyrLabels[state.quarterYear]+'</span>'
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(qyrOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
@@ -1058,7 +1059,7 @@ function topbar(){
           var qOpen = state.quarterDropOpen;
           var qLabels = {'Q1':'Q1  Apr–Jun','Q2':'Q2  Jul–Sep','Q3':'Q3  Oct–Dec','Q4':'Q4  Jan–Mar'};
           var qPill = '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleQuarterDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(qOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+            +'<div data-act="toggleQuarterDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(qOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
               +'<span style="pointer-events:none;">'+qLabels[state.selectedQuarter]+'</span>'
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(qOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
@@ -1080,7 +1081,7 @@ function topbar(){
           var ytOpen = state.yearTypeDropOpen;
           var ytLabels = {'Financial':'Financial Year (Apr–Mar)','Calendar':'Calendar Year (Jan–Dec)'};
           return '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleYearTypeDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(ytOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+            +'<div data-act="toggleYearTypeDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(ytOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
               +calIcon
               +'<span style="pointer-events:none;">'+ytLabels[state.yearType]+'</span>'
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(ytOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
@@ -1101,7 +1102,7 @@ function topbar(){
         return ''; // fallback
       })()
       // Currency toggle — sliding thumb, not an instant colour swap
-      +'<div style="position:relative;display:flex;align-items:center;background:#FFFFFF;border-radius:999px;padding:4px;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';width:104px;">'
+      +'<div style="position:relative;display:flex;align-items:center;background:#FFFFFF;border-radius:999px;padding:4px;flex-shrink:0;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';width:104px;">'
         +'<div style="position:absolute;top:4px;left:'+(state.currency==='USD'?'50%':'4px')+';width:calc(50% - 4px);height:calc(100% - 8px);background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border-radius:999px;transition:left 0.28s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 2px 6px '+BRAND_A2+'45;"></div>'
         +'<button data-act="cur" data-cur="INR" style="position:relative;z-index:1;flex:1;border:none;background:transparent;cursor:pointer;font-size:11.5px;padding:6px 0;border-radius:999px;white-space:nowrap;font-weight:700;color:'+(state.currency==='INR'?'#FFFFFF':'#9AAFC8')+';transition:color 0.2s;">INR</button>'
         +'<button data-act="cur" data-cur="USD" style="position:relative;z-index:1;flex:1;border:none;background:transparent;cursor:pointer;font-size:11.5px;padding:6px 0;border-radius:999px;white-space:nowrap;font-weight:700;color:'+(state.currency==='USD'?'#FFFFFF':'#9AAFC8')+';transition:color 0.2s;">USD</button>'
@@ -1109,7 +1110,7 @@ function topbar(){
       // Rate — small chip
       +'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#FFFFFF;border-radius:999px;padding:7px 13px;box-shadow:'+pillShadow+';">Rate '+rateEl+'</div>'
       // Filters
-      +'<button class="btnq" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border:none;border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:#3C5275;cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>Filters</button>'
+      +'<button class="btnq" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border:none;border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:#3C5275;cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>Filters</button>'
       +'<div style="flex:1;min-width:8px;"></div>'
       // Refresh — pushed to the far right, filled accent style with stronger shadow
       +'<button data-act="refreshData" id="refresh-btn" class="btnq" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:8px 16px;font-size:11.5px;font-weight:700;color:#FFFFFF;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:0 2px 6px '+BRAND_A2+'45,0 1px 2px '+BRAND_A2+'30;"><svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s ease;flex-shrink:0;"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>'
