@@ -1610,11 +1610,20 @@ function salesTable(M){
     +'<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid '+BORDER+';background:#FFFFFF;flex-wrap:wrap;gap:12px;">'
       +'<div style="display:flex;align-items:center;gap:10px;">'
         +'<span style="font-size:12.5px;font-weight:700;color:#15233B;">Sales Performance</span>'
-        +'<span style="font-size:11px;color:#64748B;font-weight:500;">Monthly · '+state.currency+'</span>'
+        +'<span style="font-size:11px;color:#64748B;font-weight:500;">'+state.reportView+' · '+state.currency+'</span>'
         +allZonesToggleButton()
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:12px;">'
-        +'<span style="font-size:12px;color:#94A3B8;font-weight:500;">Jan-26 – Jun-26</span>'
+        +(function(){
+  var fm = filteredMonths();
+  var v = state.reportView;
+  var label = '';
+  if (v === 'Weekly') label = 'Week of ' + (state.weeklyMonth || '');
+  else if (v === 'Quarterly') label = state.quarterYear + ' ' + state.selectedQuarter;
+  else if (v === 'Yearly') label = state.yearType === 'Calendar' ? 'Calendar Year' : 'Financial Year';
+  else if (fm.length > 0) label = fm[0] + (fm.length > 1 ? ' – ' + fm[fm.length-1] : '');
+  return '<span style="font-size:12px;color:#94A3B8;font-weight:500;">'+label+'</span>';
+})()
         +(state.page==='leaderboard'
           ? '<button data-act="page" data-val="sales" class=\"btnq\" style=\"display:flex;align-items:center;gap:5px;background:#2563EB;border:1px solid #2563EB;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;\"><svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M19 12H5M12 19l-7-7 7-7\"/></svg>Back</button>'
           : '<button data-act="page" data-val="leaderboard" class=\"btnq\" style=\"display:flex;align-items:center;gap:5px;background:#EFF4FF;border:1px solid #BFDBFE;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;color:#2563EB;cursor:pointer;\"><svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><polyline points=\"22 12 18 12 15 21 9 3 6 12 2 12\"/></svg>Leaderboard</button>')
@@ -1799,7 +1808,11 @@ function leaderboard(){
         +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;">'+state.currency+'</span>'
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:10px;">'
-        +'<span style="font-size:10.5px;color:#9AAFC8;font-weight:600;white-space:nowrap;">Jan-26 – Jun-26</span>'
+        +(function(){
+  var fm = filteredMonths();
+  var label = fm.length > 0 ? fm[0] + (fm.length > 1 ? ' – ' + fm[fm.length-1] : '') : '';
+  return '<span style="font-size:10.5px;color:#9AAFC8;font-weight:600;white-space:nowrap;">'+label+'</span>';
+})()
         +'<button data-act="page" data-val="sales" class="btnq" style="display:flex;align-items:center;gap:5px;background:#1D5FCC;border:1px solid #1D5FCC;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Close</button>'
       +'</div>'
     +'</div>'
