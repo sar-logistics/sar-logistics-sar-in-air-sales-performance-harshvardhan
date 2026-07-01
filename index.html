@@ -2207,13 +2207,15 @@ document.addEventListener('keydown', function(e){
 window.addEventListener('resize', function(){ positionViewDrop(); positionDrop('from-drop','toggleFromDrop'); positionDrop('to-drop','toggleToDrop'); positionDrop('weekly-drop','toggleWeeklyDrop'); });
 window.addEventListener('scroll', function(){ positionViewDrop(); positionDrop('from-drop','toggleFromDrop'); positionDrop('to-drop','toggleToDrop'); positionDrop('weekly-drop','toggleWeeklyDrop'); }, true);
 document.addEventListener('click', function(e){
+  // Skip if the click is on a data-act element — the main dispatcher handles those
+  if(e.target.closest('[data-act]')) return;
   var changed = false;
-  if(state.viewDropOpen && !e.target.closest('[data-act="toggleViewDrop"]') && !e.target.closest('[data-act="setView"]')){ state.viewDropOpen=false; changed=true; }
-  if(state.fromDropOpen && !e.target.closest('[data-act="toggleFromDrop"]') && !e.target.closest('[data-act="setFrom"]')){ state.fromDropOpen=false; changed=true; }
-  if(state.toDropOpen && !e.target.closest('[data-act="toggleToDrop"]') && !e.target.closest('[data-act="setTo"]')){ state.toDropOpen=false; changed=true; }
-  if(state.weeklyDropOpen && !e.target.closest('[data-act="toggleWeeklyDrop"]') && !e.target.closest('[data-act="setWeeklyMonth"]')){ state.weeklyDropOpen=false; changed=true; }
+  if(state.viewDropOpen){ state.viewDropOpen=false; changed=true; }
+  if(state.fromDropOpen){ state.fromDropOpen=false; changed=true; }
+  if(state.toDropOpen){ state.toDropOpen=false; changed=true; }
+  if(state.weeklyDropOpen){ state.weeklyDropOpen=false; changed=true; }
   if(changed) render();
-}, true);
+});
 
 
 
