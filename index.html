@@ -46,7 +46,7 @@
   .dcell{cursor:pointer;}
   .dcell:hover{background:#E4EDFF !important;}
   .shipcard:hover{border-color:#C9D4E2 !important;background:#FCFDFF;}
-  .kpi-card:hover{box-shadow:0 1px 1px rgba(13,43,94,0.05),0 14px 28px -6px rgba(13,43,94,0.16),0 4px 8px -2px rgba(13,43,94,0.08) !important;transform:translateY(-2px);border-color:#D8E1F0 !important;}
+  .kpi-card:hover{box-shadow:0 1px 2px rgba(13,43,94,0.05),0 12px 28px -6px rgba(13,43,94,0.14) !important;transform:translateY(-2px);border-color:#CDD6EA !important;}
   .kpi-card:hover .kpi-icon{transform:rotate(-6deg) scale(1.08);}
 
   /* ── Login screen ── */
@@ -766,44 +766,134 @@ function topbar(){
 /* ====================== KPI CARDS ====================== */
 function kpiRow(M){
   var n = months26.length || 1;
-  // Unified palette: navy accent for primary metric values, muted ink-mid for secondary.
-  // Two accent pairs (light + dark) per group so icon chips get a real gradient,
-  // not a flat tint — this is what gives them visual weight instead of feeling flat.
-  var kpis = [
-    {label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              sub:'Jobs · Period',                              a1:BRAND_A1, a2:BRAND_A2, icon:IC_KPI.box},
-    {label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           sub:'Sea + ISO Tank · Period',                    a1:BRAND_A1, a2:BRAND_A2, icon:IC_KPI.container},
-    {label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  sub:'Chargeable wt · Air only',                   a1:BRAND_A1, a2:BRAND_A2, icon:IC_KPI.plane},
-    {label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                sub:state.currency+' · Period',                   a1:BRAND_A1, a2:BRAND_A2, icon:IC_KPI.coin},
-    {label:'GP TARGET',       value:fmtCur(M.tgtGrand),                               sub:'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)),a1:BRAND_A1, a2:BRAND_A2, icon:IC_KPI.target},
-    {label:'ACHIEVEMENT',     value:M.achGrand+'%',                                   sub:'vs Target',                                  a1:BRAND_A1, a2:BRAND_A2, icon:IC_KPI.trend},
-  ];
 
-  // Value colour: positive achievement green, negative red — everything else navy
-  function valColor(k){
-    if(k.label==='ACHIEVEMENT'){
-      return M.achGrand >= 100 ? '#0A7E53' : M.achGrand < 0 ? '#C0392B' : '#0D2B5E';
-    }
-    return '#0D2B5E';
+  // Build sparkline SVG with area fill — matches the reference card style exactly
+  function sparkline(data, color){
+    if (!data || data.length < 2) return '';
+    var W = 120, H = 36, pad = 2;
+    var max = Math.max.apply(null, data), min = Math.min.apply(null, data);
+    var range = (max - min) || 1;
+    var pts = data.map(function(v, i){
+      var x = pad + i * ((W - 2*pad) / (data.length - 1));
+      var y = (H - pad) - ((v - min) / range) * (H - 2*pad);
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    });
+    var ptsStr = pts.join(' ');
+    // Close the area back to the baseline
+    var first = pts[0].split(',');
+    var last  = pts[pts.length-1].split(',');
+    var areaPath = 'M'+first[0]+','+(H-pad)+' L'+ptsStr.replace(/ /g,' L')+' L'+last[0]+','+(H-pad)+' Z';
+    var gradId = 'sg' + Math.abs(color.hashCode ? color.hashCode() : color.split('').reduce(function(a,c){return a+c.charCodeAt(0);},0));
+    return '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="display:block;overflow:visible;" preserveAspectRatio="none">'
+      +'<defs><linearGradient id="'+gradId+'" x1="0" y1="0" x2="0" y2="1">'
+        +'<stop offset="0%" stop-color="'+color+'" stop-opacity="0.22"/>'
+        +'<stop offset="100%" stop-color="'+color+'" stop-opacity="0.0"/>'
+      +'</linearGradient></defs>'
+      +'<path d="'+areaPath+'" fill="url(#'+gradId+')" />'
+      +'<polyline points="'+ptsStr+'" fill="none" stroke="'+color+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+    +'</svg>';
   }
+
+  // MoM delta — compare last month vs month before
+  function momDelta(data){
+    if (!data || data.length < 2) return null;
+    var last = data[data.length-1], prev = data[data.length-2];
+    if (!prev) return null;
+    var pct = Math.round((last - prev) / (Math.abs(prev) || 1) * 100);
+    return pct;
+  }
+
+  function deltaEl(pct, label){
+    if (pct === null) return '<div style="height:16px;"></div>';
+    var up = pct >= 0;
+    var c  = up ? '#0A7E53' : '#C0392B';
+    var arrow = up
+      ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>'
+      : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    return '<div style="display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:'+c+';">'
+      +arrow
+      +'<span>'+(up?'+':'')+pct+'%</span>'
+      +'<span style="color:#B0BFD4;font-weight:500;">'+label+'</span>'
+    +'</div>';
+  }
+
+  var achColor = M.achGrand >= 100 ? '#0A7E53' : M.achGrand < 0 ? '#C0392B' : '#0D2B5E';
+
+  var kpis = [
+    {
+      label: 'TOTAL SHIPMENTS',
+      value: String(M.shipGrand),
+      delta: momDelta(repsRaw.length ? months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); }) : null),
+      deltaLabel: 'vs last month',
+      data: months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); }),
+      spark: BRAND_A1, vcolor: '#0D2B5E'
+    },
+    {
+      label: 'TOTAL TEUS',
+      value: M.teusGrand.toFixed(2),
+      delta: momDelta(months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); })),
+      deltaLabel: 'vs last month',
+      data: months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); }),
+      spark: BRAND_A1, vcolor: '#0D2B5E'
+    },
+    {
+      label: 'TONS (AIR)',
+      value: M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',
+      delta: momDelta(months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0); })),
+      deltaLabel: 'vs last month',
+      data: months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0); }),
+      spark: BRAND_A1, vcolor: '#0D2B5E'
+    },
+    {
+      label: 'GROSS PROFIT',
+      value: fmtCur(M.gpGrand),
+      delta: momDelta(months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0); })),
+      deltaLabel: 'vs last month',
+      data: months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0); }),
+      spark: '#1D9E6F', vcolor: '#0D2B5E'
+    },
+    {
+      label: 'GP TARGET',
+      value: fmtCur(M.tgtGrand),
+      delta: null,
+      deltaLabel: 'monthly avg '+fmtCur(Math.round(M.tgtGrand/n)),
+      data: months26.map(function(){ return M.tgtGrand / n; }),
+      spark: BRAND_A1, vcolor: '#0D2B5E'
+    },
+    {
+      label: 'ACHIEVEMENT',
+      value: M.achGrand+'%',
+      delta: null,
+      deltaLabel: 'vs target',
+      data: months26.map(function(_,i){
+        var gp = repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0);
+        var tgt = repsRaw.reduce(function(s,r){return s+r.tgt;},0);
+        return tgt > 0 ? Math.round(gp/tgt*100) : 0;
+      }),
+      spark: achColor, vcolor: achColor
+    },
+  ];
 
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px;">'
     + kpis.map(function(k){
-      return '<div class="kpi-card" style="background:radial-gradient(120% 140% at 0% 0%,'+k.a1+'12 0%,#FFFFFF 55%);border:1px solid #E7ECF6;border-radius:14px;padding:12px 14px;box-shadow:0 1px 1px rgba(13,43,94,0.04),0 6px 16px -4px rgba(13,43,94,0.10),0 2px 4px -1px rgba(13,43,94,0.06);position:relative;overflow:hidden;transition:box-shadow 0.2s ease,transform 0.2s ease,border-color 0.2s ease;min-width:0;">'
-        // ghost watermark icon for texture — sits behind everything, barely visible
-        +'<div style="position:absolute;right:-6px;bottom:-8px;color:'+k.a1+';opacity:0.10;transform:scale(3.6) rotate(-6deg);pointer-events:none;">'+k.icon+'</div>'
-        +'<div style="position:relative;display:flex;align-items:center;gap:9px;margin-bottom:9px;min-width:0;">'
-          +'<div class="kpi-icon" style="width:28px;height:28px;border-radius:9px;background:linear-gradient(150deg,'+k.a1+','+k.a2+');display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#FFFFFF;box-shadow:0 4px 10px -2px '+k.a2+'60,0 1px 2px '+k.a2+'40,inset 0 1px 0 rgba(255,255,255,0.3);transition:transform 0.25s ease;">'+k.icon+'</div>'
-          +'<div style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:#8B9DBB;text-transform:uppercase;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">'+k.label+'</div>'
-        +'</div>'
-        +'<div style="position:relative;font-family:\'DM Mono\',monospace;font-size:16.5px;font-weight:700;color:'+valColor(k)+';line-height:1.1;margin-bottom:3px;letter-spacing:-0.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.value+'</div>'
-        +'<div style="position:relative;font-size:9px;color:#ABB9D1;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.sub+'</div>'
+      var spark = sparkline(k.data, k.spark);
+      return '<div class="kpi-card" style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:16px;padding:14px 14px 0 14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);overflow:hidden;transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;display:flex;flex-direction:column;">'
+        // Label
+        +'<div style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#9AAFC8;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
+        // Big value
+        +'<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:700;color:'+k.vcolor+';line-height:1.1;margin-bottom:5px;letter-spacing:-0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.value+'</div>'
+        // Delta / sub
+        +(k.delta !== null
+          ? deltaEl(k.delta, k.deltaLabel)
+          : '<div style="font-size:10px;color:#B0BFD4;font-weight:500;height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.deltaLabel+'</div>')
+        // Sparkline — flush to card bottom, full width
+        +'<div style="margin:8px -14px 0;line-height:0;">'+spark+'</div>'
       +'</div>';
     }).join('')
   +'</div>';
 }
 
-// Small monochrome icon set for KPI cards — inherits colour via currentColor,
-// tinted circular chip background computed per-card from the same accent.
+// IC_KPI kept for potential reuse elsewhere
 var IC_KPI = {
   box: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>',
   container: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="12" rx="1"/><path d="M3 11h18M9 7v12M15 7v12"/></svg>',
