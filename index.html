@@ -1139,7 +1139,7 @@ function kpiRow(M){
   })();
 
   var sparkUid = 0; // unique id counter per sparkline to avoid gradient id collisions
-  function sparkline(data, color, labels){
+  function sparkline(data, color, labels, fmt){
     if (!data || data.length < 2) return '';
     sparkUid++;
     var uid = sparkUid;
@@ -1149,7 +1149,7 @@ function kpiRow(M){
     var pts = data.map(function(v, i){
       var x = pad + i * ((W - 2*pad) / (data.length - 1));
       var y = (H - pad) - ((v - min) / range) * (H - 2*pad);
-      return {x: parseFloat(x.toFixed(1)), y: parseFloat(y.toFixed(1)), v: v, label: (labels && labels[i]) || ''};
+      return {x: parseFloat(x.toFixed(1)), y: parseFloat(y.toFixed(1)), v: v, label: (labels && labels[i]) || '', fmt: fmt};
     });
     var ptsStr = pts.map(function(p){ return p.x+','+p.y; }).join(' ');
     var first = pts[0], last = pts[pts.length-1];
@@ -1168,7 +1168,7 @@ function kpiRow(M){
 
     // Tooltip: small pill above each dot with the value
     var tooltips = pts.map(function(p, i){
-      var numStr = typeof p.v === 'number' ? (p.v % 1 === 0 ? String(p.v) : p.v.toFixed(1)) : String(p.v);
+      var numStr = p.fmt ? p.fmt(p.v) : (typeof p.v === 'number' ? (p.v % 1 === 0 ? String(p.v) : p.v.toFixed(1)) : String(p.v));
       var lbl = p.label ? p.label : '';
       var ttX = Math.min(Math.max(p.x, 16), W - 16);
       var ttY = Math.max(p.y - 14, 6);
@@ -1259,18 +1259,23 @@ function kpiRow(M){
                   : state.reportView === 'Yearly'   ? 'vs prev year'
                   : 'vs prev period'; // Custom
 
+  var fmtInt  = function(v){ return Math.round(v).toLocaleString('en-IN'); };
+  var fmtTon  = function(v){ return v ? v.toFixed(1)+'t' : '—'; };
+  var fmtTeu  = function(v){ return v ? v.toFixed(2) : '—'; };
+  var fmtPct  = function(v){ return Math.round(v)+'%'; };
+
   var kpis = [
-    { label:'TOTAL SHIPMENTS', value: noData ? '—' : String(M.shipGrand),                              delta: noData ? null : momDelta(shipData), deltaLabel:periodLabel, data:shipData, spark:trendColor(shipData), vcolor:'#0D2B5E' },
-    { label:'TOTAL TEUS',      value: noData ? '—' : M.teusGrand.toFixed(2),                           delta: noData ? null : momDelta(teuData),  deltaLabel:periodLabel, data:teuData,  spark:trendColor(teuData),  vcolor:'#0D2B5E' },
-    { label:'TONS (AIR)',      value: noData ? '—' : (M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014'),delta: noData ? null : momDelta(tonsData), deltaLabel:periodLabel, data:tonsData, spark:trendColor(tonsData), vcolor:'#0D2B5E' },
-    { label:'GROSS PROFIT',    value: noData ? '—' : fmtCur(M.gpGrand),                                delta: noData ? null : momDelta(gpData),   deltaLabel:periodLabel, data:gpData,   spark:trendColor(gpData),   vcolor:'#0D2B5E' },
-    { label:'GP TARGET',       value: noData ? '—' : fmtCur(M.tgtGrand),                               delta:null, deltaLabel: noData ? 'No data' : 'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), data:tgtData, spark:BRAND_A1, vcolor:'#0D2B5E' },
-    { label:'ACHIEVEMENT',     value: noData ? '—' : M.achGrand+'%',                                   delta:null, deltaLabel: noData ? 'No data' : 'vs target', data:achData, spark:trendColor(achData), vcolor: noData ? '#9AAFC8' : achColor },
+    { label:'TOTAL SHIPMENTS', value: noData ? '—' : String(M.shipGrand),                              delta: noData ? null : momDelta(shipData), deltaLabel:periodLabel, data:shipData, spark:trendColor(shipData), vcolor:'#0D2B5E', fmt:fmtInt },
+    { label:'TOTAL TEUS',      value: noData ? '—' : M.teusGrand.toFixed(2),                           delta: noData ? null : momDelta(teuData),  deltaLabel:periodLabel, data:teuData,  spark:trendColor(teuData),  vcolor:'#0D2B5E', fmt:fmtTeu },
+    { label:'TONS (AIR)',      value: noData ? '—' : (M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014'),delta: noData ? null : momDelta(tonsData), deltaLabel:periodLabel, data:tonsData, spark:trendColor(tonsData), vcolor:'#0D2B5E', fmt:fmtTon },
+    { label:'GROSS PROFIT',    value: noData ? '—' : fmtCur(M.gpGrand),                                delta: noData ? null : momDelta(gpData),   deltaLabel:periodLabel, data:gpData,   spark:trendColor(gpData),   vcolor:'#0D2B5E', fmt:fmtCur },
+    { label:'GP TARGET',       value: noData ? '—' : fmtCur(M.tgtGrand),                               delta:null, deltaLabel: noData ? 'No data' : 'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), data:tgtData, spark:BRAND_A1, vcolor:'#0D2B5E', fmt:fmtCur },
+    { label:'ACHIEVEMENT',     value: noData ? '—' : M.achGrand+'%',                                   delta:null, deltaLabel: noData ? 'No data' : 'vs target', data:achData, spark:trendColor(achData), vcolor: noData ? '#9AAFC8' : achColor, fmt:fmtPct },
   ];
 
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px;">'
     + kpis.map(function(k){
-      var spark = sparkline(k.data, k.spark, pointLabels);
+      var spark = sparkline(k.data, k.spark, pointLabels, k.fmt);
       return '<div class="kpi-card" style="background:#FFFFFF;border:1.5px solid #D8E1F0;border-radius:16px;padding:14px 14px 0 14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);overflow:visible;transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;display:flex;flex-direction:column;">'
         // Label
         +'<div style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5B7298;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
