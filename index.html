@@ -887,8 +887,12 @@ function topbar(){
         }
 
         if (v === 'Weekly') {
-          // Single month picker — which month's data to show
-          var wOpts = months26.map(function(m){return{val:m,label:m};});
+          // Build options with indicator for months that have no data
+          var wOpts = months26.map(function(m){
+            var idx = months26.indexOf(m);
+            var hasData = repsRaw.some(function(r){ return (r.ship[idx]||0) > 0 || (r.gp[idx]||0) !== 0; });
+            return { val:m, label: m + (hasData ? '' : ' (no data)') };
+          });
           return '<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#9AAFC8;text-transform:uppercase;white-space:nowrap;flex-shrink:0;">MONTH</span>'
             +dropPill('', calIcon, styledSelect('setWeeklyMonth', state.weeklyMonth||months26[months26.length-1], wOpts));
         }
@@ -942,6 +946,7 @@ function topbar(){
 function kpiRow(M){
   var idxs = filteredMonthIndices();
   var n = idxs.length || 1;
+  var noData = idxs.length === 0;
 
   // Build sparkline SVG with area fill — matches the reference card style exactly
   function sparkline(data, color){
@@ -1020,12 +1025,12 @@ function kpiRow(M){
                   : 'vs prev period'; // Custom
 
   var kpis = [
-    { label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              delta:momDelta(shipData), deltaLabel:periodLabel, data:shipData, spark:trendColor(shipData), vcolor:'#0D2B5E' },
-    { label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           delta:momDelta(teuData),  deltaLabel:periodLabel, data:teuData,  spark:trendColor(teuData),  vcolor:'#0D2B5E' },
-    { label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  delta:momDelta(tonsData), deltaLabel:periodLabel, data:tonsData, spark:trendColor(tonsData), vcolor:'#0D2B5E' },
-    { label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                delta:momDelta(gpData),   deltaLabel:periodLabel, data:gpData,   spark:trendColor(gpData),   vcolor:'#0D2B5E' },
-    { label:'GP TARGET',       value:fmtCur(M.tgtGrand),                               delta:null, deltaLabel:'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), data:tgtData, spark:BRAND_A1, vcolor:'#0D2B5E' },
-    { label:'ACHIEVEMENT',     value:M.achGrand+'%',                                   delta:null, deltaLabel:'vs target', data:achData, spark:trendColor(achData), vcolor:achColor },
+    { label:'TOTAL SHIPMENTS', value: noData ? '—' : String(M.shipGrand),                              delta: noData ? null : momDelta(shipData), deltaLabel:periodLabel, data:shipData, spark:trendColor(shipData), vcolor:'#0D2B5E' },
+    { label:'TOTAL TEUS',      value: noData ? '—' : M.teusGrand.toFixed(2),                           delta: noData ? null : momDelta(teuData),  deltaLabel:periodLabel, data:teuData,  spark:trendColor(teuData),  vcolor:'#0D2B5E' },
+    { label:'TONS (AIR)',      value: noData ? '—' : (M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014'),delta: noData ? null : momDelta(tonsData), deltaLabel:periodLabel, data:tonsData, spark:trendColor(tonsData), vcolor:'#0D2B5E' },
+    { label:'GROSS PROFIT',    value: noData ? '—' : fmtCur(M.gpGrand),                                delta: noData ? null : momDelta(gpData),   deltaLabel:periodLabel, data:gpData,   spark:trendColor(gpData),   vcolor:'#0D2B5E' },
+    { label:'GP TARGET',       value: noData ? '—' : fmtCur(M.tgtGrand),                               delta:null, deltaLabel: noData ? 'No data' : 'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), data:tgtData, spark:BRAND_A1, vcolor:'#0D2B5E' },
+    { label:'ACHIEVEMENT',     value: noData ? '—' : M.achGrand+'%',                                   delta:null, deltaLabel: noData ? 'No data' : 'vs target', data:achData, spark:trendColor(achData), vcolor: noData ? '#9AAFC8' : achColor },
   ];
 
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px;">'
@@ -1435,6 +1440,21 @@ function allZonesToggleButton(){
 }
 
 function salesTable(M){
+  var idxs = filteredMonthIndices();
+
+  // Empty state — no data for the selected filter (e.g. Weekly on a month with no data)
+  if (idxs.length === 0) {
+    return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'
+      +'<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 32px;gap:14px;text-align:center;">'
+        +'<div style="width:48px;height:48px;border-radius:14px;background:#F0F4FA;display:flex;align-items:center;justify-content:center;">'
+          +'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
+        +'</div>'
+        +'<div style="font-size:14px;font-weight:700;color:#3C5275;">No data for this period</div>'
+        +'<div style="font-size:12px;color:#9AAFC8;max-width:280px;line-height:1.6;">The selected month has no shipment records. Try selecting a different period from the filter above.</div>'
+      +'</div>'
+    +'</div>';
+  }
+
   var colLabels=['FY Total'].concat(filteredMonths());
   var FY_COL_LEFT = 185+140; // sticky offset for the FY Total column
   var BORDER = '#D5DCE6';      // main grid border — softened
