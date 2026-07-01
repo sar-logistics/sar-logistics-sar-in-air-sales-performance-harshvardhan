@@ -1222,12 +1222,31 @@ function kpiRow(M){
 
   var achColor = M.achGrand >= 100 ? '#0A7E53' : M.achGrand < 0 ? '#C0392B' : '#0D2B5E';
 
-  var shipData  = idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); });
-  var teuData   = idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); });
-  var tonsData  = idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0); });
-  var gpData    = idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0); });
-  var tgtData   = idxs.map(function(){ return M.tgtGrand / n; });
-  var achData   = idxs.map(function(idx_inner){
+  var isWeeklyView = state.reportView === 'Weekly' && weekDataLoaded();
+  var wkeys = isWeeklyView ? filteredWeekKeys() : null;
+
+  var shipData  = isWeeklyView
+    ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0); },0); })
+    : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); });
+  var teuData   = isWeeklyView
+    ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0); },0); })
+    : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); });
+  var tonsData  = isWeeklyView
+    ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0); },0); })
+    : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0); });
+  var gpData    = isWeeklyView
+    ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0); },0); })
+    : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0); });
+  var tgtData   = isWeeklyView
+    ? wkeys.map(function(){ return M.tgtGrand / (wkeys.length||1); })
+    : idxs.map(function(){ return M.tgtGrand / n; });
+  var achData   = isWeeklyView
+    ? wkeys.map(function(k){
+        var gp  = repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0); },0);
+        var tgt = repsRaw.reduce(function(s,r){ return s+r.tgt; },0);
+        return tgt > 0 ? Math.round(gp/tgt*100) : 0;
+      })
+    : idxs.map(function(idx_inner){
     var gp  = repsRaw.reduce(function(s,r){return s+(r.gp[idx_inner]||0);},0);
     var tgt = repsRaw.reduce(function(s,r){return s+r.tgt;},0);
     return tgt > 0 ? Math.round(gp/tgt*100) : 0;
