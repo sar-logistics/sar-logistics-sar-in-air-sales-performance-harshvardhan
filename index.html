@@ -48,6 +48,7 @@
   .shipcard:hover{border-color:#C9D4E2 !important;background:#FCFDFF;}
   .kpi-card:hover{box-shadow:0 1px 2px rgba(13,43,94,0.05),0 12px 28px -6px rgba(13,43,94,0.14) !important;transform:translateY(-2px);border-color:#CDD6EA !important;}
   .kpi-card:hover .kpi-icon{transform:rotate(-6deg) scale(1.08);}
+  .sp-dot{filter:drop-shadow(0 1px 2px rgba(0,0,0,0.15));}
 
   /* ── Login screen ── */
   #login-screen{
@@ -1125,22 +1126,59 @@ function kpiRow(M){
   var noData = !hasDataForIndices(idxs);
 
   // Build sparkline SVG with area fill — matches the reference card style exactly
-  function sparkline(data, color){
+  // Build point labels from current view + filtered months
+  var pointLabels = (function(){
+    var v = state.reportView;
+    if (v === 'Weekly') return ['Week 1','Week 2','Week 3','Week 4'];
+    if (v === 'Quarterly') {
+      var qm = {'Q1':['Apr','May','Jun'],'Q2':['Jul','Aug','Sep'],'Q3':['Oct','Nov','Dec'],'Q4':['Jan','Feb','Mar']};
+      return (qm[state.selectedQuarter]||[]).map(function(m){ return m+' ('+state.selectedQuarter+')'; });
+    }
+    if (v === 'Yearly') return filteredMonths();
+    return filteredMonths();
+  })();
+
+  var sparkUid = 0; // unique id counter per sparkline to avoid gradient id collisions
+  function sparkline(data, color, labels){
     if (!data || data.length < 2) return '';
+    sparkUid++;
+    var uid = sparkUid;
     var W = 120, H = 36, pad = 2;
     var max = Math.max.apply(null, data), min = Math.min.apply(null, data);
     var range = (max - min) || 1;
     var pts = data.map(function(v, i){
       var x = pad + i * ((W - 2*pad) / (data.length - 1));
       var y = (H - pad) - ((v - min) / range) * (H - 2*pad);
-      return x.toFixed(1) + ',' + y.toFixed(1);
+      return {x: parseFloat(x.toFixed(1)), y: parseFloat(y.toFixed(1)), v: v, label: (labels && labels[i]) || ''};
     });
-    var ptsStr = pts.join(' ');
-    // Close the area back to the baseline
-    var first = pts[0].split(',');
-    var last  = pts[pts.length-1].split(',');
-    var areaPath = 'M'+first[0]+','+(H-pad)+' L'+ptsStr.replace(/ /g,' L')+' L'+last[0]+','+(H-pad)+' Z';
-    var gradId = 'sg' + Math.abs(color.hashCode ? color.hashCode() : color.split('').reduce(function(a,c){return a+c.charCodeAt(0);},0));
+    var ptsStr = pts.map(function(p){ return p.x+','+p.y; }).join(' ');
+    var first = pts[0], last = pts[pts.length-1];
+    var areaPath = 'M'+first.x+','+(H-pad)+' L'+ptsStr.replace(/ /g,' L')+' L'+last.x+','+(H-pad)+' Z';
+    var gradId = 'sg'+uid;
+    var zoneW = (W - 2*pad) / Math.max(data.length - 1, 1);
+
+    // Hover dots + tooltip via SVG title and JS mouseover
+    var circles = pts.map(function(p, i){
+      var valStr = p.label ? p.label+': '+p.v : String(p.v);
+      return '<circle class="sp-dot" cx="'+p.x+'" cy="'+p.y+'" r="2.5" fill="#FFFFFF" stroke="'+color+'" stroke-width="1.8"'
+        +' style="opacity:0;transition:opacity 0.15s;cursor:default;"/>'
+        // invisible wider hit zone
+        +'<rect x="'+(p.x - zoneW/2)+'" y="0" width="'+zoneW+'" height="'+H+'" fill="transparent"'
+        +' onmouseenter="this.previousSibling.style.opacity=1;this.parentNode.querySelector(\'.sp-tt-'+uid+'-'+i+'\').style.opacity=1;"'
+        +' onmouseleave="this.previousSibling.style.opacity=0;this.parentNode.querySelector(\'.sp-tt-'+uid+'-'+i+'\').style.opacity=0;"/>';
+    }).join('');
+
+    // Tooltip labels — one per point, positioned above the dot
+    var tooltips = pts.map(function(p, i){
+      var valStr = p.label || '';
+      var numStr = typeof p.v === 'number' ? (p.v % 1 === 0 ? p.v : p.v.toFixed(1)) : p.v;
+      var ttX = Math.min(Math.max(p.x, 14), W - 14);
+      var ttY = Math.max(p.y - 8, 10);
+      return '<text class="sp-tt-'+uid+'-'+i+'" x="'+ttX+'" y="'+ttY+'"'
+        +' text-anchor="middle" font-size="7.5" font-weight="700" fill="'+color+'"'
+        +' style="opacity:0;transition:opacity 0.15s;pointer-events:none;">'+numStr+'</text>';
+    }).join('');
+
     return '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="display:block;overflow:visible;" preserveAspectRatio="none">'
       +'<defs><linearGradient id="'+gradId+'" x1="0" y1="0" x2="0" y2="1">'
         +'<stop offset="0%" stop-color="'+color+'" stop-opacity="0.22"/>'
@@ -1148,6 +1186,8 @@ function kpiRow(M){
       +'</linearGradient></defs>'
       +'<path d="'+areaPath+'" fill="url(#'+gradId+')" />'
       +'<polyline points="'+ptsStr+'" fill="none" stroke="'+color+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+      +circles
+      +tooltips
     +'</svg>';
   }
 
@@ -1211,7 +1251,7 @@ function kpiRow(M){
 
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px;">'
     + kpis.map(function(k){
-      var spark = sparkline(k.data, k.spark);
+      var spark = sparkline(k.data, k.spark, pointLabels);
       return '<div class="kpi-card" style="background:#FFFFFF;border:1.5px solid #D8E1F0;border-radius:16px;padding:14px 14px 0 14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);overflow:hidden;transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;display:flex;flex-direction:column;">'
         // Label
         +'<div style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5B7298;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
