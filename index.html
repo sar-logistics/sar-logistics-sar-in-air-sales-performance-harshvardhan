@@ -854,7 +854,7 @@ function topbar(){
           +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;transition:transform 0.2s;'+(state.viewDropOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
         +'</div>'
         +(state.viewDropOpen
-          ? '<div id="view-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
+          ? '<div id="view-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
             +['Monthly','Weekly','Quarterly','Yearly','Custom'].map(function(v){
               var active = state.reportView===v;
               var desc = v==='Monthly'?'Month by month':v==='Weekly'?'Week by week':v==='Quarterly'?'Quarter view':v==='Yearly'?'Full year':'Custom range';
@@ -900,7 +900,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(fromOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(fromOpen
-              ? '<div id="from-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;padding:4px;">'
+              ? '<div id="from-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;padding:4px;">'
                 +months26.map(function(m){
                   var active=m===state.dateFrom;
                   return '<div data-act="setFrom" data-val="'+m+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
@@ -917,7 +917,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(toOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(toOpen
-              ? '<div id="to-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;padding:4px;">'
+              ? '<div id="to-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;padding:4px;">'
                 +months26.map(function(m){
                   var active=m===state.dateTo;
                   return '<div data-act="setTo" data-val="'+m+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
@@ -942,7 +942,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(wOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(wOpen
-              ? '<div id="weekly-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:150px;max-height:280px;overflow-y:auto;padding:4px;">'
+              ? '<div id="weekly-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:150px;max-height:280px;overflow-y:auto;padding:4px;">'
                 +months26.map(function(m){
                   var active=m===wCurrent;
                   var idx=months26.indexOf(m);
@@ -968,7 +968,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(qyrOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(qyrOpen
-              ? '<div id="qyr-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:150px;padding:4px;">'
+              ? '<div id="qyr-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:150px;padding:4px;">'
                 +[{v:'FY26',l:'FY 2025-26'},{v:'FY27',l:'FY 2026-27'}].map(function(o){
                   var active=o.v===state.quarterYear;
                   return '<div data-act="setQuarterYear" data-val="'+o.v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
@@ -987,7 +987,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(qOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(qOpen
-              ? '<div id="quarter-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;padding:4px;">'
+              ? '<div id="quarter-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;padding:4px;">'
                 +['Q1','Q2','Q3','Q4'].map(function(q){
                   var active=q===state.selectedQuarter;
                   return '<div data-act="setQuarter" data-val="'+q+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
@@ -1010,7 +1010,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(ytOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(ytOpen
-              ? '<div id="yeartype-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:210px;padding:4px;">'
+              ? '<div id="yeartype-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:210px;padding:4px;">'
                 +[{v:'Financial',l:'Financial Year (Apr–Mar)'},{v:'Calendar',l:'Calendar Year (Jan–Dec)'}].map(function(o){
                   var active=o.v===state.yearType;
                   return '<div data-act="setYearType" data-val="'+o.v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
@@ -2006,22 +2006,14 @@ function positionDrop(dropId, triggerAct){
   if (active) active.scrollIntoView({ block:'nearest' });
 }
 
-function positionViewDrop(){
-  var drop = document.getElementById('view-drop');
-  if (!drop) return;
-  var btn = document.querySelector('[data-act="toggleViewDrop"]');
-  if (!btn) return;
-  var rect = btn.getBoundingClientRect();
-  drop.style.top  = (rect.bottom + 6) + 'px';
-  drop.style.left = rect.left + 'px';
-}
+function positionViewDrop(){ positionAllDrops(); }
 
 function render(){
   var M=model();
   var app=document.getElementById('app');
   // Only rebuild sidebar on first load — avoids sidebar scroll jump
   if(!app.querySelector('aside')){
-    app.innerHTML=sidebar()+'<div id="main-col" style="flex:1;display:flex;flex-direction:column;height:100%;overflow:hidden;"><div id="topbar-slot"></div><main id="main-slot" style="flex:1;overflow-y:auto;padding:14px 18px 24px;"></main></div><div id="drawer-slot"></div>';
+    app.innerHTML=sidebar()+'<div id="main-col" style="flex:1;display:flex;flex-direction:column;height:100%;overflow:hidden;"><div id="topbar-slot"></div><main id="main-slot" style="flex:1;overflow-y:auto;padding:14px 18px 24px;"></main></div><div id="drawer-slot"></div><div id="dropdown-portal" style="position:fixed;top:0;left:0;z-index:9999;pointer-events:none;"></div>';
   }
   var mainEl=document.getElementById('main-slot');
   var scrollTop=mainEl?mainEl.scrollTop:0;
@@ -2260,13 +2252,37 @@ document.addEventListener('keydown', function(e){
   } 
 });
 function positionAllDrops(){
-  positionViewDrop();
-  positionDrop('from-drop','toggleFromDrop');
-  positionDrop('to-drop','toggleToDrop');
-  positionDrop('weekly-drop','toggleWeeklyDrop');
-  positionDrop('qyr-drop','toggleQyrDrop');
-  positionDrop('quarter-drop','toggleQuarterDrop');
-  positionDrop('yeartype-drop','toggleYearTypeDrop');
+  var portal = document.getElementById('dropdown-portal');
+  if (!portal) return;
+  portal.innerHTML = '';
+  portal.style.pointerEvents = 'none';
+
+  function renderDropInPortal(triggerId, panelId, panelHTML){
+    var btn = document.querySelector('[data-act="'+triggerId+'"]');
+    if (!btn) return;
+    var panel = document.getElementById(panelId);
+    if (!panel) return; // panel not open
+    var rect = btn.getBoundingClientRect();
+    var clone = panel.cloneNode(true);
+    clone.style.position = 'fixed';
+    clone.style.top = (rect.bottom + 6) + 'px';
+    clone.style.left = rect.left + 'px';
+    clone.style.pointerEvents = 'all';
+    clone.style.display = 'block';
+    portal.style.pointerEvents = 'all';
+    portal.appendChild(clone);
+    // Scroll active item into view
+    var active = clone.querySelector('[style*="color:#1D5FCC"]');
+    if (active) setTimeout(function(){ active.scrollIntoView({ block:'nearest' }); }, 0);
+  }
+
+  renderDropInPortal('toggleViewDrop',     'view-drop',     '');
+  renderDropInPortal('toggleFromDrop',     'from-drop',     '');
+  renderDropInPortal('toggleToDrop',       'to-drop',       '');
+  renderDropInPortal('toggleWeeklyDrop',   'weekly-drop',   '');
+  renderDropInPortal('toggleQyrDrop',      'qyr-drop',      '');
+  renderDropInPortal('toggleQuarterDrop',  'quarter-drop',  '');
+  renderDropInPortal('toggleYearTypeDrop', 'yeartype-drop', '');
 }
 window.addEventListener('resize', positionAllDrops);
 window.addEventListener('scroll', positionAllDrops, true);
