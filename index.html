@@ -46,6 +46,7 @@
   .dcell{cursor:pointer;}
   .dcell:hover{background:#E4EDFF !important;}
   .shipcard:hover{border-color:#C9D4E2 !important;background:#FCFDFF;}
+  .kpi-card:hover{box-shadow:0 2px 4px rgba(13,43,94,0.06),0 10px 24px rgba(13,43,94,0.10) !important;transform:translateY(-1px);}
 
   /* ── Login screen ── */
   #login-screen{
@@ -688,57 +689,59 @@ function topbar(){
   var isCustom = state.reportView==='Custom';
   // Rate display: editable on click
   var rateEl = state.rateEditing
-    ? '<input id="rate-input" type="number" value="'+state.rate+'" step="0.01" min="0" data-act="rateCommit" style="width:52px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:500;color:#15233B;background:#F4F7FB;border:1px solid #2563EB;border-radius:5px;padding:2px 5px;outline:none;" />'
-    : '<span data-act="rateEdit" style="font-family:\'DM Mono\',monospace;color:#5B6678;font-weight:500;cursor:pointer;border-bottom:1px dashed #CBD5E1;">'+state.rate.toFixed(2)+'</span>';
+    ? '<input id="rate-input" type="number" value="'+state.rate+'" step="0.01" min="0" data-act="rateCommit" style="width:52px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;color:#0D2B5E;background:#F4F7FB;border:1px solid #1D5FCC;border-radius:5px;padding:2px 5px;outline:none;" />'
+    : '<span data-act="rateEdit" style="font-family:\'DM Mono\',monospace;color:#3C5275;font-weight:600;cursor:pointer;border-bottom:1px dashed #B8C6DA;">'+state.rate.toFixed(2)+'</span>';
 
-  return '<header style="height:46px;flex-shrink:0;background:#FFFFFF;border-bottom:1px solid #E7ECF3;display:flex;align-items:center;gap:10px;padding:0 16px;">'
+  return '<header style="height:58px;flex-shrink:0;background:#FFFFFF;border-bottom:1px solid #E3EAF3;box-shadow:0 1px 0 rgba(13,43,94,0.03),0 2px 8px rgba(13,43,94,0.04);display:flex;align-items:center;gap:14px;padding:0 20px;position:relative;z-index:20;">'
     // ── Report View dropdown ──
-    +'<div style="display:flex;align-items:center;gap:6px;">'
-      +'<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#A6B0C0;text-transform:uppercase;">Report View</span>'
+    +'<div style="display:flex;align-items:center;gap:7px;">'
+      +'<span style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:#9AAFC8;text-transform:uppercase;">View</span>'
       +'<div style="position:relative;display:inline-block;">'
-        +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:6px;background:#F4F7FB;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;user-select:none;">'+state.reportView+' View<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8B97A8" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></div>'
+        +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:6px;background:#F4F7FB;border:1px solid #E3EAF3;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:border-color 0.15s;">'+state.reportView+' View<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8B97A8" stroke-width="2.2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></div>'
         +(state.viewDropOpen
-          ? '<div style="position:absolute;top:calc(100% + 4px);left:0;background:#FFFFFF;border:1px solid #E2E8F0;border-radius:8px;box-shadow:0 8px 24px rgba(15,23,40,0.12);z-index:200;min-width:150px;overflow:hidden;">'
+          ? '<div style="position:absolute;top:calc(100% + 6px);left:0;background:#FFFFFF;border:1px solid #E3EAF3;border-radius:10px;box-shadow:0 12px 32px rgba(13,43,94,0.16);z-index:200;min-width:150px;overflow:hidden;">'
             +['Monthly','Weekly','Quarterly','Yearly','Custom'].map(function(v){
               var active=state.reportView===v;
-              return '<div data-act="setView" data-val="'+v+'" style="padding:8px 14px;font-size:12px;font-weight:'+(active?'600':'500')+';color:'+(active?'#fff':'#15233B')+';background:'+(active?'#2563EB':'transparent')+';cursor:pointer;">'+v+' View</div>';
+              return '<div data-act="setView" data-val="'+v+'" style="padding:9px 14px;font-size:12px;font-weight:'+(active?'700':'500')+';color:'+(active?'#fff':'#0D2B5E')+';background:'+(active?'#1D5FCC':'transparent')+';cursor:pointer;">'+v+' View</div>';
             }).join('')
           +'</div>'
           : '')
       +'</div>'
     +'</div>'
+    +'<div style="width:1px;height:24px;background:#EAF0F8;"></div>'
     // ── Date range ──
-    +'<div style="display:flex;align-items:center;gap:6px;">'
-      +'<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#A6B0C0;text-transform:uppercase;">From</span>'
+    +'<div style="display:flex;align-items:center;gap:7px;">'
+      +'<span style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:#9AAFC8;text-transform:uppercase;">From</span>'
       +(isCustom
-        ? '<select data-act="setFrom" style="background:#F4F7FB;border:1px solid #2563EB;border-radius:6px;padding:2px 4px;font-size:10.5px;font-weight:600;font-family:inherit;cursor:pointer;color:#15233B;outline:none;">'
+        ? '<select data-act="setFrom" style="background:#F4F7FB;border:1px solid #1D5FCC;border-radius:7px;padding:5px 6px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;color:#0D2B5E;outline:none;">'
           +['Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26'].map(function(m){ return '<option value="'+m+'"'+(state.dateFrom===m?' selected':'')+'>'+m+'</option>'; }).join('')
           +'</select>'
-        : '<div style="background:#F4F7FB;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#15233B;">'+state.dateFrom+'</div>')
-      +'<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#A6B0C0;text-transform:uppercase;">To</span>'
+        : '<div style="background:#F4F7FB;border:1px solid #E3EAF3;border-radius:7px;padding:5px 10px;font-size:11.5px;font-weight:700;color:#0D2B5E;">'+state.dateFrom+'</div>')
+      +'<span style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:#9AAFC8;text-transform:uppercase;">To</span>'
       +(isCustom
-        ? '<select data-act="setTo" style="background:#F4F7FB;border:1px solid #2563EB;border-radius:6px;padding:2px 4px;font-size:10.5px;font-weight:600;font-family:inherit;cursor:pointer;color:#15233B;outline:none;">'
+        ? '<select data-act="setTo" style="background:#F4F7FB;border:1px solid #1D5FCC;border-radius:7px;padding:5px 6px;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;color:#0D2B5E;outline:none;">'
           +['Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26'].map(function(m){ return '<option value="'+m+'"'+(state.dateTo===m?' selected':'')+'>'+m+'</option>'; }).join('')
           +'</select>'
-        : '<div style="background:#F4F7FB;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#15233B;">'+state.dateTo+'</div>')
+        : '<div style="background:#F4F7FB;border:1px solid #E3EAF3;border-radius:7px;padding:5px 10px;font-size:11.5px;font-weight:700;color:#0D2B5E;">'+state.dateTo+'</div>')
     +'</div>'
+    +'<div style="width:1px;height:24px;background:#EAF0F8;"></div>'
     // ── Currency toggle ──
-    +'<div style="display:flex;align-items:center;background:#F0F4FA;border-radius:6px;padding:2px;gap:1px;">'
-      +'<button data-act="cur" data-cur="INR" style="border:none;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:5px;'+seg(state.currency==='INR')+'">INR</button>'
-      +'<button data-act="cur" data-cur="USD" style="border:none;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:5px;'+seg(state.currency==='USD')+'">USD</button>'
+    +'<div style="display:flex;align-items:center;background:#F0F4FA;border-radius:8px;padding:3px;gap:1px;">'
+      +'<button data-act="cur" data-cur="INR" style="border:none;cursor:pointer;font-size:11.5px;padding:5px 11px;border-radius:6px;'+seg(state.currency==='INR')+'">INR</button>'
+      +'<button data-act="cur" data-cur="USD" style="border:none;cursor:pointer;font-size:11.5px;padding:5px 11px;border-radius:6px;'+seg(state.currency==='USD')+'">USD</button>'
     +'</div>'
     // ── Rate (click to edit) ──
-    +'<div style="font-size:10.5px;color:#8B97A8;font-weight:500;">Rate '+rateEl+'</div>'
+    +'<div style="font-size:11px;color:#9AAFC8;font-weight:600;">Rate '+rateEl+'</div>'
     // ── Filters ──
-    +'<button class="btnq" style="display:flex;align-items:center;gap:4px;background:#FFFFFF;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#5B6678;cursor:pointer;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>Filters</button>'
-    +'<button data-act="refreshData" id="refresh-btn" class="btnq" style="display:flex;align-items:center;gap:4px;background:#FFFFFF;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#5B6678;cursor:pointer;"><svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s ease;"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>'
+    +'<button class="btnq" style="display:flex;align-items:center;gap:5px;background:#FFFFFF;border:1px solid #E3EAF3;border-radius:8px;padding:6px 11px;font-size:11.5px;font-weight:700;color:#3C5275;cursor:pointer;transition:border-color 0.15s,box-shadow 0.15s;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>Filters</button>'
+    +'<button data-act="refreshData" id="refresh-btn" class="btnq" style="display:flex;align-items:center;gap:5px;background:#FFFFFF;border:1px solid #E3EAF3;border-radius:8px;padding:6px 11px;font-size:11.5px;font-weight:700;color:#3C5275;cursor:pointer;transition:border-color 0.15s,box-shadow 0.15s;"><svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s ease;"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>'
     +'<div style="flex:1;"></div>'
     // ── Live Data ──
-    +'<div style="display:flex;align-items:center;gap:4px;background:#EAF7EF;border:1px solid #C9EAD6;border-radius:20px;padding:3px 8px;font-size:10.5px;font-weight:700;color:#15875A;"><span style="width:5px;height:5px;border-radius:50%;background:#1FAE6A;display:inline-block;"></span>Live Data</div>'
+    +'<div style="display:flex;align-items:center;gap:5px;background:linear-gradient(135deg,#EAF7EF,#DCF3E4);border:1px solid #BFE6CE;border-radius:20px;padding:5px 11px;font-size:11px;font-weight:700;color:#0A7E53;box-shadow:0 1px 2px rgba(10,126,83,0.08);"><span style="width:5px;height:5px;border-radius:50%;background:#1FAE6A;display:inline-block;box-shadow:0 0 0 3px rgba(31,174,106,0.18);"></span>Live Data</div>'
     // ── Feedback ──
-    +'<button data-act="feedbackOpen" style="display:flex;align-items:center;gap:4px;background:#FFFFFF;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#5B6678;cursor:pointer;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Feedback</button>'
+    +'<button data-act="feedbackOpen" style="display:flex;align-items:center;gap:5px;background:#FFFFFF;border:1px solid #E3EAF3;border-radius:8px;padding:6px 11px;font-size:11.5px;font-weight:700;color:#3C5275;cursor:pointer;transition:border-color 0.15s,box-shadow 0.15s;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Feedback</button>'
     // ── Sign Out ──
-    +'<button class="btnq" style="display:flex;align-items:center;gap:4px;background:#FFFFFF;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#5B6678;cursor:pointer;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign Out</button>'
+    +'<button class="btnq" style="display:flex;align-items:center;gap:5px;background:#FFFFFF;border:1px solid #E3EAF3;border-radius:8px;padding:6px 11px;font-size:11.5px;font-weight:700;color:#3C5275;cursor:pointer;transition:border-color 0.15s,box-shadow 0.15s;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign Out</button>'
   +'</header>';
 }
 
@@ -749,12 +752,12 @@ function kpiRow(M){
   // Single top-border accent colour per card — drawn from a controlled 2-step ramp
   // so the row reads as one cohesive unit rather than a colour wheel.
   var kpis = [
-    {label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              sub:'Jobs · Period',                              accent:'#1D5FCC'},
-    {label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           sub:'Sea + ISO Tank · Period',                    accent:'#1D5FCC'},
-    {label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  sub:'Chargeable wt · Air only',                   accent:'#1D5FCC'},
-    {label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                sub:state.currency+' · Period',                   accent:'#0D2B5E'},
-    {label:'GP TARGET',       value:fmtCur(M.tgtGrand),                               sub:'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)),accent:'#0D2B5E'},
-    {label:'ACHIEVEMENT',     value:M.achGrand+'%',                                   sub:'vs Target',                                  accent:'#0D2B5E'},
+    {label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              sub:'Jobs · Period',                              accent:'#1D5FCC', icon:IC_KPI.box},
+    {label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           sub:'Sea + ISO Tank · Period',                    accent:'#1D5FCC', icon:IC_KPI.container},
+    {label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  sub:'Chargeable wt · Air only',                   accent:'#1D5FCC', icon:IC_KPI.plane},
+    {label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                sub:state.currency+' · Period',                   accent:'#0D2B5E', icon:IC_KPI.coin},
+    {label:'GP TARGET',       value:fmtCur(M.tgtGrand),                               sub:'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)),accent:'#0D2B5E', icon:IC_KPI.target},
+    {label:'ACHIEVEMENT',     value:M.achGrand+'%',                                   sub:'vs Target',                                  accent:'#0D2B5E', icon:IC_KPI.trend},
   ];
 
   // Value colour: positive achievement green, negative red — everything else navy
@@ -765,16 +768,31 @@ function kpiRow(M){
     return '#0D2B5E';
   }
 
-  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-bottom:14px;">'
+  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:18px;">'
     + kpis.map(function(k){
-      return '<div style="background:#FFFFFF;border:1px solid #D9E3EE;border-top:2.5px solid '+k.accent+';border-radius:8px;padding:10px 13px;box-shadow:0 1px 3px rgba(13,43,94,0.05);">'
-        +'<div style="font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#8B97A8;text-transform:uppercase;margin-bottom:5px;">'+k.label+'</div>'
-        +'<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:700;color:'+valColor(k)+';line-height:1;margin-bottom:3px;">'+k.value+'</div>'
-        +'<div style="font-size:9.5px;color:#9AAFC8;font-weight:500;">'+k.sub+'</div>'
+      return '<div class="kpi-card" style="background:#FFFFFF;border:1px solid #E9EEF6;border-radius:12px;padding:14px 15px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 14px rgba(13,43,94,0.06);position:relative;overflow:hidden;transition:box-shadow 0.18s ease,transform 0.18s ease;">'
+        +'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+k.accent+';"></div>'
+        +'<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:9px;">'
+          +'<div style="font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#8B97A8;text-transform:uppercase;line-height:1.3;">'+k.label+'</div>'
+          +'<div style="width:26px;height:26px;border-radius:8px;background:'+k.accent+'12;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:'+k.accent+';">'+k.icon+'</div>'
+        +'</div>'
+        +'<div style="font-family:\'DM Mono\',monospace;font-size:19px;font-weight:700;color:'+valColor(k)+';line-height:1.15;margin-bottom:4px;letter-spacing:-0.01em;">'+k.value+'</div>'
+        +'<div style="font-size:9.5px;color:#9AAFC8;font-weight:600;">'+k.sub+'</div>'
       +'</div>';
     }).join('')
   +'</div>';
 }
+
+// Small monochrome icon set for KPI cards — inherits colour via currentColor,
+// tinted circular chip background computed per-card from the same accent.
+var IC_KPI = {
+  box: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>',
+  container: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="12" rx="1"/><path d="M3 11h18M9 7v12M15 7v12"/></svg>',
+  plane: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5c.8-.8.8-2 0-2.8-.8-.8-2-.8-2.8 0L13.2 8 5 6.2 3.5 7.7l6.7 4.3-3 3-2.5-.5L3 16.3l3 1.7 1.7 3 1.8-1.7-.5-2.5 3-3 4.3 6.7 1.5-1.5z"/></svg>',
+  coin: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.2c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7c0 2.6-5 1.3-5 3.9 0 1 1 1.7 2.5 1.7s2.5-.7 2.5-1.7"/></svg>',
+  target: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>',
+  trend: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 6h6v6"/></svg>',
+};
 
 /* ====================== CUSTOMER INSIGHTS ====================== */
 function horizontalBarPanel(title, items, valueKey, fmtFn, barColor){
