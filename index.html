@@ -676,6 +676,34 @@ function filteredMonths(){
   return filteredMonthIndices().map(function(i){ return months26[i]; });
 }
 
+// For Yearly view: group months by calendar year (e.g. "25", "26")
+// Returns [{year:"25", label:"2025", range:"Jan 2025 – Dec 2025", idxs:[0,1,2,...]}, ...]
+function yearGroups(){
+  var idxs = filteredMonthIndices();
+  var groups = {};
+  var order = [];
+  idxs.forEach(function(i){
+    var m = months26[i];
+    var y2 = m.split('-')[1]; // "25" or "26"
+    var fullYear = '20'+y2;
+    if (!groups[y2]) {
+      groups[y2] = { year: y2, label: fullYear, idxs: [] };
+      order.push(y2);
+    }
+    groups[y2].idxs.push(i);
+  });
+  // Add range label e.g. "Jan 2025 – Dec 2025"
+  order.forEach(function(y2){
+    var g = groups[y2];
+    var ms = g.idxs.map(function(i){ return months26[i]; });
+    var first = ms[0], last = ms[ms.length-1];
+    var MNAMES = {Jan:'Jan',Feb:'Feb',Mar:'Mar',Apr:'Apr',May:'May',Jun:'Jun',Jul:'Jul',Aug:'Aug',Sep:'Sep',Oct:'Oct',Nov:'Nov',Dec:'Dec'};
+    var fy = first.split('-'); var ly = last.split('-');
+    g.range = fy[0]+' 20'+fy[1]+' – '+ly[0]+' 20'+ly[1];
+  });
+  return order.map(function(y2){ return groups[y2]; });
+}
+
 // Display label for a column: week keys show as "Week 1" etc, months show as-is
 function colDisplayLabel(key){
   if (key && key.indexOf(':W') > -1) {
@@ -1605,7 +1633,16 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
 }
 
 function tableRows(){
-  var colLabels = ['FY Total'].concat(filteredMonths().map(colDisplayLabel));
+  var isYearly = state.reportView === 'Yearly';
+  var yGroups  = isYearly ? yearGroups() : null;
+
+  // Build colLabels — yearly uses year labels, others use month labels
+  var colLabels;
+  if (isYearly) {
+    colLabels = ['FY Total'].concat(yGroups.map(function(g){ return g.label; }));
+  } else {
+    colLabels = ['FY Total'].concat(filteredMonths().map(colDisplayLabel));
+  }
   var ents = entities();
   var rows = [];
 
@@ -1621,10 +1658,34 @@ function tableRows(){
     var groupBg = isGrand ? '#EEF3FC' : isZone ? '#F0F4FB' : '#FFFFFF';
     var avatarBg = e.avatarBg;
 
-    var teus    = e.teu || e.gp.map(function(){ return 0; });
-    var lcl     = e.lcl || e.gp.map(function(){ return 0; });
-    var tgtArr  = e.gp.map(function(){ return e.tgt; });
-    var achArr  = e.gp.map(function(v,i){ return e.tgt ? Math.round(v/e.tgt*100) : 0; });
+    // In Yearly view, aggregate monthly arrays into per-year totals
+    var dispGp, dispShip, dispTons, dispTeus, dispLcl, dispTgt, dispAch;
+    if (isYearly && yGroups) {
+      dispGp   = yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return e.gp[i]||0; })); });
+      dispShip = yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return e.ship[i]||0; })); });
+      dispTons = yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.tons&&e.tons[i])||0; })); });
+      dispTeus = yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.teu&&e.teu[i])||0; })); });
+      dispLcl  = yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.lcl&&e.lcl[i])||0; })); });
+      dispTgt  = yGroups.map(function(g){ return e.tgt * g.idxs.length; });
+      dispAch  = yGroups.map(function(g){
+        var gp  = sum(g.idxs.map(function(i){ return e.gp[i]||0; }));
+        var tgt = e.tgt * g.idxs.length;
+        return tgt > 0 ? Math.round(gp/tgt*100) : 0;
+      });
+    } else {
+      dispGp   = e.gp;
+      dispShip = e.ship;
+      dispTons = e.tons || e.gp.map(function(){ return 0; });
+      dispTeus = e.teu  || e.gp.map(function(){ return 0; });
+      dispLcl  = e.lcl  || e.gp.map(function(){ return 0; });
+      dispTgt  = e.gp.map(function(){ return e.tgt; });
+      dispAch  = e.gp.map(function(v){ return e.tgt ? Math.round(v/e.tgt*100) : 0; });
+    }
+
+    var teus    = dispTeus;
+    var lcl     = dispLcl;
+    var tgtArr  = dispTgt;
+    var achArr  = dispAch;
 
     function metric(label, indent, type, color, vals, fy, toggleType, repInfo){
       var isShip = toggleType === 'ship';
@@ -1654,17 +1715,17 @@ function tableRows(){
       isZone: isZone, isGrand: isGrand, isBranch: !!e.isBranch
     };
 
-    rows.push(metric('Shipments', 0, 'int', '#15233B', e.ship, sum(e.ship), 'ship', repInfo));
+    rows.push(metric('Shipments', 0, 'int', '#15233B', dispShip, sum(dispShip), 'ship', repInfo));
 
     if (shipOpen) {
-      rows.push(metric('Tons (Air)',         1, 'tons', '#5B8DEF', e.tons, sum(e.tons), false));
+      rows.push(metric('Tons (Air)',         1, 'tons', '#5B8DEF', dispTons, sum(dispTons), false));
       rows.push(metric('TEUs (Ocean)',       1, 'teu',  '#5B8DEF', teus, sum(teus), false));
       rows.push(metric('LCL (Ocean in CBM)', 1, 'cbm',  '#9AA4B2', lcl, sum(lcl), false));
     }
 
-    rows.push(metric('GP',            0, 'cur', '#374151', e.gp,    sum(e.gp),                  false));
-    rows.push(metric('Target',        0, 'cur', '#374151', tgtArr,  e.tgt * e.gp.length,        false));
-    rows.push(metric('Achievement %', 0, 'pct', '#374151', achArr,  achFy,                      false));
+    rows.push(metric('GP',            0, 'cur', '#374151', dispGp,  sum(dispGp),                  false));
+    rows.push(metric('Target',        0, 'cur', '#374151', tgtArr,  sum(tgtArr),                  false));
+    rows.push(metric('Achievement %', 0, 'pct', '#374151', achArr,  achFy,                        false));
   });
 
   return rows;
@@ -1711,7 +1772,11 @@ function salesTable(M){
     +'</div>';
   }
 
-  var colLabels=['FY Total'].concat(filteredMonths().map(colDisplayLabel));
+  var isYearly2 = state.reportView === 'Yearly';
+  var yGroups2  = isYearly2 ? yearGroups() : null;
+  var colLabels = isYearly2
+    ? ['FY Total'].concat(yGroups2.map(function(g){ return g.label; }))
+    : ['FY Total'].concat(filteredMonths().map(colDisplayLabel));
   var FY_COL_LEFT = 185+140; // sticky offset for the FY Total column
   var BORDER = '#D5DCE6';      // main grid border — softened
   var BORDER_STRONG = '#B0BAC8'; // block separators — still distinct but lighter
@@ -1719,9 +1784,15 @@ function salesTable(M){
     +'<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:185px;min-width:185px;">Zones/Sales Rep</th>'
     +'<th style="position:sticky;left:185px;z-index:3;background:#F0F4FA;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">Metrics</th>'
     +'<th style="position:sticky;left:'+FY_COL_LEFT+'px;z-index:3;text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#FCF3DA;white-space:nowrap;box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">Grand Total</th>'
-    + colLabels.slice(1).map(function(l){
-      return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#F0F4FA;white-space:nowrap;">'+l+'</th>';
-    }).join('')
+    + (isYearly2 ? yGroups2.map(function(g, gi){
+        return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#FCF3DA;white-space:nowrap;">'
+          +'<div style="font-size:11px;font-weight:800;color:#A8720E;">'+g.label+'</div>'
+          +'<div style="font-size:9px;font-weight:500;color:#B8955A;margin-top:1px;">'+g.range+'</div>'
+        +'</th>';
+      }).join('')
+    : colLabels.slice(1).map(function(l){
+        return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#F0F4FA;white-space:nowrap;">'+l+'</th>';
+      }).join(''))
   +'</tr>';
 
   var allRows = tableRows();
