@@ -637,6 +637,14 @@ function filteredMonthIndices(){
 function hasDataForIndices(idxs){
   if (state.reportView === 'Weekly') {
     var wkeys = filteredWeekKeys();
+    // Check weekData first; fall back to monthly check if weekData not loaded yet
+    var hasWeekData = repsRaw.some(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; });
+    if (!hasWeekData) {
+      // weekData not in cache yet — fall back to monthly index check
+      var mi = months26.indexOf(state.weeklyMonth || months26[months26.length-1]);
+      if (mi < 0) return false;
+      return repsRaw.some(function(r){ return (r.ship[mi]||0) > 0 || (r.gp[mi]||0) !== 0; });
+    }
     return repsRaw.some(function(r){
       return wkeys.some(function(k){
         return r.weekData && r.weekData[k] && ((r.weekData[k].ship||0) > 0 || (r.weekData[k].gp||0) !== 0);
@@ -699,7 +707,7 @@ function syncDateRangeToData(){
 }
 
 function model(){
-  var isWeekly = state.reportView === 'Weekly';
+  var isWeekly = state.reportView === 'Weekly' && weekDataLoaded();
   if (isWeekly) {
     var wkeys = filteredWeekKeys();
     var gpGrand   = sum(repsRaw.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0;}));}));
@@ -720,8 +728,13 @@ function model(){
   return {gpGrand:gpGrand, shipGrand:shipGrand, tonsGrand:tonsGrand, tgtGrand:tgtGrand, achGrand:achGrand, teusGrand:teusGrand};
 }
 
+// True if the current repsRaw has weekData populated (post-Refresh)
+function weekDataLoaded(){
+  return repsRaw.some(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; });
+}
+
 function grandEntity(){
-  var isWeekly = state.reportView === 'Weekly';
+  var isWeekly = state.reportView === 'Weekly' && weekDataLoaded();
   var idxs = filteredMonthIndices();
   var wkeys = isWeekly ? filteredWeekKeys() : null;
   return {
@@ -752,7 +765,7 @@ function getZones(){
 
 // Zone-level aggregate entity
 function zoneEntity(zoneName){
-  var isWeekly = state.reportView === 'Weekly';
+  var isWeekly = state.reportView === 'Weekly' && weekDataLoaded();
   var idxs = filteredMonthIndices();
   var wkeys = isWeekly ? filteredWeekKeys() : null;
   var zReps = repsRaw.filter(function(r){ return r.zone === zoneName; });
@@ -783,7 +796,7 @@ function zoneHue(zone){
 }
 
 function repEntity(r){
-  var isWeekly = state.reportView === 'Weekly';
+  var isWeekly = state.reportView === 'Weekly' && weekDataLoaded();
   var idxs = filteredMonthIndices();
   var wkeys = isWeekly ? filteredWeekKeys() : null;
   var ini = r.isBranch ? r.name.slice(0,2).toUpperCase() : initials(r.name);
@@ -1604,7 +1617,21 @@ function allZonesToggleButton(){
 function salesTable(M){
   var idxs = filteredMonthIndices();
 
-  // Empty state — no data for the selected filter (e.g. Weekly on a month with no data)
+  // Weekly view with no weekData yet — prompt to Refresh
+  if (state.reportView === 'Weekly' && !weekDataLoaded()) {
+    return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'
+      +'<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 32px;gap:14px;text-align:center;">'
+        +'<div style="width:48px;height:48px;border-radius:14px;background:#EAF1FE;display:flex;align-items:center;justify-content:center;">'
+          +'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1D5FCC" stroke-width="1.8" stroke-linecap="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>'
+        +'</div>'
+        +'<div style="font-size:14px;font-weight:700;color:#0D2B5E;">Weekly data needs a refresh</div>'
+        +'<div style="font-size:12px;color:#9AAFC8;max-width:300px;line-height:1.6;">Hit the Refresh button to load weekly breakdowns. This only needs to be done once — it will be cached after that.</div>'
+        +'<button data-act="refreshData" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#5678C2,#1E3A66);border:none;border-radius:999px;padding:10px 20px;font-size:12px;font-weight:700;color:#FFFFFF;cursor:pointer;">↻ Refresh Now</button>'
+      +'</div>'
+    +'</div>';
+  }
+
+  // Empty state — no data for the selected filter
   if (!hasDataForIndices(idxs)) {
     return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'
       +'<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 32px;gap:14px;text-align:center;">'
