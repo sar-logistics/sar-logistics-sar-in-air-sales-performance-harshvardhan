@@ -1280,7 +1280,10 @@ function drawer(){
     if (d.metric === 'LCL (Ocean in CBM)') return m.toFixed(2);
     return m.toFixed(2);
   }
-  var totalDisplay = (!d.loading && !d.error && d.totalMetric !== undefined) ? metricTotalDisplay() : esc(d.valueFmt);
+  var totalDisplay = (d.loading)
+    ? '<span style="display:inline-flex;align-items:center;gap:8px;color:#94A3B8;font-size:18px;">Calculating… <span class="login-spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;"></span></span>'
+    : (!d.error && d.totalMetric !== undefined) ? metricTotalDisplay()
+    : esc(d.valueFmt);
 
   var bodyContent;
   if (d.loading) {
