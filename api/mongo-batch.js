@@ -518,13 +518,18 @@ async function computeSalesAggregate(db) {
   // 3. Aggregate job data per rep per month
   const repMonthData = {};
   const repMeta      = {};
-  const unmapped     = {}; // tracks sales person names with no mapping match
+  const unmapped     = {};
 
-  // Cross Sales: any Sales Person not found in mapping_sales_targets gets
-  // grouped under a synthetic "Cross Sales" zone, broken down by Location
-  // (branch) instead of by individual rep.
   const CROSS_SALES_ZONE = "Cross Sales";
   const branchMonthData = {}; // branchName → { monthLabel → { gp, ship, tons, teu, lcl } }
+  const repWeekData   = {}; // repKey → { "Apr-25:W1" → { gp, ship, tons, teu, lcl }, ... }
+  const branchWeekData= {}; // branchName → { "Apr-25:W1" → { gp, ship, tons, teu, lcl }, ... }
+
+  // Week label within a month: day 1-7=W1, 8-14=W2, 15-21=W3, 22+=W4
+  function weekLabel(monthLabel, day){
+    var w = day <= 7 ? 'W1' : day <= 14 ? 'W2' : day <= 21 ? 'W3' : 'W4';
+    return monthLabel + ':' + w;
+  }
 
   for (const collName of JOB_COLLECTIONS) {
     // Fetch every field any classification might need — we don't know which
@@ -553,6 +558,7 @@ async function computeSalesAggregate(db) {
 
       // Primary date column for this row's classification, falling back to Job Date if blank
       let monthLabel = null;
+      let dayOfMonth = null;
       const primaryDate = job[dateCol];
       const fallbackDate = job["Job Date"];
       const rawDate = primaryDate || fallbackDate;
@@ -560,6 +566,7 @@ async function computeSalesAggregate(db) {
         const d = new Date(rawDate);
         if (!isNaN(d.getTime())) {
           monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
+          dayOfMonth = d.getDate();
         }
       }
       if (!monthLabel || !FY_MONTHS.includes(monthLabel)) continue;
@@ -618,6 +625,14 @@ async function computeSalesAggregate(db) {
         branchMonthData[branch][monthLabel].tons += tons;
         branchMonthData[branch][monthLabel].teu  += teu;
         branchMonthData[branch][monthLabel].lcl  += lcl;
+        // Weekly accumulation
+        if (dayOfMonth) {
+          const wk = weekLabel(monthLabel, dayOfMonth);
+          if (!branchWeekData[branch]) branchWeekData[branch] = {};
+          if (!branchWeekData[branch][wk]) branchWeekData[branch][wk] = { gp:0, ship:0, tons:0, teu:0, lcl:0 };
+          branchWeekData[branch][wk].gp += gp; branchWeekData[branch][wk].ship += 1;
+          branchWeekData[branch][wk].tons += tons; branchWeekData[branch][wk].teu += teu; branchWeekData[branch][wk].lcl += lcl;
+        }
         continue;
       }
 
@@ -630,6 +645,14 @@ async function computeSalesAggregate(db) {
       repMonthData[repKey][monthLabel].tons += tons;
       repMonthData[repKey][monthLabel].teu  += teu;
       repMonthData[repKey][monthLabel].lcl  += lcl;
+      // Weekly accumulation
+      if (dayOfMonth) {
+        const wk = weekLabel(monthLabel, dayOfMonth);
+        if (!repWeekData[repKey]) repWeekData[repKey] = {};
+        if (!repWeekData[repKey][wk]) repWeekData[repKey][wk] = { gp:0, ship:0, tons:0, teu:0, lcl:0 };
+        repWeekData[repKey][wk].gp += gp; repWeekData[repKey][wk].ship += 1;
+        repWeekData[repKey][wk].tons += tons; repWeekData[repKey][wk].teu += teu; repWeekData[repKey][wk].lcl += lcl;
+      }
 
       if (!repMeta[repKey]) repMeta[repKey] = mapped;
     }
@@ -644,7 +667,7 @@ async function computeSalesAggregate(db) {
   const repsRaw = [];
   for (const [repKey, monthData] of Object.entries(repMonthData)) {
     const meta = repMeta[repKey];
-    const gp   = activeMonths.map(m => monthData[m]?.gp || 0);  // full float — rounding only at display time
+    const gp   = activeMonths.map(m => monthData[m]?.gp || 0);
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
     const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
     const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
@@ -658,14 +681,14 @@ async function computeSalesAggregate(db) {
       hue:   zoneHue(meta.zone),
       gp, ship, tons, teu, lcl,
       tank:  activeMonths.map(() => 0),
-      tgt:   0, // rep-level targets ignored — Target/Achievement shown at Zone level only
+      tgt:   0,
+      weekData: repWeekData[repKey] || {}, // { "Apr-25:W1" → { gp, ship, ... } }
     });
   }
 
-  // Cross Sales branches — shown as "rep-like" rows under the Cross Sales
-  // zone, but representing a Location/branch rather than an individual person.
+  // Cross Sales branches
   for (const [branchName, monthData] of Object.entries(branchMonthData)) {
-    const gp   = activeMonths.map(m => monthData[m]?.gp || 0);  // full float
+    const gp   = activeMonths.map(m => monthData[m]?.gp || 0);
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
     const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
     const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
@@ -680,7 +703,8 @@ async function computeSalesAggregate(db) {
       gp, ship, tons, teu, lcl,
       tank:  activeMonths.map(() => 0),
       tgt:   0,
-      isBranch: true, // flags this as a branch, not an individual rep — frontend uses this for labeling
+      isBranch: true,
+      weekData: branchWeekData[branchName] || {},
     });
   }
 
