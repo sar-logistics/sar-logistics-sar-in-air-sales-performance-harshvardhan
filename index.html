@@ -2073,22 +2073,7 @@ function openDrill(entity, metric, col, valueFmt){
     });
 }
 
-document.addEventListener('change', function(ev){
-  var el=ev.target;
-  if(el.getAttribute('data-act')==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.getAttribute('data-val'); state.fromDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='setTo'){ ev.stopPropagation(); state.dateTo=el.getAttribute('data-val'); state.toDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='toggleFromDrop'){ ev.stopPropagation(); state.fromDropOpen=!state.fromDropOpen; state.toDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
-  else if(el.getAttribute('data-act')==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
-  else if(el.getAttribute('data-act')==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(el.getAttribute('data-act')==='setQuarter'){ ev.stopPropagation(); state.selectedQuarter=el.getAttribute('data-val'); state.quarterDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='toggleQuarterDrop'){ ev.stopPropagation(); state.quarterDropOpen=!state.quarterDropOpen; state.qyrDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
-  else if(el.getAttribute('data-act')==='setQuarterYear'){ ev.stopPropagation(); state.quarterYear=el.getAttribute('data-val'); state.qyrDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='toggleQyrDrop'){ ev.stopPropagation(); state.qyrDropOpen=!state.qyrDropOpen; state.quarterDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
-  else if(el.getAttribute('data-act')==='setYearType'){ ev.stopPropagation(); state.yearType=el.getAttribute('data-val'); state.yearTypeDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='toggleYearTypeDrop'){ ev.stopPropagation(); state.yearTypeDropOpen=!state.yearTypeDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
-});
+document.addEventListener('change', function(ev){ var el=ev.target; if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); } });
 document.addEventListener('click', function(ev){
   var el = ev.target.closest('[data-act]');
   if(!el) return;
@@ -2180,6 +2165,18 @@ document.addEventListener('click', function(ev){
       fetchOrgData(function(){ render(); }, true);
     });
   }
+  else if(act==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.getAttribute('data-val'); state.fromDropOpen=false; render(); }
+  else if(act==='setTo'){ ev.stopPropagation(); state.dateTo=el.getAttribute('data-val'); state.toDropOpen=false; render(); }
+  else if(act==='toggleFromDrop'){ ev.stopPropagation(); state.fromDropOpen=!state.fromDropOpen; state.toDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; render(); }
+  else if(act==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; state.fromDropOpen=false; state.toDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='setQuarter'){ ev.stopPropagation(); state.selectedQuarter=el.getAttribute('data-val'); state.quarterDropOpen=false; render(); }
+  else if(act==='toggleQuarterDrop'){ ev.stopPropagation(); state.quarterDropOpen=!state.quarterDropOpen; state.qyrDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='setQuarterYear'){ ev.stopPropagation(); state.quarterYear=el.getAttribute('data-val'); state.qyrDropOpen=false; render(); }
+  else if(act==='toggleQyrDrop'){ ev.stopPropagation(); state.qyrDropOpen=!state.qyrDropOpen; state.quarterDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='setYearType'){ ev.stopPropagation(); state.yearType=el.getAttribute('data-val'); state.yearTypeDropOpen=false; render(); }
+  else if(act==='toggleYearTypeDrop'){ ev.stopPropagation(); state.yearTypeDropOpen=!state.yearTypeDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
   else if(act==='rateCommit'){ var v=parseFloat(document.getElementById('rate-input').value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
   else if(act==='feedbackOpen'){ ev.stopPropagation(); state.feedbackOpen=true; state.feedbackSent=false; state.feedbackText=''; render(); }
