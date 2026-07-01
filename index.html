@@ -723,7 +723,7 @@ function topbar(){
         : '<div style="background:#F4F7FB;border:1px solid #E7ECF3;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;color:#15233B;">'+state.dateTo+'</div>')
     +'</div>'
     // ── Currency toggle ──
-    +'<div style="display:flex;align-items:center;background:#EEF2F8;border-radius:6px;padding:2px;gap:1px;">'
+    +'<div style="display:flex;align-items:center;background:#F0F4FA;border-radius:6px;padding:2px;gap:1px;">'
       +'<button data-act="cur" data-cur="INR" style="border:none;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:5px;'+seg(state.currency==='INR')+'">INR</button>'
       +'<button data-act="cur" data-cur="USD" style="border:none;cursor:pointer;font-size:11px;padding:3px 8px;border-radius:5px;'+seg(state.currency==='USD')+'">USD</button>'
     +'</div>'
@@ -745,20 +745,32 @@ function topbar(){
 /* ====================== KPI CARDS ====================== */
 function kpiRow(M){
   var n = months26.length || 1;
+  // Unified palette: navy accent for primary metric values, muted ink-mid for secondary.
+  // Single top-border accent colour per card — drawn from a controlled 2-step ramp
+  // so the row reads as one cohesive unit rather than a colour wheel.
   var kpis = [
-    {label:'TOTAL SHIPMENTS', value:String(M.shipGrand), sub:'Jobs · Period', valueColor:'#2563EB', borderColor:'#2563EB'},
-    {label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2), sub:'Sea + ISO Tank · Period', valueColor:'#0891B2', borderColor:'#0891B2'},
-    {label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014', sub:'Chargeable wt · Air only', valueColor:'#DC2626', borderColor:'#DC2626'},
-    {label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),  sub:state.currency+' · Period',   valueColor:'#059669', borderColor:'#059669'},
-    {label:'GP TARGET',       value:fmtCur(M.tgtGrand), sub:'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), valueColor:'#D97706', borderColor:'#D97706'},
-    {label:'ACHIEVEMENT',     value:M.achGrand+'%',     sub:'vs Target',      valueColor:'#7C3AED', borderColor:'#7C3AED'}
+    {label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              sub:'Jobs · Period',                              accent:'#1D5FCC'},
+    {label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           sub:'Sea + ISO Tank · Period',                    accent:'#1D5FCC'},
+    {label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  sub:'Chargeable wt · Air only',                   accent:'#1D5FCC'},
+    {label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                sub:state.currency+' · Period',                   accent:'#0D2B5E'},
+    {label:'GP TARGET',       value:fmtCur(M.tgtGrand),                               sub:'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)),accent:'#0D2B5E'},
+    {label:'ACHIEVEMENT',     value:M.achGrand+'%',                                   sub:'vs Target',                                  accent:'#0D2B5E'},
   ];
-  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;margin-bottom:12px;">'
+
+  // Value colour: positive achievement green, negative red — everything else navy
+  function valColor(k){
+    if(k.label==='ACHIEVEMENT'){
+      return M.achGrand >= 100 ? '#0A7E53' : M.achGrand < 0 ? '#C0392B' : '#0D2B5E';
+    }
+    return '#0D2B5E';
+  }
+
+  return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-bottom:14px;">'
     + kpis.map(function(k){
-      return '<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-top:3px solid '+k.borderColor+';border-radius:7px;padding:9px 11px;box-shadow:0 1px 2px rgba(20,35,59,0.04);">'
-        +'<div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#64748B;text-transform:uppercase;margin-bottom:4px;">'+k.label+'</div>'
-        +'<div style="font-family:\'DM Mono\',monospace;font-size:19px;font-weight:700;color:'+k.valueColor+';line-height:1;margin-bottom:2px;">'+k.value+'</div>'
-        +'<div style="font-size:9.5px;color:#94A3B8;font-weight:500;">'+k.sub+'</div>'
+      return '<div style="background:#FFFFFF;border:1px solid #D9E3EE;border-top:2.5px solid '+k.accent+';border-radius:8px;padding:10px 13px;box-shadow:0 1px 3px rgba(13,43,94,0.05);">'
+        +'<div style="font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#8B97A8;text-transform:uppercase;margin-bottom:5px;">'+k.label+'</div>'
+        +'<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:700;color:'+valColor(k)+';line-height:1;margin-bottom:3px;">'+k.value+'</div>'
+        +'<div style="font-size:9.5px;color:#9AAFC8;font-weight:500;">'+k.sub+'</div>'
       +'</div>';
     }).join('')
   +'</div>';
@@ -1078,7 +1090,7 @@ function tableRows(){
     var achFy = e.tgt > 0 ? Math.round(sum(e.gp) / (e.tgt * months26.length) * 100) : 0;
 
     // Zone-level background
-    var groupBg = isGrand ? '#EDF3FF' : isZone ? '#F4F0FD' : '#FFFFFF';
+    var groupBg = isGrand ? '#EEF3FC' : isZone ? '#F3F0FC' : '#FFFFFF';
     var avatarBg = e.avatarBg;
 
     var teus    = e.teu || months26.map(function(){ return 0; });
@@ -1147,11 +1159,11 @@ function salesTable(M){
   var BORDER = '#D5DCE6';      // main grid border — softened
   var BORDER_STRONG = '#B0BAC8'; // block separators — still distinct but lighter
   var head='<tr>'
-    +'<th style="position:sticky;left:0;z-index:3;background:#EEF2F8;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:185px;min-width:185px;">Zones/Sales Rep</th>'
-    +'<th style="position:sticky;left:185px;z-index:3;background:#EEF2F8;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">Metrics</th>'
+    +'<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:185px;min-width:185px;">Zones/Sales Rep</th>'
+    +'<th style="position:sticky;left:185px;z-index:3;background:#F0F4FA;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">Metrics</th>'
     +'<th style="position:sticky;left:'+FY_COL_LEFT+'px;z-index:3;text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#FCF3DA;white-space:nowrap;box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">Grand Total</th>'
     + colLabels.slice(1).map(function(l){
-      return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#EEF2F8;white-space:nowrap;">'+l+'</th>';
+      return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#F0F4FA;white-space:nowrap;">'+l+'</th>';
     }).join('')
   +'</tr>';
 
@@ -1285,7 +1297,7 @@ function salesTable(M){
   }).join('');
 
   return '<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);overflow:hidden;">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid '+BORDER+';background:#F8FAFC;flex-wrap:wrap;gap:12px;">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid '+BORDER+';background:#FFFFFF;flex-wrap:wrap;gap:12px;">'
       +'<div style="display:flex;align-items:center;gap:10px;">'
         +'<span style="font-size:12.5px;font-weight:700;color:#15233B;">Sales Performance</span>'
         +'<span style="font-size:11px;color:#64748B;font-weight:500;">Monthly · '+state.currency+'</span>'
@@ -1625,7 +1637,7 @@ function render(){
   var app=document.getElementById('app');
   // Only rebuild sidebar on first load — avoids sidebar scroll jump
   if(!app.querySelector('aside')){
-    app.innerHTML=sidebar()+'<div id="main-col" style="flex:1;display:flex;flex-direction:column;height:100%;overflow:hidden;"><div id="topbar-slot"></div><main id="main-slot" style="flex:1;overflow-y:auto;padding:10px 14px 20px;"></main></div><div id="drawer-slot"></div>';
+    app.innerHTML=sidebar()+'<div id="main-col" style="flex:1;display:flex;flex-direction:column;height:100%;overflow:hidden;"><div id="topbar-slot"></div><main id="main-slot" style="flex:1;overflow-y:auto;padding:14px 18px 24px;"></main></div><div id="drawer-slot"></div>';
   }
   var mainEl=document.getElementById('main-slot');
   var scrollTop=mainEl?mainEl.scrollTop:0;
