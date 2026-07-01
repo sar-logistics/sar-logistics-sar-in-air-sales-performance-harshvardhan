@@ -644,7 +644,7 @@ async function computeSalesAggregate(db) {
   const repsRaw = [];
   for (const [repKey, monthData] of Object.entries(repMonthData)) {
     const meta = repMeta[repKey];
-    const gp   = activeMonths.map(m => Math.round(monthData[m]?.gp || 0));
+    const gp   = activeMonths.map(m => monthData[m]?.gp || 0);  // full float — rounding only at display time
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
     const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
     const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
@@ -665,7 +665,7 @@ async function computeSalesAggregate(db) {
   // Cross Sales branches — shown as "rep-like" rows under the Cross Sales
   // zone, but representing a Location/branch rather than an individual person.
   for (const [branchName, monthData] of Object.entries(branchMonthData)) {
-    const gp   = activeMonths.map(m => Math.round(monthData[m]?.gp || 0));
+    const gp   = activeMonths.map(m => monthData[m]?.gp || 0);  // full float
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
     const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
     const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
