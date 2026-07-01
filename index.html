@@ -498,7 +498,10 @@ var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:f
   yearType: 'Financial',
   fromDropOpen: false,
   toDropOpen: false,
-  weeklyDropOpen: false
+  weeklyDropOpen: false,
+  quarterDropOpen: false,
+  qyrDropOpen: false,
+  yearTypeDropOpen: false
 };
 
 /* ====================== HELPERS ====================== */
@@ -888,80 +891,135 @@ function topbar(){
         }
 
         if (v === 'Monthly' || v === 'Custom') {
-          function monthDrop(dropId, current, isOpen, actOpen, actSet){
-            return '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-              +'<div data-act="'+actOpen+'" style="display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none;'+(isOpen?'color:#1D5FCC;':'color:#0D2B5E;')+'">'
-                +'<span style="font-size:12px;font-weight:700;white-space:nowrap;">'+current+'</span>'
-                +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="'+(isOpen?'#1D5FCC':'#9AAFC8')+'" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;transition:transform 0.2s;'+(isOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
+          var fromOpen = state.fromDropOpen;
+          var toOpen   = state.toDropOpen;
+          var fromBtn  = '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+            +'<div data-act="toggleFromDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(fromOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+              +calIcon
+              +'<span style="pointer-events:none;">'+state.dateFrom+'</span>'
+              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(fromOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
+            +'</div>'
+            +(fromOpen
+              ? '<div id="from-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;padding:4px;">'
+                +months26.map(function(m){
+                  var active=m===state.dateFrom;
+                  return '<div data-act="setFrom" data-val="'+m+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
+                    +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';pointer-events:none;">'+m+'</div>'
+                  +'</div>';
+                }).join('')
               +'</div>'
-              +(isOpen
-                ? '<div id="'+dropId+'" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:120px;max-height:280px;overflow-y:auto;padding:4px;">'
-                  +months26.map(function(m){
-                    var active = m===current;
-                    return '<div data-act="'+actSet+'" data-val="'+m+'" style="padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:'+(active?'700':'500')+';color:'+(active?'#FFFFFF':'#0D2B5E')+';background:'+(active?'#1D5FCC':'transparent')+';white-space:nowrap;transition:background 0.1s;">'+m+'</div>';
-                  }).join('')
-                +'</div>'
-                : '')
-            +'</div>';
-          }
-          return dropPill('', calIcon,
-            monthDrop('from-drop', state.dateFrom, state.fromDropOpen, 'toggleFromDrop', 'setFrom')
-            +'<span style="color:#B7C4D9;font-weight:600;margin:0 6px;">–</span>'
-            +monthDrop('to-drop', state.dateTo, state.toDropOpen, 'toggleToDrop', 'setTo')
-          );
+              :'')
+          +'</div>';
+          var toBtn = '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+            +'<div data-act="toggleToDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(toOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+              +calIcon
+              +'<span style="pointer-events:none;">'+state.dateTo+'</span>'
+              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(toOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
+            +'</div>'
+            +(toOpen
+              ? '<div id="to-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;padding:4px;">'
+                +months26.map(function(m){
+                  var active=m===state.dateTo;
+                  return '<div data-act="setTo" data-val="'+m+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
+                    +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';pointer-events:none;">'+m+'</div>'
+                  +'</div>';
+                }).join('')
+              +'</div>'
+              :'')
+          +'</div>';
+          return fromBtn
+            +'<span style="color:#B7C4D9;font-weight:600;font-size:13px;margin:0 4px;flex-shrink:0;">–</span>'
+            +toBtn;
         }
 
         if (v === 'Weekly') {
           var wCurrent = state.weeklyMonth||months26[months26.length-1];
           var wOpen = state.weeklyDropOpen;
-          return '<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#9AAFC8;text-transform:uppercase;white-space:nowrap;flex-shrink:0;">MONTH</span>'
-            +dropPill('', calIcon,
-              '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-                +'<div data-act="toggleWeeklyDrop" style="display:flex;align-items:center;gap:5px;cursor:pointer;user-select:none;'+(wOpen?'color:#1D5FCC;':'color:#0D2B5E;')+'">'
-                  +'<span style="font-size:12px;font-weight:700;white-space:nowrap;">'+wCurrent+'</span>'
-                  +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="'+(wOpen?'#1D5FCC':'#9AAFC8')+'" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;transition:transform 0.2s;'+(wOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
-                +'</div>'
-                +(wOpen
-                  ? '<div id="weekly-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:130px;max-height:280px;overflow-y:auto;padding:4px;">'
-                    +months26.map(function(m){
-                      var active = m===wCurrent;
-                      var idx = months26.indexOf(m);
-                      var hasData = hasDataForIndices([idx]);
-                      return '<div data-act="setWeeklyMonth" data-val="'+m+'" style="padding:8px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;background:'+(active?'#1D5FCC':'transparent')+';transition:background 0.1s;">'
-                        +'<span style="font-size:12px;font-weight:'+(active?'700':'500')+';color:'+(active?'#FFFFFF':'#0D2B5E')+';white-space:nowrap;">'+m+'</span>'
-                        +(hasData?'<span style="width:6px;height:6px;border-radius:50%;background:'+(active?'rgba(255,255,255,0.6)':'#22C574')+';flex-shrink:0;"></span>':'<span style="width:6px;height:6px;border-radius:50%;background:'+(active?'rgba(255,255,255,0.3)':'#E2E8F0')+';flex-shrink:0;"></span>')
-                      +'</div>';
-                    }).join('')
-                  +'</div>'
-                  : '')
+          return '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+            +'<div data-act="toggleWeeklyDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(wOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+              +calIcon
+              +'<span style="pointer-events:none;">'+wCurrent+'</span>'
+              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(wOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
+            +'</div>'
+            +(wOpen
+              ? '<div id="weekly-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:150px;max-height:280px;overflow-y:auto;padding:4px;">'
+                +months26.map(function(m){
+                  var active=m===wCurrent;
+                  var idx=months26.indexOf(m);
+                  var hasData=hasDataForIndices([idx]);
+                  return '<div data-act="setWeeklyMonth" data-val="'+m+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;">'
+                    +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';pointer-events:none;">'+m+'</div>'
+                    +'<span style="width:6px;height:6px;border-radius:50%;background:'+(hasData?'#22C574':'#E2E8F0')+';flex-shrink:0;pointer-events:none;"></span>'
+                  +'</div>';
+                }).join('')
               +'</div>'
-            );
+              :'')
+          +'</div>';
         }
 
         if (v === 'Quarterly') {
-          var qOpts = [
-            {val:'Q1', label:'Q1  Apr – Jun'},
-            {val:'Q2', label:'Q2  Jul – Sep'},
-            {val:'Q3', label:'Q3  Oct – Dec'},
-            {val:'Q4', label:'Q4  Jan – Mar'},
-          ];
-          var qyrOpts = [{val:'FY26',label:'FY 2025-26'},{val:'FY27',label:'FY 2026-27'}];
-          return '<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#9AAFC8;text-transform:uppercase;white-space:nowrap;flex-shrink:0;">QUARTER</span>'
-            +dropPill('', calIcon,
-              styledSelect('setQuarterYear', state.quarterYear, qyrOpts)
-              +'<span style="color:#B7C4D9;font-weight:600;margin:0 2px;">·</span>'
-              +styledSelect('setQuarter', state.selectedQuarter, qOpts)
-            );
+          // FY Year pill
+          var qyrOpen = state.qyrDropOpen;
+          var qyrLabels = {'FY26':'FY 2025-26','FY27':'FY 2026-27'};
+          var qyrPill = '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+            +'<div data-act="toggleQyrDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(qyrOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+              +calIcon
+              +'<span style="pointer-events:none;">'+qyrLabels[state.quarterYear]+'</span>'
+              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(qyrOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
+            +'</div>'
+            +(qyrOpen
+              ? '<div id="qyr-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:150px;padding:4px;">'
+                +[{v:'FY26',l:'FY 2025-26'},{v:'FY27',l:'FY 2026-27'}].map(function(o){
+                  var active=o.v===state.quarterYear;
+                  return '<div data-act="setQuarterYear" data-val="'+o.v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
+                    +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';pointer-events:none;">'+o.l+'</div>'
+                  +'</div>';
+                }).join('')
+              +'</div>'
+              :'')
+          +'</div>';
+          // Quarter pill
+          var qOpen = state.quarterDropOpen;
+          var qLabels = {'Q1':'Q1  Apr–Jun','Q2':'Q2  Jul–Sep','Q3':'Q3  Oct–Dec','Q4':'Q4  Jan–Mar'};
+          var qPill = '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+            +'<div data-act="toggleQuarterDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(qOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+              +'<span style="pointer-events:none;">'+qLabels[state.selectedQuarter]+'</span>'
+              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(qOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
+            +'</div>'
+            +(qOpen
+              ? '<div id="quarter-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;padding:4px;">'
+                +['Q1','Q2','Q3','Q4'].map(function(q){
+                  var active=q===state.selectedQuarter;
+                  return '<div data-act="setQuarter" data-val="'+q+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
+                    +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';pointer-events:none;">'+qLabels[q]+'</div>'
+                  +'</div>';
+                }).join('')
+              +'</div>'
+              :'')
+          +'</div>';
+          return qyrPill+'<span style="color:#B7C4D9;font-weight:600;font-size:13px;margin:0 4px;flex-shrink:0;">·</span>'+qPill;
         }
 
         if (v === 'Yearly') {
-          // Financial Year vs Calendar Year toggle
-          var ytOpts = [
-            {val:'Financial', label:'Financial Year  (Apr – Mar)'},
-            {val:'Calendar',  label:'Calendar Year  (Jan – Dec)'},
-          ];
-          return '<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#9AAFC8;text-transform:uppercase;white-space:nowrap;flex-shrink:0;">YEAR TYPE</span>'
-            +dropPill('', calIcon, styledSelect('setYearType', state.yearType, ytOpts));
+          var ytOpen = state.yearTypeDropOpen;
+          var ytLabels = {'Financial':'Financial Year (Apr–Mar)','Calendar':'Calendar Year (Jan–Dec)'};
+          return '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+            +'<div data-act="toggleYearTypeDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;box-shadow:'+ps+';'+(ytOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+              +calIcon
+              +'<span style="pointer-events:none;">'+ytLabels[state.yearType]+'</span>'
+              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(ytOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
+            +'</div>'
+            +(ytOpen
+              ? '<div id="yeartype-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:210px;padding:4px;">'
+                +[{v:'Financial',l:'Financial Year (Apr–Mar)'},{v:'Calendar',l:'Calendar Year (Jan–Dec)'}].map(function(o){
+                  var active=o.v===state.yearType;
+                  return '<div data-act="setYearType" data-val="'+o.v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
+                    +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';pointer-events:none;">'+o.l+'</div>'
+                  +'</div>';
+                }).join('')
+              +'</div>'
+              :'')
+          +'</div>';
         }
 
         return ''; // fallback
@@ -1975,13 +2033,7 @@ function render(){
     : kpiRow(M)+(state.page==='leaderboard'?leaderboard():salesTable(M));
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
-  // Position all fixed dropdowns if open
-  requestAnimationFrame(function(){
-    positionViewDrop();
-    positionDrop('from-drop','toggleFromDrop');
-    positionDrop('to-drop','toggleToDrop');
-    positionDrop('weekly-drop','toggleWeeklyDrop');
-  });
+  requestAnimationFrame(positionAllDrops);
 }
 function renderKeepTopbar(){
   // Re-render everything EXCEPT topbar — used when date inputs change
@@ -2029,15 +2081,18 @@ function openDrill(entity, metric, col, valueFmt){
 
 document.addEventListener('change', function(ev){
   var el=ev.target;
-  if(el.getAttribute('data-act')==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.value; state.fromDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='setTo'){ ev.stopPropagation(); state.dateTo=el.value; state.toDropOpen=false; render(); }
+  if(el.getAttribute('data-act')==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.getAttribute('data-val'); state.fromDropOpen=false; render(); }
+  else if(el.getAttribute('data-act')==='setTo'){ ev.stopPropagation(); state.dateTo=el.getAttribute('data-val'); state.toDropOpen=false; render(); }
   else if(el.getAttribute('data-act')==='toggleFromDrop'){ ev.stopPropagation(); state.fromDropOpen=!state.fromDropOpen; state.toDropOpen=false; render(); requestAnimationFrame(function(){ positionDrop('from-drop','toggleFromDrop'); }); }
   else if(el.getAttribute('data-act')==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; render(); requestAnimationFrame(function(){ positionDrop('to-drop','toggleToDrop'); }); }
-  else if(el.getAttribute('data-act')==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.value; state.weeklyDropOpen=false; render(); }
+  else if(el.getAttribute('data-act')==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; render(); }
   else if(el.getAttribute('data-act')==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; render(); requestAnimationFrame(function(){ positionDrop('weekly-drop','toggleWeeklyDrop'); }); }
-  else if(el.getAttribute('data-act')==='setQuarter'){ ev.stopPropagation(); state.selectedQuarter=el.value; render(); }
-  else if(el.getAttribute('data-act')==='setQuarterYear'){ ev.stopPropagation(); state.quarterYear=el.value; render(); }
-  else if(el.getAttribute('data-act')==='setYearType'){ ev.stopPropagation(); state.yearType=el.value; render(); }
+  else if(el.getAttribute('data-act')==='setQuarter'){ ev.stopPropagation(); state.selectedQuarter=el.getAttribute('data-val'); state.quarterDropOpen=false; render(); }
+  else if(el.getAttribute('data-act')==='toggleQuarterDrop'){ ev.stopPropagation(); state.quarterDropOpen=!state.quarterDropOpen; state.qyrDropOpen=false; render(); requestAnimationFrame(function(){ positionDrop('quarter-drop','toggleQuarterDrop'); }); }
+  else if(el.getAttribute('data-act')==='setQuarterYear'){ ev.stopPropagation(); state.quarterYear=el.getAttribute('data-val'); state.qyrDropOpen=false; render(); }
+  else if(el.getAttribute('data-act')==='toggleQyrDrop'){ ev.stopPropagation(); state.qyrDropOpen=!state.qyrDropOpen; state.quarterDropOpen=false; render(); requestAnimationFrame(function(){ positionDrop('qyr-drop','toggleQyrDrop'); }); }
+  else if(el.getAttribute('data-act')==='setYearType'){ ev.stopPropagation(); state.yearType=el.getAttribute('data-val'); state.yearTypeDropOpen=false; render(); }
+  else if(el.getAttribute('data-act')==='toggleYearTypeDrop'){ ev.stopPropagation(); state.yearTypeDropOpen=!state.yearTypeDropOpen; render(); requestAnimationFrame(function(){ positionDrop('yeartype-drop','toggleYearTypeDrop'); }); }
   else if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
 });
 document.addEventListener('click', function(ev){
@@ -2204,16 +2259,22 @@ document.addEventListener('keydown', function(e){
     } else if(state.drill){ state.drill=null; render(); } 
   } 
 });
-window.addEventListener('resize', function(){ positionViewDrop(); positionDrop('from-drop','toggleFromDrop'); positionDrop('to-drop','toggleToDrop'); positionDrop('weekly-drop','toggleWeeklyDrop'); });
-window.addEventListener('scroll', function(){ positionViewDrop(); positionDrop('from-drop','toggleFromDrop'); positionDrop('to-drop','toggleToDrop'); positionDrop('weekly-drop','toggleWeeklyDrop'); }, true);
+function positionAllDrops(){
+  positionViewDrop();
+  positionDrop('from-drop','toggleFromDrop');
+  positionDrop('to-drop','toggleToDrop');
+  positionDrop('weekly-drop','toggleWeeklyDrop');
+  positionDrop('qyr-drop','toggleQyrDrop');
+  positionDrop('quarter-drop','toggleQuarterDrop');
+  positionDrop('yeartype-drop','toggleYearTypeDrop');
+}
+window.addEventListener('resize', positionAllDrops);
+window.addEventListener('scroll', positionAllDrops, true);
 document.addEventListener('click', function(e){
-  // Skip if the click is on a data-act element — the main dispatcher handles those
   if(e.target.closest('[data-act]')) return;
   var changed = false;
-  if(state.viewDropOpen){ state.viewDropOpen=false; changed=true; }
-  if(state.fromDropOpen){ state.fromDropOpen=false; changed=true; }
-  if(state.toDropOpen){ state.toDropOpen=false; changed=true; }
-  if(state.weeklyDropOpen){ state.weeklyDropOpen=false; changed=true; }
+  var dropKeys = ['viewDropOpen','fromDropOpen','toDropOpen','weeklyDropOpen','quarterDropOpen','qyrDropOpen','yearTypeDropOpen'];
+  dropKeys.forEach(function(k){ if(state[k]){ state[k]=false; changed=true; } });
   if(changed) render();
 });
 
