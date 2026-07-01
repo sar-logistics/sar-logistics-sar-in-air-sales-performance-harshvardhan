@@ -636,20 +636,10 @@ async function computeSalesAggregate(db) {
   }
 
   // 4. Shape into repsRaw
-  // Strip future months — any month label beyond the current real-world month
-  // should never appear in the dashboard (they're data entry errors in the source sheet).
-  const now = new Date();
-  const currentMonthLabel = MONTH_NAMES[now.getMonth()] + '-' + String(now.getFullYear()).slice(2);
-  const currentIdx = FY_MONTHS.indexOf(currentMonthLabel);
-
-  const activeMonths = FY_MONTHS.filter(m => {
-    const mi = FY_MONTHS.indexOf(m);
-    const isPresent = currentIdx < 0 || mi <= currentIdx; // include all if current month not in FY_MONTHS
-    return isPresent && (
-      Object.values(repMonthData).some(d => d[m]) ||
-      Object.values(branchMonthData).some(d => d[m])
-    );
-  });
+  const activeMonths = FY_MONTHS.filter(m =>
+    Object.values(repMonthData).some(d => d[m]) ||
+    Object.values(branchMonthData).some(d => d[m])
+  );
 
   const repsRaw = [];
   for (const [repKey, monthData] of Object.entries(repMonthData)) {
