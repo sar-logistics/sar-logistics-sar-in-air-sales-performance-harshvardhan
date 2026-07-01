@@ -1035,7 +1035,7 @@ function tableRows(){
     var achFy = e.tgt > 0 ? Math.round(sum(e.gp) / (e.tgt * months26.length) * 100) : 0;
 
     // Zone-level background
-    var groupBg = isGrand ? '#F1F6FF' : isZone ? '#F8F4FF' : '#FCFDFF';
+    var groupBg = isGrand ? '#EDF3FF' : isZone ? '#EEE8FF' : '#FFFFFF';
     var avatarBg = e.avatarBg;
 
     var teus    = e.teu || months26.map(function(){ return 0; });
@@ -1203,16 +1203,22 @@ function salesTable(M){
     var nameCell;
     if (isMiddleOfBlock && ri) {
       var avatarEl;
-      if (isZoneRow || isGrandRow || ri.isBranch) {
+      if (isZoneRow) {
+        // Zone: larger square avatar with heavier font to match the bolder zone label
+        avatarEl = '<div style="width:28px;height:28px;border-radius:7px;background:'+ri.avatarBg+';color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 5px rgba(0,0,0,0.18);">'+ri.initials+'</div>';
+      } else if (isGrandRow || ri.isBranch) {
         avatarEl = '<div style="width:22px;height:22px;border-radius:5px;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
       } else {
         avatarEl = '<div style="width:22px;height:22px;border-radius:50%;background:'+ri.avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ri.initials+'</div>';
       }
       var nameLabel = isZoneRow
-        ? '<div><div style="font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#7C3AED;text-transform:uppercase;line-height:1;">Zone</div><div style="font-size:11.5px;font-weight:700;color:#15233B;white-space:nowrap;">'+ri.name+'</div></div>'
+        ? '<div style="display:flex;flex-direction:column;gap:1px;">'
+            +'<div style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#7C3AED;text-transform:uppercase;line-height:1;">Zone</div>'
+            +'<div style="font-size:12.5px;font-weight:800;color:#3B0F8C;white-space:nowrap;letter-spacing:-0.01em;">'+ri.name+'</div>'
+          +'</div>'
         : ri.isBranch
           ? '<div><div style="font-size:8.5px;font-weight:700;letter-spacing:0.08em;color:#C26A12;text-transform:uppercase;line-height:1;">Branch</div><div style="font-size:11.5px;font-weight:'+ri.nameWeight+';color:#15233B;white-space:nowrap;">'+ri.name+'</div></div>'
-          : '<div style="font-size:11.5px;font-weight:'+ri.nameWeight+';white-space:nowrap;color:#15233B;">'+ri.name+'</div>';
+          : '<div style="font-size:11.5px;font-weight:'+ri.nameWeight+';white-space:nowrap;color:#374151;">'+ri.name+'</div>';
       var zoneToggle = '';
       if (isZoneRow) {
         var zCollapsed = state.zoneOpen[blockEntity] === false;
@@ -1221,7 +1227,9 @@ function salesTable(M){
           : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
         zoneToggle = '<div data-act="zoneToggle" data-zone="'+esc(blockEntity)+'" style="width:18px;height:18px;border-radius:5px;background:#7C3AED;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;margin-left:auto;box-shadow:0 1px 3px rgba(124,79,194,0.35);">'+chevSvg+'</div>';
       }
-      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;width:185px;min-width:185px;text-align:left;box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';"><div style="display:flex;align-items:center;justify-content:flex-start;gap:7px;">'+avatarEl+nameLabel+zoneToggle+'</div></td>';
+      // Zone rows get a bold left-edge purple accent bar to visually anchor them
+      var leftAccent = isZoneRow ? 'box-shadow:inset 3px 0 0 #7C3AED, inset -1.5px 0 0 '+BORDER_STRONG+';' : 'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';';
+      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 10px 6px 10px;z-index:2;width:185px;min-width:185px;text-align:left;'+leftAccent+'"><div style="display:flex;align-items:center;justify-content:flex-start;gap:7px;">'+avatarEl+nameLabel+zoneToggle+'</div></td>';
     } else {
       nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;width:185px;min-width:185px;box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';"></td>';
     }
