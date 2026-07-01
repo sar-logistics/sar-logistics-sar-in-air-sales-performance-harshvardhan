@@ -492,9 +492,10 @@ function updateUserField(email, fields, callback){
 }
 
 var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{},
-  weeklyMonth: null,      // which month is selected in Weekly view
-  selectedQuarter: 'Q1',  // Q1/Q2/Q3/Q4 in Quarterly view
-  yearType: 'Financial'   // 'Financial' (Apr-Mar) or 'Calendar' (Jan-Dec) in Yearly view
+  weeklyMonth: null,
+  selectedQuarter: 'Q1',
+  quarterYear: 'FY26',
+  yearType: 'Financial'
 };
 
 /* ====================== HELPERS ====================== */
@@ -552,44 +553,69 @@ function filteredMonthIndices(){
   if (!months26 || months26.length === 0) return [];
   var v = state.reportView;
 
-  // Weekly: show the single selected month
+  // Helper: get month abbreviation from label e.g. "Apr-25" → "Apr"
+  function mo(label){ return label.split('-')[0]; }
+  // Helper: get 2-digit year suffix e.g. "Apr-25" → "25"
+  function yr(label){ return label.split('-')[1]; }
+
+  // Weekly: show only the single selected month
   if (v === 'Weekly') {
     var wi = months26.indexOf(state.weeklyMonth || months26[months26.length-1]);
     return wi >= 0 ? [wi] : [months26.length - 1];
   }
 
-  // Quarterly: map Q1-Q4 to FY months (Apr-Jun, Jul-Sep, Oct-Dec, Jan-Mar)
+  // Quarterly: Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar (Indian FY)
   if (v === 'Quarterly') {
-    var qMonths = {
-      'Q1': ['Apr-25','May-25','Jun-25','Apr-26','May-26','Jun-26'],
-      'Q2': ['Jul-25','Aug-25','Sep-25','Jul-26','Aug-26','Sep-26'],
-      'Q3': ['Oct-25','Nov-25','Dec-25','Oct-26','Nov-26','Dec-26'],
-      'Q4': ['Jan-26','Feb-26','Mar-26','Jan-27','Feb-27','Mar-27']
+    var qMap = {
+      'Q1': ['Apr','May','Jun'],
+      'Q2': ['Jul','Aug','Sep'],
+      'Q3': ['Oct','Nov','Dec'],
+      'Q4': ['Jan','Feb','Mar']
     };
-    var qList = qMonths[state.selectedQuarter] || [];
+    var qMos = qMap[state.selectedQuarter] || [];
+    // FY26 = Apr-25→Mar-26, FY27 = Apr-26→Mar-27
+    // For Q4 (Jan-Mar), the year suffix shifts by 1 (Jan-26 belongs to FY26)
+    var fyYrMap = { 'FY26': { normal:'25', q4:'26' }, 'FY27': { normal:'26', q4:'27' } };
+    var fyYr = fyYrMap[state.quarterYear] || fyYrMap['FY26'];
     return months26.reduce(function(acc, m, i){
-      if (qList.indexOf(m) >= 0) acc.push(i);
+      var mMonth = mo(m), mYear = yr(m);
+      if (qMos.indexOf(mMonth) < 0) return acc;
+      // Q4 months (Jan/Feb/Mar) have a different year suffix in the FY
+      var expectedYr = (state.selectedQuarter === 'Q4') ? fyYr.q4 : fyYr.normal;
+      if (mYear === expectedYr) acc.push(i);
       return acc;
     }, []);
   }
 
-  // Yearly: Financial (Apr-Mar) or Calendar (Jan-Dec)
+  // Yearly: Financial (Apr-Mar) = all months, Calendar (Jan-Dec) = filter by Jan-Dec months
   if (v === 'Yearly') {
     if (state.yearType === 'Calendar') {
-      // Jan-Dec of any year present in months26
+      // Calendar year = exclude Apr-Dec of the first FY year (Apr-25 to Dec-25 excluded,
+      // only keep Jan-Mar of each year grouping i.e. Jan-26, Feb-26, Mar-26 etc.)
+      // More accurately: keep months whose prefix is Jan-Dec (all months) but
+      // grouped into Jan-Dec calendar year. Since data spans Apr-25→Dec-26,
+      // Calendar Year = Jan-26 onwards (Jan-26 to Dec-26).
       return months26.reduce(function(acc, m, i){
-        var mo = m.split('-')[0];
-        var calMonths = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        if (calMonths.indexOf(mo) >= 0) acc.push(i);
+        // Calendar year: include only months from Jan-XX onwards (skip Apr-Dec of first year)
+        var m3 = mo(m);
+        var y2 = yr(m);
+        // Keep if it belongs to a full calendar year range present in data
+        // Simple rule: include Jan-26 through Dec-26 (year "26")
+        var calYears = {};
+        months26.forEach(function(ml){
+          var y = yr(ml); var month = mo(ml);
+          if (month === 'Jan') calYears[y] = true;
+        });
+        if (calYears[y2]) acc.push(i);
         return acc;
       }, []);
     } else {
-      // Financial Year Apr-Mar — all months
+      // Financial Year (Apr-Mar) — all available months
       return months26.map(function(_,i){ return i; });
     }
   }
 
-  // Monthly / Custom: use dateFrom → dateTo range
+  // Monthly / Custom: dateFrom → dateTo range
   var fi = months26.indexOf(state.dateFrom);
   var ti = months26.indexOf(state.dateTo);
   if (fi < 0 && ti < 0) return months26.map(function(_,i){ return i; });
@@ -868,15 +894,19 @@ function topbar(){
         }
 
         if (v === 'Quarterly') {
-          // Q1 / Q2 / Q3 / Q4 selector — Financial Year quarters
           var qOpts = [
             {val:'Q1', label:'Q1  Apr – Jun'},
             {val:'Q2', label:'Q2  Jul – Sep'},
             {val:'Q3', label:'Q3  Oct – Dec'},
             {val:'Q4', label:'Q4  Jan – Mar'},
           ];
+          var qyrOpts = [{val:'FY26',label:'FY 2025-26'},{val:'FY27',label:'FY 2026-27'}];
           return '<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#9AAFC8;text-transform:uppercase;white-space:nowrap;flex-shrink:0;">QUARTER</span>'
-            +dropPill('', calIcon, styledSelect('setQuarter', state.selectedQuarter, qOpts));
+            +dropPill('', calIcon,
+              styledSelect('setQuarterYear', state.quarterYear, qyrOpts)
+              +'<span style="color:#B7C4D9;font-weight:600;margin:0 2px;">·</span>'
+              +styledSelect('setQuarter', state.selectedQuarter, qOpts)
+            );
         }
 
         if (v === 'Yearly') {
@@ -1911,6 +1941,7 @@ document.addEventListener('change', function(ev){
   else if(el.getAttribute('data-act')==='setTo'){ ev.stopPropagation(); state.dateTo=el.value; render(); }
   else if(el.getAttribute('data-act')==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.value; render(); }
   else if(el.getAttribute('data-act')==='setQuarter'){ ev.stopPropagation(); state.selectedQuarter=el.value; render(); }
+  else if(el.getAttribute('data-act')==='setQuarterYear'){ ev.stopPropagation(); state.quarterYear=el.value; render(); }
   else if(el.getAttribute('data-act')==='setYearType'){ ev.stopPropagation(); state.yearType=el.value; render(); }
   else if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
 });
