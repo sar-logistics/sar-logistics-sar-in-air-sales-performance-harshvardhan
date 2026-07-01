@@ -1456,127 +1456,75 @@ function leaderboard(){
     var tgtTotal = r.tgt * 6;
     var ach = tgtTotal > 0 ? gpTotal / tgtTotal : 0;
     var achPct = Math.round(ach * 100);
-    var last = r.gp[5], prev = r.gp[4];
-    var momPct = prev ? Math.round((last - prev) / prev * 100) : 0;
-    var trend = last > prev ? 'up' : last < prev ? 'down' : 'flat';
     return { name:r.name, hue:r.hue, gpTotal:gpTotal, shipTotal:shipTotal,
-      tgtTotal:tgtTotal, achPct:achPct, ach:ach, momPct:momPct, trend:trend,
-      gp:r.gp, tgt:r.tgt };
+      tgtTotal:tgtTotal, achPct:achPct, ach:ach, gp:r.gp, tgt:r.tgt };
   }).sort(function(a,b){ return b.gpTotal - a.gpTotal; });
 
-  var medals = ['🥇','🥈','🥉'];
+  var medalColors = ['#D4A017','#94A3B8','#C2793A']; // gold / silver / bronze accents for rank 1/2/3
 
-  // Sparkline helper
-  function spark(arr, color){
-    var max=Math.max.apply(null,arr), min=Math.min.apply(null,arr);
-    var W=80, H=24, pad=2;
-    var pts = arr.map(function(v,i){
-      var x = pad + i*((W-2*pad)/(arr.length-1));
-      var y = (H-pad) - ((v-min)/((max-min)||1))*(H-2*pad);
-      return x.toFixed(1)+','+y.toFixed(1);
-    }).join(' ');
-    return '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="overflow:visible;">'
-      +'<polyline points="'+pts+'" fill="none" stroke="'+color+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
-      +'</svg>';
-  }
-
-  // Top 3 podium
-  var podium = '';
-  if(sorted.length >= 3){
-    var order = [sorted[1], sorted[0], sorted[2]]; // 2nd, 1st, 3rd
-    var heights = ['80px','110px','60px'];
-    var podColors = ['#94A3B8','#F59E0B','#CD7C3A'];
-    var ranks = ['2nd','1st','3rd'];
-    podium = '<div style="display:flex;align-items:flex-end;justify-content:center;gap:12px;margin-bottom:28px;padding:24px 0 0;">';
-    order.forEach(function(r, idx){
-      var avatarBg = 'oklch(0.6 0.12 '+r.hue+')';
-      var ini = r.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
-      podium += '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;flex:1;max-width:180px;">'
-        +'<div style="width:44px;height:44px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;border:3px solid '+podColors[idx]+';">'+ini+'</div>'
-        +'<div style="text-align:center;">'
-          +'<div style="font-size:12px;font-weight:700;color:#15233B;white-space:nowrap;">'+r.name.split(' ')[0]+'</div>'
-          +'<div style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:'+podColors[idx]+';">'+fmtCur(r.gpTotal)+'</div>'
-        +'</div>'
-        +'<div style="width:100%;height:'+heights[idx]+';background:'+podColors[idx]+';border-radius:6px 6px 0 0;display:flex;align-items:center;justify-content:center;">'
-          +'<span style="font-size:22px;">'+medals[idx]+'</span>'
-        +'</div>'
-      +'</div>';
-    });
-    podium += '</div>';
-  }
-
-  // Full rankings table
+  // Rankings table — rank, rep, total sales, target, achievement only
   var rows = sorted.map(function(r, i){
     var avatarBg = 'oklch(0.6 0.12 '+r.hue+')';
     var ini = r.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
-    var trendColor = r.trend==='up'?'#15875A':r.trend==='down'?'#DC2626':'#94A3B8';
-    var trendIcon = r.trend==='up'?'▲':r.trend==='down'?'▼':'—';
-    var achColor = r.achPct>=100?'#15875A':r.achPct>=50?'#2563EB':'#DC2626';
+    var achColor = r.achPct>=100?'#0A7E53':r.achPct>=50?'#1D5FCC':'#C0392B';
     var barW = Math.min(100, r.achPct);
-    var barColor = r.achPct>=100?'#15875A':r.achPct>=50?'#2563EB':'#F59E0B';
-    var rankBg = i===0?'#FEF3C7':i===1?'#F1F5F9':i===2?'#FEF0E7':'transparent';
-    var sparkColor = r.trend==='up'?'#15875A':'#DC2626';
-    return '<tr style="border-bottom:1px solid #E2E8F0;background:'+rankBg+';">'
-      // rank
-      +'<td style="padding:8px 12px;font-size:13px;font-weight:700;color:#64748B;width:36px;text-align:center;">'+(i<3?medals[i]:'#'+(i+1))+'</td>'
+    var barColor = r.achPct>=100?'#0A7E53':r.achPct>=50?'#1D5FCC':'#E08A2B';
+    var isTop3 = i < 3;
+    var rankBadge = isTop3
+      ? '<div style="width:24px;height:24px;border-radius:50%;background:'+medalColors[i]+';color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,0.18);">'+(i+1)+'</div>'
+      : '<div style="width:24px;height:24px;border-radius:50%;background:#F0F4FA;color:#8B97A8;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">'+(i+1)+'</div>';
+    var rowBg = isTop3 ? (i===0?'#FEFBF0':i===1?'#F8FAFC':'#FDF6F0') : '#FFFFFF';
+    return '<tr style="border-bottom:1px solid #EEF2F8;background:'+rowBg+';">'
+      // rank badge
+      +'<td style="padding:10px 14px;width:42px;">'+rankBadge+'</td>'
       // name
-      +'<td style="padding:8px 12px;">'
-        +'<div style="display:flex;align-items:center;gap:9px;">'
-          +'<div style="width:28px;height:28px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini+'</div>'
-          +'<span style="font-size:12.5px;font-weight:600;color:#15233B;white-space:nowrap;">'+r.name+'</span>'
+      +'<td style="padding:10px 12px;">'
+        +'<div style="display:flex;align-items:center;gap:10px;">'
+          +'<div style="width:30px;height:30px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini+'</div>'
+          +'<span style="font-size:13px;font-weight:700;color:#0D2B5E;white-space:nowrap;">'+r.name+'</span>'
         +'</div>'
       +'</td>'
-      // GP
-      +'<td style="padding:8px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:12.5px;font-weight:700;color:#059669;white-space:nowrap;">'+fmtCur(r.gpTotal)+'</td>'
+      // Total Sales (GP)
+      +'<td style="padding:10px 14px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#0D2B5E;white-space:nowrap;">'+fmtCur(r.gpTotal)+'</td>'
       // Target
-      +'<td style="padding:8px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;color:#64748B;white-space:nowrap;">'+(r.tgtTotal>0?fmtCur(r.tgtTotal):'—')+'</td>'
+      +'<td style="padding:10px 14px;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:600;color:#9AAFC8;white-space:nowrap;">'+(r.tgtTotal>0?fmtCur(r.tgtTotal):'—')+'</td>'
       // Achievement bar
-      +'<td style="padding:8px 16px;min-width:140px;">'
-        +'<div style="display:flex;align-items:center;gap:8px;">'
-          +'<div style="flex:1;height:6px;background:#E2E8F0;border-radius:99px;overflow:hidden;">'
+      +'<td style="padding:10px 16px;min-width:160px;">'
+        +'<div style="display:flex;align-items:center;gap:9px;">'
+          +'<div style="flex:1;height:6px;background:#EAF0F8;border-radius:99px;overflow:hidden;">'
             +'<div style="height:100%;width:'+barW+'%;background:'+barColor+';border-radius:99px;"></div>'
           +'</div>'
-          +'<span style="font-size:11px;font-weight:700;color:'+achColor+';width:36px;text-align:right;">'+(r.tgtTotal>0?r.achPct+'%':'—')+'</span>'
+          +'<span style="font-size:11.5px;font-weight:800;color:'+achColor+';width:42px;text-align:right;white-space:nowrap;">'+(r.tgtTotal>0?r.achPct+'%':'—')+'</span>'
         +'</div>'
-      +'</td>'
-      // Shipments
-      +'<td style="padding:8px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:12px;color:#374151;">'+r.shipTotal+'</td>'
-      // Trend sparkline
-      +'<td style="padding:8px 12px;">'+spark(r.gp, sparkColor)+'</td>'
-      // MoM
-      +'<td style="padding:8px 12px;text-align:right;white-space:nowrap;">'
-        +'<span style="font-size:11.5px;font-weight:600;color:'+trendColor+';">'+trendIcon+' '+(r.momPct>0?'+':'')+r.momPct+'%</span>'
       +'</td>'
     +'</tr>';
   }).join('');
 
-  return '<div style="background:#FFFFFF;border:1px solid #CBD5E1;border-radius:12px;box-shadow:0 1px 3px rgba(20,35,59,0.08);overflow:hidden;">'
+  return '<div style="background:#FFFFFF;border:1px solid #E3EAF3;border-radius:12px;box-shadow:0 1px 3px rgba(13,43,94,0.05),0 4px 14px rgba(13,43,94,0.05);overflow:hidden;">'
     // header — same structure as sales table so Back button is in same spot
-    +'<div style="padding:9px 14px;border-bottom:1px solid #E2E8F0;display:flex;align-items:center;justify-content:space-between;">'
-      +'<div>'
-        +'<span style="font-size:12.5px;font-weight:700;color:#15233B;">Leaderboard</span>'
-        +'<span style="font-size:11px;color:#64748B;font-weight:500;margin-left:8px;">'+state.currency+'</span>'
+    +'<div style="padding:14px 18px;border-bottom:1px solid #E3EAF3;background:#FFFFFF;display:flex;align-items:center;justify-content:space-between;">'
+      +'<div style="display:flex;align-items:center;gap:8px;">'
+        +'<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#1D5FCC,#0D2B5E);display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+          +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M17 3H7v6a5 5 0 0010 0V3z"/><path d="M7 6H3v2a4 4 0 004 4M17 6h4v2a4 4 0 01-4 4"/></svg>'
+        +'</div>'
+        +'<span style="font-size:13.5px;font-weight:800;color:#0D2B5E;">Leaderboard</span>'
+        +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;">'+state.currency+'</span>'
       +'</div>'
       +'<div style="display:flex;align-items:center;gap:10px;">'
-        +'<span style="font-size:10.5px;color:#94A3B8;font-weight:500;">Jan-26 – Jun-26</span>'
-        +'<button data-act="page" data-val="sales" class="btnq" style="display:flex;align-items:center;gap:5px;background:#2563EB;border:1px solid #2563EB;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Close</button>'
+        +'<span style="font-size:10.5px;color:#9AAFC8;font-weight:600;white-space:nowrap;">Jan-26 – Jun-26</span>'
+        +'<button data-act="page" data-val="sales" class="btnq" style="display:flex;align-items:center;gap:5px;background:#1D5FCC;border:1px solid #1D5FCC;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Close</button>'
       +'</div>'
     +'</div>'
-    // podium
-    + podium
     // table
     +'<div style="overflow-x:auto;">'
       +'<table style="width:100%;border-collapse:collapse;">'
-        +'<thead style="background:#F8FAFC;">'
+        +'<thead style="background:#F4F7FB;">'
           +'<tr>'
-            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:center;width:36px;">#</th>'
-            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:left;">Sales Rep</th>'
-            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:right;">Gross Profit</th>'
-            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:right;">Target</th>'
-            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:left;min-width:140px;">Achievement</th>'
-            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:right;">Shipments</th>'
-            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:left;">GP Trend</th>'
-            +'<th style="padding:7px 12px;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;border-bottom:2px solid #CBD5E1;text-align:right;">MoM</th>'
+            +'<th style="padding:9px 14px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:left;width:42px;">#</th>'
+            +'<th style="padding:9px 12px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:left;">Sales Rep</th>'
+            +'<th style="padding:9px 14px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:right;">Total Sales</th>'
+            +'<th style="padding:9px 14px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:right;">Target</th>'
+            +'<th style="padding:9px 16px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:left;min-width:160px;">Achievement</th>'
           +'</tr>'
         +'</thead>'
         +'<tbody>'+rows+'</tbody>'
