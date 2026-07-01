@@ -1157,26 +1157,26 @@ function kpiRow(M){
     var gradId = 'sg'+uid;
     var zoneW = (W - 2*pad) / Math.max(data.length - 1, 1);
 
-    // Hover dots + tooltip via SVG title and JS mouseover
+    // Hover dots + tooltip
     var circles = pts.map(function(p, i){
-      var valStr = p.label ? p.label+': '+p.v : String(p.v);
-      return '<circle class="sp-dot" cx="'+p.x+'" cy="'+p.y+'" r="2.5" fill="#FFFFFF" stroke="'+color+'" stroke-width="1.8"'
+      return '<circle class="sp-dot" cx="'+p.x+'" cy="'+p.y+'" r="3" fill="#FFFFFF" stroke="'+color+'" stroke-width="2"'
         +' style="opacity:0;transition:opacity 0.15s;cursor:default;"/>'
-        // invisible wider hit zone
         +'<rect x="'+(p.x - zoneW/2)+'" y="0" width="'+zoneW+'" height="'+H+'" fill="transparent"'
-        +' onmouseenter="this.previousSibling.style.opacity=1;this.parentNode.querySelector(\'.sp-tt-'+uid+'-'+i+'\').style.opacity=1;"'
-        +' onmouseleave="this.previousSibling.style.opacity=0;this.parentNode.querySelector(\'.sp-tt-'+uid+'-'+i+'\').style.opacity=0;"/>';
+        +' onmouseenter="this.previousSibling.style.opacity=1;var tt=this.parentNode.querySelector(\'.sp-tt-'+uid+'-'+i+'\');if(tt)tt.style.opacity=1;"'
+        +' onmouseleave="this.previousSibling.style.opacity=0;var tt=this.parentNode.querySelector(\'.sp-tt-'+uid+'-'+i+'\');if(tt)tt.style.opacity=0;"/>';
     }).join('');
 
-    // Tooltip labels — one per point, positioned above the dot
+    // Tooltip: small pill above each dot with the value
     var tooltips = pts.map(function(p, i){
-      var valStr = p.label || '';
-      var numStr = typeof p.v === 'number' ? (p.v % 1 === 0 ? p.v : p.v.toFixed(1)) : p.v;
-      var ttX = Math.min(Math.max(p.x, 14), W - 14);
-      var ttY = Math.max(p.y - 8, 10);
-      return '<text class="sp-tt-'+uid+'-'+i+'" x="'+ttX+'" y="'+ttY+'"'
-        +' text-anchor="middle" font-size="7.5" font-weight="700" fill="'+color+'"'
-        +' style="opacity:0;transition:opacity 0.15s;pointer-events:none;">'+numStr+'</text>';
+      var numStr = typeof p.v === 'number' ? (p.v % 1 === 0 ? String(p.v) : p.v.toFixed(1)) : String(p.v);
+      var lbl = p.label ? p.label : '';
+      var ttX = Math.min(Math.max(p.x, 16), W - 16);
+      var ttY = Math.max(p.y - 14, 6);
+      var bgW = Math.max(numStr.length * 5 + 8, 28);
+      return '<g class="sp-tt-'+uid+'-'+i+'" style="opacity:0;transition:opacity 0.15s;pointer-events:none;">'
+        +'<rect x="'+(ttX - bgW/2)+'" y="'+(ttY - 8)+'" width="'+bgW+'" height="11" rx="3" fill="'+color+'" opacity="0.92"/>'
+        +'<text x="'+ttX+'" y="'+(ttY + 0.5)+'" text-anchor="middle" font-size="7" font-weight="700" fill="#FFFFFF">'+numStr+'</text>'
+      +'</g>';
     }).join('');
 
     return '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="display:block;overflow:visible;" preserveAspectRatio="none">'
@@ -1252,7 +1252,7 @@ function kpiRow(M){
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px;">'
     + kpis.map(function(k){
       var spark = sparkline(k.data, k.spark, pointLabels);
-      return '<div class="kpi-card" style="background:#FFFFFF;border:1.5px solid #D8E1F0;border-radius:16px;padding:14px 14px 0 14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);overflow:hidden;transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;display:flex;flex-direction:column;">'
+      return '<div class="kpi-card" style="background:#FFFFFF;border:1.5px solid #D8E1F0;border-radius:16px;padding:14px 14px 0 14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);overflow:visible;transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;display:flex;flex-direction:column;">'
         // Label
         +'<div style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5B7298;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
         // Big value
