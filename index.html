@@ -1678,7 +1678,7 @@ function allZonesToggleButton(){
   var icon = anyExpanded
     ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>'
     : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
-  return '<button data-act="toggleAllZones" class="btnq" style="display:flex;align-items:center;gap:5px;background:#EEF3FC;border:1px solid #C5D4EC;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+icon+label+'</button>';
+  return '<button data-act="toggleAllZones" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+icon+label+'</button>';
 }
 
 function salesTable(M){
@@ -1868,13 +1868,13 @@ function salesTable(M){
   }).join('');
 
   return '<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);overflow:hidden;">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid '+BORDER+';background:#FFFFFF;flex-wrap:wrap;gap:12px;">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid '+BORDER+';background:#FFFFFF;flex-wrap:wrap;gap:10px;">'
       +'<div style="display:flex;align-items:center;gap:10px;">'
-        +'<span style="font-size:12.5px;font-weight:700;color:#15233B;">Sales Performance</span>'
-        +'<span style="font-size:11px;color:#64748B;font-weight:500;">'+state.reportView+' · '+state.currency+'</span>'
+        +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Sales Performance</span>'
+        +'<span style="font-size:11px;color:#9AAFC8;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+state.reportView+' · '+state.currency+'</span>'
         +allZonesToggleButton()
       +'</div>'
-      +'<div style="display:flex;align-items:center;gap:12px;">'
+      +'<div style="display:flex;align-items:center;gap:10px;">'
         +(function(){
   var fm = filteredMonths();
   var v = state.reportView;
@@ -1883,11 +1883,11 @@ function salesTable(M){
   else if (v === 'Quarterly') label = state.quarterYear + ' ' + state.selectedQuarter;
   else if (v === 'Yearly') label = state.yearType === 'Calendar' ? 'Calendar Year' : 'Financial Year';
   else if (fm.length > 0) label = fm[0] + (fm.length > 1 ? ' – ' + fm[fm.length-1] : '');
-  return '<span style="font-size:12px;color:#94A3B8;font-weight:500;">'+label+'</span>';
+  return '<span style="font-size:11.5px;color:#5B7298;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+label+'</span>';
 })()
         +(state.page==='leaderboard'
-          ? '<button data-act="page" data-val="sales" class=\"btnq\" style=\"display:flex;align-items:center;gap:5px;background:#2563EB;border:1px solid #2563EB;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;\"><svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><path d=\"M19 12H5M12 19l-7-7 7-7\"/></svg>Back</button>'
-          : '<button data-act="page" data-val="leaderboard" class=\"btnq\" style=\"display:flex;align-items:center;gap:5px;background:#EFF4FF;border:1px solid #BFDBFE;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;color:#2563EB;cursor:pointer;\"><svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"><polyline points=\"22 12 18 12 15 21 9 3 6 12 2 12\"/></svg>Leaderboard</button>')
+          ? '<button data-act="page" data-val="sales" class="btnq" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;box-shadow:0 2px 5px rgba(30,58,102,0.25);"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back</button>'
+          : '<button data-act="page" data-val="leaderboard" class="btnq" style="display:flex;align-items:center;gap:6px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Leaderboard</button>')
       +'</div>'
     +'</div>'
     +'<div style="overflow-x:auto;">'
