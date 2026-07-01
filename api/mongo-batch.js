@@ -290,19 +290,13 @@ const SALES_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 async function getDrillRows(db, entity, metric, month) {
   const CROSS_SALES_ZONE = "Cross Sales";
 
-  // 1. Load ALL mapping rows (both FY26 and FY27) and split by _fy,
-  //    so zone→reps lookups use the correct year's mapping for each job row.
+  // ── 1. Load mapping — EXACT same logic as computeSalesAggregate ─────
   const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
-
-  // Per-FY lookup structures
-  const repsByZoneByFY     = {}; // fy → zone → [normalizedSalesPersonName, ...]
-  const displayByNormByFY  = {}; // fy → normalizedName → displayName
-  const normByDisplayByFY  = {}; // fy → displayName → normalizedName
-  const rawNamesByNormByFY = {}; // fy → normalizedName → [rawName, ...]
-  const allMappedNamesByFY = {}; // fy → Set of normalizedNames
-
-  // Also maintain a flat allMappedNames (across all FYs) for Cross Sales exclusion
-  const allMappedNames = new Set();
+  const repLookupByFY      = { FY26: {}, FY27: {} };
+  const repsByZoneByFY     = { FY26: {}, FY27: {} };
+  const normByDisplayByFY  = { FY26: {}, FY27: {} };
+  const rawNamesByNormByFY = { FY26: {}, FY27: {} };
+  const allMappedNames     = new Set();
 
   for (const row of mappingRows) {
     const rawName = row["Sales Rep Name"];
@@ -312,33 +306,45 @@ async function getDrillRows(db, entity, metric, month) {
     const zone = String(row["Zone"] || "Unassigned").trim();
     const displayName = String(row["Display Name"] || rawName || "").trim();
 
-    if (!repsByZoneByFY[fy])     repsByZoneByFY[fy]     = {};
-    if (!displayByNormByFY[fy])  displayByNormByFY[fy]  = {};
-    if (!normByDisplayByFY[fy])  normByDisplayByFY[fy]  = {};
-    if (!rawNamesByNormByFY[fy]) rawNamesByNormByFY[fy] = {};
-    if (!allMappedNamesByFY[fy]) allMappedNamesByFY[fy] = new Set();
-
+    repLookupByFY[fy][norm] = { displayName, zone,
+      lob: String(row["LOB"] || "").trim(),
+      monthlyTarget: parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0,
+      email: String(row["Email ID"] || "").toLowerCase().trim(),
+    };
     if (!repsByZoneByFY[fy][zone]) repsByZoneByFY[fy][zone] = [];
     repsByZoneByFY[fy][zone].push(norm);
-    displayByNormByFY[fy][norm] = displayName;
     normByDisplayByFY[fy][displayName] = norm;
     if (!rawNamesByNormByFY[fy][norm]) rawNamesByNormByFY[fy][norm] = [];
     rawNamesByNormByFY[fy][norm].push(String(rawName || "").trim());
-    allMappedNamesByFY[fy].add(norm);
     allMappedNames.add(norm);
   }
 
-  // Cross Sales detection: entity not found as a zone or display name in ANY FY
+  // ── 2. Resolve entity ────────────────────────────────────────────────
   const isCrossSalesZone = entity === CROSS_SALES_ZONE;
-  const isKnownZone      = Object.values(repsByZoneByFY).some(z => z[entity]);
-  const isKnownRep       = Object.values(normByDisplayByFY).some(d => d[entity]);
-  const isCrossSalesBranch = !isCrossSalesZone && !isKnownZone && !isKnownRep && entity !== "Grand Total";
+  const isGrandTotal     = entity === "Grand Total";
+  const isKnownZone = Object.values(repsByZoneByFY).some(z => z[entity]);
+  const isKnownRep  = Object.values(normByDisplayByFY).some(d => d[entity]);
+  const isCrossSalesBranch = !isCrossSalesZone && !isGrandTotal && !isKnownZone && !isKnownRep;
+  const useCrossSalesPath  = isCrossSalesZone || isCrossSalesBranch;
 
-  const isFYTotal = month === "FY Total";
+  // ── 3. Build MongoDB $in filter ──────────────────────────────────────
+  const allRelevantRawNames = new Set();
+  if (!useCrossSalesPath) {
+    ["FY26","FY27"].forEach(fy => {
+      let norms = [];
+      if (isGrandTotal)                         norms = Object.keys(repLookupByFY[fy]);
+      else if (repsByZoneByFY[fy][entity])      norms = repsByZoneByFY[fy][entity];
+      else if (normByDisplayByFY[fy][entity])   norms = [normByDisplayByFY[fy][entity]];
+      norms.forEach(norm =>
+        (rawNamesByNormByFY[fy][norm] || []).forEach(raw => allRelevantRawNames.add(raw))
+      );
+    });
+  }
+
+  const isFYTotal      = month === "FY Total";
   const isAirMetric    = metric === "Tons (Air)";
   const isTeuLclMetric = metric === "TEUs (Ocean)" || metric === "LCL (Ocean in CBM)";
 
-  // Skip collections that can never contribute to this metric
   const relevantCollections = JOB_COLLECTIONS.filter(collName => {
     if (isAirMetric)    return collName.includes("air");
     if (isTeuLclMetric) return collName.includes("sea") || collName.includes("isotank");
@@ -346,46 +352,19 @@ async function getDrillRows(db, entity, metric, month) {
   });
 
   const baseProjection = {
-    "Shipment No": 1, "Sales Person": 1, "Job Date": 1, "LOB": 1, "Location": 1, "Cargo Type": 1,
-    "Customer": 1, "Loading Port": 1, "Discharge Port": 1,
-    "Actual Profit (J=C-G)": 1,
-    "ETD Loading Port": 1, "ETA Discharge": 1,
-    "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
-    "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
+    "Shipment No":1,"Sales Person":1,"Job Date":1,"LOB":1,"Location":1,"Cargo Type":1,
+    "Customer":1,"Loading Port":1,"Discharge Port":1,"Actual Profit (J=C-G)":1,
+    "ETD Loading Port":1,"ETA Discharge":1,
+    "Chargeable Weight":1,"Chargeable Weight Unit":1,
+    "Container TEU":1,"Volume":1,"Volume Unit":1,
   };
 
-  const useCrossSalesPath = isCrossSalesZone || isCrossSalesBranch;
-
-  // For non-cross-sales entities, build a combined $in filter of all raw
-  // Sales Person strings that could possibly match across both FY26/FY27 —
-  // then refine per-row using the row's actual fiscal year below.
-  const allRelevantRawNames = new Set();
-  if (!useCrossSalesPath && entity !== "Grand Total") {
-    ["FY26", "FY27"].forEach(fy => {
-      const zoneReps = (repsByZoneByFY[fy] || {})[entity];
-      const repNorm  = (normByDisplayByFY[fy] || {})[entity];
-      const norms = zoneReps ? zoneReps : (repNorm ? [repNorm] : []);
-      norms.forEach(norm => {
-        ((rawNamesByNormByFY[fy] || {})[norm] || []).forEach(raw => allRelevantRawNames.add(raw));
-      });
-    });
-  } else if (!useCrossSalesPath && entity === "Grand Total") {
-    allMappedNames.forEach(norm => {
-      ["FY26","FY27"].forEach(fy => {
-        ((rawNamesByNormByFY[fy] || {})[norm] || []).forEach(raw => allRelevantRawNames.add(raw));
-      });
-    });
-  }
-
   const queryPromises = relevantCollections.map(collName => {
-    const filter = useCrossSalesPath
-      ? {}
+    const filter = useCrossSalesPath ? {}
       : (allRelevantRawNames.size > 0
           ? { "Sales Person": { $in: Array.from(allRelevantRawNames) } }
           : { "Sales Person": { $in: [] } });
-    return db.collection(collName)
-      .find(filter, { projection: baseProjection })
-      .toArray()
+    return db.collection(collName).find(filter, { projection: baseProjection }).toArray()
       .then(rows => ({ collName, rows }));
   });
 
@@ -394,14 +373,13 @@ async function getDrillRows(db, entity, metric, month) {
 
   for (const { collName, rows } of resultsByCollection) {
     for (const job of rows) {
-      const normPerson = normalizeName(job["Sales Person"]);
-      if (!normPerson) continue;
+      const salesPerson = normalizeName(job["Sales Person"]);
+      if (!salesPerson) continue;
 
-      // Determine this row's fiscal year from its actual date first,
-      // so we use the correct year's mapping for zone/rep membership checks.
-      const cls      = classifyRow(job, collName);
-      const dateCol  = getDateColumnFor(cls);
-      const rawDate  = job[dateCol] || job["Job Date"];
+      // ── Date — EXACT same logic as computeSalesAggregate ───────────────
+      const cls     = classifyRow(job, collName);
+      const dateCol = getDateColumnFor(cls);
+      const rawDate = job[dateCol] || job["Job Date"];
       if (!rawDate) continue;
       const d = new Date(rawDate);
       if (isNaN(d.getTime())) continue;
@@ -409,74 +387,58 @@ async function getDrillRows(db, entity, metric, month) {
       if (!FY_MONTHS.includes(monthLabel)) continue;
       if (!isFYTotal && monthLabel !== month) continue;
 
-      const rowFY = fyForMonthLabel(monthLabel);
+      // ── FY-aware mapping — EXACT same as computeSalesAggregate ─────────
+      const rowFY  = fyForMonthLabel(monthLabel);
+      const repLookup = repLookupByFY[rowFY] || {};
+      const mapped    = repLookup[salesPerson];
 
-      // ── Entity membership check (per fiscal year) ──────────────
+      // ── Entity membership — mirrors computeSalesAggregate exactly ───────
       if (useCrossSalesPath) {
-        if (allMappedNames.has(normPerson)) continue;
+        if (allMappedNames.has(salesPerson)) continue;
         if (isCrossSalesBranch) {
           const branch = String(job["Location"] || "Unspecified").trim() || "Unspecified";
           if (branch !== entity) continue;
         }
       } else {
-        const mappingForFY   = repsByZoneByFY[rowFY]    || {};
-        const normByDispForFY = normByDisplayByFY[rowFY] || {};
-        const allMappedForFY  = allMappedNamesByFY[rowFY] || new Set();
-
-        if (entity === "Grand Total") {
-          // Only include rows whose sales person is mapped in THIS row's fiscal year
-          if (!allMappedForFY.has(normPerson)) continue;
-        } else if (mappingForFY[entity]) {
-          // entity is a zone name — check rep is in that zone for this FY
-          if (!mappingForFY[entity].includes(normPerson)) continue;
-        } else if (normByDispForFY[entity]) {
-          // entity is a rep display name — check it matches this rep for this FY
-          if (normByDispForFY[entity] !== normPerson) continue;
-        } else {
-          // entity not found in this FY's mapping — skip
-          continue;
+        if (!mapped) continue;
+        if (!isGrandTotal) {
+          if (isKnownZone && mapped.zone !== entity)         continue;
+          if (isKnownRep  && mapped.displayName !== entity)  continue;
         }
       }
 
-      // ── Metric-specific filtering ───────────────────────────────
+      // ── Metric filtering ────────────────────────────────────────────────
       const cargoMetric = hasTeuLclRow(cls) ? cargoMetricFor(job) : null;
-      if (metric === "Tons (Air)"          && !isAirRow(cls))            continue;
-      if (metric === "TEUs (Ocean)"        && cargoMetric !== "TEU")     continue;
-      if (metric === "LCL (Ocean in CBM)"  && cargoMetric !== "LCL")     continue;
+      if (metric === "Tons (Air)"         && !isAirRow(cls))        continue;
+      if (metric === "TEUs (Ocean)"       && cargoMetric !== "TEU") continue;
+      if (metric === "LCL (Ocean in CBM)" && cargoMetric !== "LCL") continue;
 
-      // ── Compute metric value ────────────────────────────────────
-      let metricVal = 0;
-      let metricUnit = "";
+      // ── Metric value — EXACT same formulas as computeSalesAggregate ────
+      let metricVal = 0; let metricUnit = "";
       if (metric === "Shipments") {
         metricVal = 1; metricUnit = "job";
       } else if (metric === "GP") {
-        metricVal = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0;
-        metricUnit = "currency";
+        metricVal = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0; metricUnit = "currency";
       } else if (metric === "Tons (Air)") {
         const rawWeight = parseFloat(job["Chargeable Weight"] || 0) || 0;
         const unit = String(job["Chargeable Weight Unit"] || "").toLowerCase().trim();
-        metricVal = (unit === "ton" || unit === "tons" || unit === "mt") ? rawWeight
-                  : (unit === "lb"  || unit === "lbs")                  ? rawWeight * 0.000453592
-                  : rawWeight / 1000;
+        metricVal = (unit==="ton"||unit==="tons"||unit==="mt") ? rawWeight
+                  : (unit==="lb"||unit==="lbs") ? rawWeight*0.000453592 : rawWeight/1000;
         metricUnit = "t";
       } else if (metric === "TEUs (Ocean)") {
-        metricVal = parseFloat(job["Container TEU"] || 0) || 0;
-        metricUnit = "TEU";
+        metricVal = parseFloat(job["Container TEU"] || 0) || 0; metricUnit = "TEU";
       } else if (metric === "LCL (Ocean in CBM)") {
-        const vol     = parseFloat(job["Volume"] || 0) || 0;
+        const vol = parseFloat(job["Volume"] || 0) || 0;
         const volUnit = String(job["Volume Unit"] || "").toUpperCase().trim();
-        metricVal = (!volUnit || volUnit === "CBM") ? vol : 0;
-        metricUnit = "m³";
+        metricVal = (!volUnit || volUnit === "CBM") ? vol : 0; metricUnit = "m³";
       }
-
-      // Skip zero-value rows for non-GP/Shipments metrics
       if (metric !== "Shipments" && metric !== "GP" && metricVal === 0) continue;
 
       matchedRows.push({
-        shipmentNo:  job["Shipment No"]  || "—",
-        salesPerson: job["Sales Person"] || "",
-        customer:    job["Customer"]     || "",
-        origin:      job["Loading Port"] || "",
+        shipmentNo:  job["Shipment No"]    || "—",
+        salesPerson: job["Sales Person"]   || "",
+        customer:    job["Customer"]       || "",
+        origin:      job["Loading Port"]   || "",
         destination: job["Discharge Port"] || "",
         lob:   cls.kind + (cls.direction ? " " + cls.direction : ""),
         month: monthLabel,
@@ -489,17 +451,14 @@ async function getDrillRows(db, entity, metric, month) {
   }
 
   matchedRows.sort((a, b) => new Date(b.date) - new Date(a.date));
-
   const totalMetric = matchedRows.reduce((s, r) => s + r.metricVal, 0);
   const totalGP     = matchedRows.reduce((s, r) => s + r.gp,        0);
 
   return {
-    success: true,
-    entity, metric, month,
+    success: true, entity, metric, month,
     count: matchedRows.length,
-    totalMetric,
-    totalGP,
-    rows: matchedRows.slice(0, 500), // increased cap — totals are from full set
+    totalMetric, totalGP,
+    rows: matchedRows.slice(0, 500),
   };
 }
 
