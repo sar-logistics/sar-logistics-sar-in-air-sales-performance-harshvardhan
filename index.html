@@ -381,7 +381,8 @@ function resetSignInButton() {
 // Single brand gradient pair — used consistently for every accented element
 // (KPI icon chips, Refresh button, currency toggle thumb) so nothing in the
 // header/KPI row looks like it belongs to a different colour family.
-var BRAND_A1 = '#5678C2'; // muted mid slate-blue — softer than a saturated primary blue
+var BRAND_A1 = '#5678C2';
+var _dropdownPanels = ''; // panels collected by topbar(), written to portal by render() // muted mid slate-blue — softer than a saturated primary blue
 var BRAND_A2 = '#1E3A66'; // muted deep navy — not near-black
 
 var months26 = ['Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26'];
@@ -824,6 +825,7 @@ function seg(active){
 }
 
 function topbar(){
+  _dropdownPanels = ''; // reset panel collector
   var isCustom = state.reportView==='Custom';
   // Rate display: editable on click
   var rateEl = state.rateEditing
@@ -845,7 +847,7 @@ function topbar(){
     +'</div>'
 
     // ── ROW 2: View / Dates / Currency / Rate / Filters / Refresh ──
-    +'<div style="display:flex;align-items:center;gap:10px;padding:10px 20px 14px;overflow-x:auto;overflow-y:hidden;background:linear-gradient(180deg,#F9FBFE,#F2F6FB);">'
+    +'<div style="display:flex;align-items:center;gap:10px;padding:10px 20px 14px;overflow:visible;background:linear-gradient(180deg,#F9FBFE,#F2F6FB);">'
       // Report View dropdown — pill with icon, dropdown uses fixed position to escape overflow:auto clipping
       +'<div style="position:relative;display:inline-block;flex-shrink:0;">'
         +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;box-shadow:'+pillShadow+';'+(state.viewDropOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+pillShadow+';':'')+'">'
@@ -854,7 +856,7 @@ function topbar(){
           +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;transition:transform 0.2s;'+(state.viewDropOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
         +'</div>'
         +(state.viewDropOpen
-          ? '<div id="view-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
+          ? '<div id="view-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
             +['Monthly','Weekly','Quarterly','Yearly','Custom'].map(function(v){
               var active = state.reportView===v;
               var desc = v==='Monthly'?'Month by month':v==='Weekly'?'Week by week':v==='Quarterly'?'Quarter view':v==='Yearly'?'Full year':'Custom range';
@@ -900,7 +902,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(fromOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(fromOpen
-              ? '<div id="from-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;padding:4px;">'
+              ? '<div id="from-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;padding:4px;">'
                 +months26.map(function(m){
                   var active=m===state.dateFrom;
                   return '<div data-act="setFrom" data-val="'+m+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
@@ -917,7 +919,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(toOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(toOpen
-              ? '<div id="to-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;padding:4px;">'
+              ? '<div id="to-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;padding:4px;">'
                 +months26.map(function(m){
                   var active=m===state.dateTo;
                   return '<div data-act="setTo" data-val="'+m+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
@@ -942,7 +944,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(wOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(wOpen
-              ? '<div id="weekly-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:150px;max-height:280px;overflow-y:auto;padding:4px;">'
+              ? '<div id="weekly-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:150px;max-height:280px;overflow-y:auto;padding:4px;">'
                 +months26.map(function(m){
                   var active=m===wCurrent;
                   var idx=months26.indexOf(m);
@@ -968,7 +970,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(qyrOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(qyrOpen
-              ? '<div id="qyr-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:150px;padding:4px;">'
+              ? '<div id="qyr-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:150px;padding:4px;">'
                 +[{v:'FY26',l:'FY 2025-26'},{v:'FY27',l:'FY 2026-27'}].map(function(o){
                   var active=o.v===state.quarterYear;
                   return '<div data-act="setQuarterYear" data-val="'+o.v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
@@ -987,7 +989,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(qOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(qOpen
-              ? '<div id="quarter-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;padding:4px;">'
+              ? '<div id="quarter-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;padding:4px;">'
                 +['Q1','Q2','Q3','Q4'].map(function(q){
                   var active=q===state.selectedQuarter;
                   return '<div data-act="setQuarter" data-val="'+q+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
@@ -1010,7 +1012,7 @@ function topbar(){
               +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(ytOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +(ytOpen
-              ? '<div id="yeartype-drop" style="display:none;position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:210px;padding:4px;">'
+              ? '<div id="yeartype-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:210px;padding:4px;">'
                 +[{v:'Financial',l:'Financial Year (Apr–Mar)'},{v:'Calendar',l:'Calendar Year (Jan–Dec)'}].map(function(o){
                   var active=o.v===state.yearType;
                   return '<div data-act="setYearType" data-val="'+o.v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
@@ -2075,16 +2077,16 @@ document.addEventListener('change', function(ev){
   var el=ev.target;
   if(el.getAttribute('data-act')==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.getAttribute('data-val'); state.fromDropOpen=false; render(); }
   else if(el.getAttribute('data-act')==='setTo'){ ev.stopPropagation(); state.dateTo=el.getAttribute('data-val'); state.toDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='toggleFromDrop'){ ev.stopPropagation(); state.fromDropOpen=!state.fromDropOpen; state.toDropOpen=false; render(); requestAnimationFrame(function(){ positionDrop('from-drop','toggleFromDrop'); }); }
-  else if(el.getAttribute('data-act')==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; render(); requestAnimationFrame(function(){ positionDrop('to-drop','toggleToDrop'); }); }
+  else if(el.getAttribute('data-act')==='toggleFromDrop'){ ev.stopPropagation(); state.fromDropOpen=!state.fromDropOpen; state.toDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
+  else if(el.getAttribute('data-act')==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(el.getAttribute('data-act')==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; render(); requestAnimationFrame(function(){ positionDrop('weekly-drop','toggleWeeklyDrop'); }); }
+  else if(el.getAttribute('data-act')==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(el.getAttribute('data-act')==='setQuarter'){ ev.stopPropagation(); state.selectedQuarter=el.getAttribute('data-val'); state.quarterDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='toggleQuarterDrop'){ ev.stopPropagation(); state.quarterDropOpen=!state.quarterDropOpen; state.qyrDropOpen=false; render(); requestAnimationFrame(function(){ positionDrop('quarter-drop','toggleQuarterDrop'); }); }
+  else if(el.getAttribute('data-act')==='toggleQuarterDrop'){ ev.stopPropagation(); state.quarterDropOpen=!state.quarterDropOpen; state.qyrDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(el.getAttribute('data-act')==='setQuarterYear'){ ev.stopPropagation(); state.quarterYear=el.getAttribute('data-val'); state.qyrDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='toggleQyrDrop'){ ev.stopPropagation(); state.qyrDropOpen=!state.qyrDropOpen; state.quarterDropOpen=false; render(); requestAnimationFrame(function(){ positionDrop('qyr-drop','toggleQyrDrop'); }); }
+  else if(el.getAttribute('data-act')==='toggleQyrDrop'){ ev.stopPropagation(); state.qyrDropOpen=!state.qyrDropOpen; state.quarterDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(el.getAttribute('data-act')==='setYearType'){ ev.stopPropagation(); state.yearType=el.getAttribute('data-val'); state.yearTypeDropOpen=false; render(); }
-  else if(el.getAttribute('data-act')==='toggleYearTypeDrop'){ ev.stopPropagation(); state.yearTypeDropOpen=!state.yearTypeDropOpen; render(); requestAnimationFrame(function(){ positionDrop('yeartype-drop','toggleYearTypeDrop'); }); }
+  else if(el.getAttribute('data-act')==='toggleYearTypeDrop'){ ev.stopPropagation(); state.yearTypeDropOpen=!state.yearTypeDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
 });
 document.addEventListener('click', function(ev){
@@ -2252,37 +2254,25 @@ document.addEventListener('keydown', function(e){
   } 
 });
 function positionAllDrops(){
-  var portal = document.getElementById('dropdown-portal');
-  if (!portal) return;
-  portal.innerHTML = '';
-  portal.style.pointerEvents = 'none';
-
-  function renderDropInPortal(triggerId, panelId, panelHTML){
-    var btn = document.querySelector('[data-act="'+triggerId+'"]');
-    if (!btn) return;
-    var panel = document.getElementById(panelId);
-    if (!panel) return; // panel not open
+  var pairs = [
+    ['toggleViewDrop','view-drop'],['toggleFromDrop','from-drop'],
+    ['toggleToDrop','to-drop'],['toggleWeeklyDrop','weekly-drop'],
+    ['toggleQyrDrop','qyr-drop'],['toggleQuarterDrop','quarter-drop'],
+    ['toggleYearTypeDrop','yeartype-drop']
+  ];
+  pairs.forEach(function(p){
+    var drop = document.getElementById(p[1]);
+    if(!drop) return;
+    drop.style.display = 'none';
+    var btn = document.querySelector('[data-act="'+p[0]+'"]');
+    if(!btn) return;
     var rect = btn.getBoundingClientRect();
-    var clone = panel.cloneNode(true);
-    clone.style.position = 'fixed';
-    clone.style.top = (rect.bottom + 6) + 'px';
-    clone.style.left = rect.left + 'px';
-    clone.style.pointerEvents = 'all';
-    clone.style.display = 'block';
-    portal.style.pointerEvents = 'all';
-    portal.appendChild(clone);
-    // Scroll active item into view
-    var active = clone.querySelector('[style*="color:#1D5FCC"]');
-    if (active) setTimeout(function(){ active.scrollIntoView({ block:'nearest' }); }, 0);
-  }
-
-  renderDropInPortal('toggleViewDrop',     'view-drop',     '');
-  renderDropInPortal('toggleFromDrop',     'from-drop',     '');
-  renderDropInPortal('toggleToDrop',       'to-drop',       '');
-  renderDropInPortal('toggleWeeklyDrop',   'weekly-drop',   '');
-  renderDropInPortal('toggleQyrDrop',      'qyr-drop',      '');
-  renderDropInPortal('toggleQuarterDrop',  'quarter-drop',  '');
-  renderDropInPortal('toggleYearTypeDrop', 'yeartype-drop', '');
+    drop.style.top  = (rect.bottom + 6) + 'px';
+    drop.style.left = rect.left + 'px';
+    drop.style.display = 'block';
+    var active = drop.querySelector('[style*="color:#1D5FCC"]');
+    if(active) active.scrollIntoView({block:'nearest'});
+  });
 }
 window.addEventListener('resize', positionAllDrops);
 window.addEventListener('scroll', positionAllDrops, true);
