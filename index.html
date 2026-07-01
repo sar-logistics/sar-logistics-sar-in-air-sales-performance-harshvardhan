@@ -850,11 +850,18 @@ function kpiRow(M){
     return tgt > 0 ? Math.round(gp/tgt*100) : 0;
   });
 
+  // Label adapts to the active view mode
+  var periodLabel = state.reportView === 'Monthly'  ? 'vs prev month'
+                  : state.reportView === 'Weekly'   ? 'vs prev week'
+                  : state.reportView === 'Quarterly'? 'vs prev quarter'
+                  : state.reportView === 'Yearly'   ? 'vs prev year'
+                  : 'vs prev period'; // Custom
+
   var kpis = [
-    { label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              delta:momDelta(shipData), deltaLabel:'vs prior period', data:shipData, spark:trendColor(shipData), vcolor:'#0D2B5E' },
-    { label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           delta:momDelta(teuData),  deltaLabel:'vs prior period', data:teuData,  spark:trendColor(teuData),  vcolor:'#0D2B5E' },
-    { label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  delta:momDelta(tonsData), deltaLabel:'vs prior period', data:tonsData, spark:trendColor(tonsData), vcolor:'#0D2B5E' },
-    { label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                delta:momDelta(gpData),   deltaLabel:'vs prior period', data:gpData,   spark:trendColor(gpData),   vcolor:'#0D2B5E' },
+    { label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              delta:momDelta(shipData), deltaLabel:periodLabel, data:shipData, spark:trendColor(shipData), vcolor:'#0D2B5E' },
+    { label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           delta:momDelta(teuData),  deltaLabel:periodLabel, data:teuData,  spark:trendColor(teuData),  vcolor:'#0D2B5E' },
+    { label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  delta:momDelta(tonsData), deltaLabel:periodLabel, data:tonsData, spark:trendColor(tonsData), vcolor:'#0D2B5E' },
+    { label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                delta:momDelta(gpData),   deltaLabel:periodLabel, data:gpData,   spark:trendColor(gpData),   vcolor:'#0D2B5E' },
     { label:'GP TARGET',       value:fmtCur(M.tgtGrand),                               delta:null, deltaLabel:'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), data:tgtData, spark:BRAND_A1, vcolor:'#0D2B5E' },
     { label:'ACHIEVEMENT',     value:M.achGrand+'%',                                   delta:null, deltaLabel:'vs target', data:achData, spark:trendColor(achData), vcolor:achColor },
   ];
