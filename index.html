@@ -627,8 +627,19 @@ function filteredMonthIndices(){
   return idx;
 }
 
+function hasDataForIndices(idxs){
+  if (!idxs || idxs.length === 0) return false;
+  return repsRaw.some(function(r){
+    return idxs.some(function(i){
+      return (r.ship[i]||0) > 0 || (r.gp[i]||0) !== 0;
+    });
+  });
+}
+
 // Helper: the actual month labels for the current filter
 function filteredMonths(){
+  return filteredMonthIndices().map(function(i){ return months26[i]; });
+}
   return filteredMonthIndices().map(function(i){ return months26[i]; });
 }
 
@@ -890,7 +901,7 @@ function topbar(){
           // Build options with indicator for months that have no data
           var wOpts = months26.map(function(m){
             var idx = months26.indexOf(m);
-            var hasData = repsRaw.some(function(r){ return (r.ship[idx]||0) > 0 || (r.gp[idx]||0) !== 0; });
+            var hasData = hasDataForIndices([idx]);
             return { val:m, label: m + (hasData ? '' : ' (no data)') };
           });
           return '<span style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:#9AAFC8;text-transform:uppercase;white-space:nowrap;flex-shrink:0;">MONTH</span>'
@@ -946,7 +957,7 @@ function topbar(){
 function kpiRow(M){
   var idxs = filteredMonthIndices();
   var n = idxs.length || 1;
-  var noData = idxs.length === 0;
+  var noData = !hasDataForIndices(idxs);
 
   // Build sparkline SVG with area fill — matches the reference card style exactly
   function sparkline(data, color){
@@ -1443,7 +1454,7 @@ function salesTable(M){
   var idxs = filteredMonthIndices();
 
   // Empty state — no data for the selected filter (e.g. Weekly on a month with no data)
-  if (idxs.length === 0) {
+  if (!hasDataForIndices(idxs)) {
     return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'
       +'<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 32px;gap:14px;text-align:center;">'
         +'<div style="width:48px;height:48px;border-radius:14px;background:#F0F4FA;display:flex;align-items:center;justify-content:center;">'
