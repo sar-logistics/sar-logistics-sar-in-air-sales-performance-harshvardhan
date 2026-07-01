@@ -496,11 +496,13 @@ var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:f
 
 /* ====================== HELPERS ====================== */
 function fmtCur(v){
-  var rate = state.currency==='INR' ? state.rate : 1;
-  var sym  = state.currency==='INR' ? '\u20B9' : '$';
-  var val  = v * rate;
-  var neg  = val < 0;
-  var abs  = Math.abs(val);
+  // Raw GP values from the JPA sheet (Actual Profit J=C-G) are already in INR.
+  // INR display: show as-is (no conversion needed)
+  // USD display: divide by exchange rate to convert INR → USD
+  var val = state.currency === 'USD' ? v / state.rate : v;
+  var sym = state.currency === 'INR' ? '\u20B9' : '$';
+  var neg = val < 0;
+  var abs = Math.abs(val);
   var out;
 
   if (state.currency === 'INR') {
