@@ -561,15 +561,16 @@ function model(){
 }
 
 function grandEntity(){
-  var n = months26.length;
+  var idxs = filteredMonthIndices();
+  var n = idxs.length;
   return {
     name:'Grand Total', initials:'GT', avatarBg:'oklch(0.5 0.14 262)', isGrand:true, zone:'',
-    ship: months26.map(function(_,i){return sum(repsRaw.map(function(r){return r.ship[i]||0;}));}),
-    gp:   months26.map(function(_,i){return sum(repsRaw.map(function(r){return r.gp[i]  ||0;}));}),
-    tons: months26.map(function(_,i){return sum(repsRaw.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
-    teu:  months26.map(function(_,i){return sum(repsRaw.map(function(r){return (r.teu&&r.teu[i])||0;}));}),
-    lcl:  months26.map(function(_,i){return sum(repsRaw.map(function(r){return (r.lcl&&r.lcl[i])||0;}));}),
-    tank: months26.map(function(){return 0;}),
+    ship: idxs.map(function(i){return sum(repsRaw.map(function(r){return r.ship[i]||0;}));}),
+    gp:   idxs.map(function(i){return sum(repsRaw.map(function(r){return r.gp[i]  ||0;}));}),
+    tons: idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
+    teu:  idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.teu&&r.teu[i])||0;}));}),
+    lcl:  idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.lcl&&r.lcl[i])||0;}));}),
+    tank: idxs.map(function(){return 0;}),
     tgt:  sum(zonesRaw.map(function(z){return z.monthlyTarget||0;}))
   };
 }
@@ -585,18 +586,19 @@ function getZones(){
 
 // Zone-level aggregate entity
 function zoneEntity(zoneName){
+  var idxs = filteredMonthIndices();
   var zReps = repsRaw.filter(function(r){ return r.zone === zoneName; });
   var zData = zonesRaw.find(function(z){ return z.zone === zoneName; }) || {};
   return {
     name: zoneName, initials: zoneName.slice(0,2).toUpperCase(),
     avatarBg: 'oklch(0.5 0.14 ' + zoneHue(zoneName) + ')',
     isZone: true, zone: zoneName,
-    ship: months26.map(function(_,i){ return sum(zReps.map(function(r){ return r.ship[i]||0; })); }),
-    gp:   months26.map(function(_,i){ return sum(zReps.map(function(r){ return r.gp[i]  ||0; })); }),
-    tons: months26.map(function(_,i){ return sum(zReps.map(function(r){ return (r.tons&&r.tons[i])||0; })); }),
-    teu:  months26.map(function(_,i){ return sum(zReps.map(function(r){ return (r.teu&&r.teu[i])||0; })); }),
-    lcl:  months26.map(function(_,i){ return sum(zReps.map(function(r){ return (r.lcl&&r.lcl[i])||0; })); }),
-    tank: months26.map(function(){ return 0; }),
+    ship: idxs.map(function(i){ return sum(zReps.map(function(r){ return r.ship[i]||0; })); }),
+    gp:   idxs.map(function(i){ return sum(zReps.map(function(r){ return r.gp[i]  ||0; })); }),
+    tons: idxs.map(function(i){ return sum(zReps.map(function(r){ return (r.tons&&r.tons[i])||0; })); }),
+    teu:  idxs.map(function(i){ return sum(zReps.map(function(r){ return (r.teu&&r.teu[i])||0; })); }),
+    lcl:  idxs.map(function(i){ return sum(zReps.map(function(r){ return (r.lcl&&r.lcl[i])||0; })); }),
+    tank: idxs.map(function(){ return 0; }),
     tgt:  zData.monthlyTarget || sum(zReps.map(function(r){ return r.tgt; }))
   };
 }
@@ -608,16 +610,19 @@ function zoneHue(zone){
 }
 
 function repEntity(r){
+  var idxs = filteredMonthIndices();
   var ini = r.isBranch ? r.name.slice(0,2).toUpperCase() : initials(r.name);
   return {
     name: r.name, initials: ini,
     avatarBg: 'oklch(0.6 0.12 ' + r.hue + ')',
     isRep: true, isBranch: !!r.isBranch, zone: r.zone,
-    ship: r.ship, gp: r.gp,
-    tons: r.tons || months26.map(function(){return 0;}),
-    teu:  r.teu  || months26.map(function(){return 0;}),
-    lcl:  r.lcl  || months26.map(function(){return 0;}),
-    tank: r.tank, tgt: r.tgt
+    ship: idxs.map(function(i){ return r.ship[i]||0; }),
+    gp:   idxs.map(function(i){ return r.gp[i]  ||0; }),
+    tons: idxs.map(function(i){ return (r.tons&&r.tons[i])||0; }),
+    teu:  idxs.map(function(i){ return (r.teu&&r.teu[i])||0; }),
+    lcl:  idxs.map(function(i){ return (r.lcl&&r.lcl[i])||0; }),
+    tank: idxs.map(function(){ return 0; }),
+    tgt:  r.tgt
   };
 }
 
@@ -778,7 +783,8 @@ function topbar(){
 
 /* ====================== KPI CARDS ====================== */
 function kpiRow(M){
-  var n = months26.length || 1;
+  var idxs = filteredMonthIndices();
+  var n = idxs.length || 1;
 
   // Filter months to the current date range selection — this is what makes
   // the sparkline reflect the same window as the topbar filter controls.
@@ -1221,16 +1227,16 @@ function tableRows(){
     var isRep   = e.isRep;
     var shipOpen = state.shipOpen[e.name] === true;
 
-    var achFy = e.tgt > 0 ? Math.round(sum(e.gp) / (e.tgt * months26.length) * 100) : 0;
+    var achFy = e.tgt > 0 ? Math.round(sum(e.gp) / (e.tgt * e.gp.length) * 100) : 0;
 
     // Zone-level background
     var groupBg = isGrand ? '#EEF3FC' : isZone ? '#F3F0FC' : '#FFFFFF';
     var avatarBg = e.avatarBg;
 
-    var teus    = e.teu || months26.map(function(){ return 0; });
-    var lcl     = e.lcl || months26.map(function(){ return 0; });
-    var tgtArr  = months26.map(function(){ return e.tgt; });
-    var achArr  = months26.map(function(_,i){ return e.tgt ? Math.round(e.gp[i]/e.tgt*100) : 0; });
+    var teus    = e.teu || e.gp.map(function(){ return 0; });
+    var lcl     = e.lcl || e.gp.map(function(){ return 0; });
+    var tgtArr  = e.gp.map(function(){ return e.tgt; });
+    var achArr  = e.gp.map(function(v,i){ return e.tgt ? Math.round(v/e.tgt*100) : 0; });
 
     function metric(label, indent, type, color, vals, fy, toggleType, repInfo){
       var isShip = toggleType === 'ship';
@@ -1268,9 +1274,9 @@ function tableRows(){
       rows.push(metric('LCL (Ocean in CBM)', 1, 'cbm',  '#9AA4B2', lcl, sum(lcl), false));
     }
 
-    rows.push(metric('GP',            0, 'cur', '#374151', e.gp,    sum(e.gp),              false));
-    rows.push(metric('Target',        0, 'cur', '#374151', tgtArr,  e.tgt * months26.length, false));
-    rows.push(metric('Achievement %', 0, 'pct', '#374151', achArr,  achFy,                   false));
+    rows.push(metric('GP',            0, 'cur', '#374151', e.gp,    sum(e.gp),                  false));
+    rows.push(metric('Target',        0, 'cur', '#374151', tgtArr,  e.tgt * e.gp.length,        false));
+    rows.push(metric('Achievement %', 0, 'pct', '#374151', achArr,  achFy,                      false));
   });
 
   return rows;
@@ -1563,15 +1569,15 @@ function drawer(){
 /* ====================== RENDER ====================== */
 function leaderboard(){
   var M = model();
-  // Sort reps by GP total descending
+  var idxs = filteredMonthIndices();
+  // Sort reps by GP total for the filtered period only
   var sorted = repsRaw.map(function(r){
-    var gpTotal = sum(r.gp);
-    var shipTotal = sum(r.ship);
-    var tgtTotal = r.tgt * 6;
-    var ach = tgtTotal > 0 ? gpTotal / tgtTotal : 0;
-    var achPct = Math.round(ach * 100);
+    var gpTotal   = sum(idxs.map(function(i){ return r.gp[i]||0; }));
+    var shipTotal = sum(idxs.map(function(i){ return r.ship[i]||0; }));
+    var tgtTotal  = r.tgt * idxs.length;
+    var achPct    = tgtTotal > 0 ? Math.round(gpTotal / tgtTotal * 100) : 0;
     return { name:r.name, hue:r.hue, gpTotal:gpTotal, shipTotal:shipTotal,
-      tgtTotal:tgtTotal, achPct:achPct, ach:ach, gp:r.gp, tgt:r.tgt };
+      tgtTotal:tgtTotal, achPct:achPct, gp:r.gp, tgt:r.tgt };
   }).sort(function(a,b){ return b.gpTotal - a.gpTotal; });
 
   var medalColors = ['#D4A017','#94A3B8','#C2793A']; // gold / silver / bronze accents for rank 1/2/3
