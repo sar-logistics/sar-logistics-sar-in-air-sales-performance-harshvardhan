@@ -767,6 +767,19 @@ function topbar(){
 function kpiRow(M){
   var n = months26.length || 1;
 
+  // Filter months to the current date range selection — this is what makes
+  // the sparkline reflect the same window as the topbar filter controls.
+  // For non-Custom views, use a sensible default slice based on reportView.
+  var filteredMonths = (function(){
+    var from = state.dateFrom, to = state.dateTo;
+    var filtered = months26.filter(function(m){
+      var fi = months26.indexOf(from), ti = months26.indexOf(to), mi = months26.indexOf(m);
+      if (fi < 0 || ti < 0) return true; // fallback: show all if dates not found
+      return mi >= fi && mi <= ti;
+    });
+    return filtered.length > 0 ? filtered : months26;
+  })();
+
   // Build sparkline SVG with area fill — matches the reference card style exactly
   function sparkline(data, color){
     if (!data || data.length < 2) return '';
@@ -829,22 +842,23 @@ function kpiRow(M){
 
   var achColor = M.achGrand >= 100 ? '#0A7E53' : M.achGrand < 0 ? '#C0392B' : '#0D2B5E';
 
-  var shipData  = months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); });
-  var teuData   = months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); });
-  var tonsData  = months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0); });
-  var gpData    = months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0); });
-  var tgtData   = months26.map(function(){ return M.tgtGrand / n; });
-  var achData   = months26.map(function(_,i){
+  var shipData  = filteredMonths.map(function(m){ var i=months26.indexOf(m); return i>=0 ? repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0) : 0; });
+  var teuData   = filteredMonths.map(function(m){ var i=months26.indexOf(m); return i>=0 ? repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0) : 0; });
+  var tonsData  = filteredMonths.map(function(m){ var i=months26.indexOf(m); return i>=0 ? repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0) : 0; });
+  var gpData    = filteredMonths.map(function(m){ var i=months26.indexOf(m); return i>=0 ? repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0) : 0; });
+  var tgtData   = filteredMonths.map(function(){ return M.tgtGrand / (filteredMonths.length||1); });
+  var achData   = filteredMonths.map(function(m){
+    var i = months26.indexOf(m); if (i < 0) return 0;
     var gp  = repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0);
     var tgt = repsRaw.reduce(function(s,r){return s+r.tgt;},0);
     return tgt > 0 ? Math.round(gp/tgt*100) : 0;
   });
 
   var kpis = [
-    { label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              delta:momDelta(shipData), deltaLabel:'vs last month', data:shipData, spark:trendColor(shipData), vcolor:'#0D2B5E' },
-    { label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           delta:momDelta(teuData),  deltaLabel:'vs last month', data:teuData,  spark:trendColor(teuData),  vcolor:'#0D2B5E' },
-    { label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  delta:momDelta(tonsData), deltaLabel:'vs last month', data:tonsData, spark:trendColor(tonsData), vcolor:'#0D2B5E' },
-    { label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                delta:momDelta(gpData),   deltaLabel:'vs last month', data:gpData,   spark:trendColor(gpData),   vcolor:'#0D2B5E' },
+    { label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              delta:momDelta(shipData), deltaLabel:'vs prior period', data:shipData, spark:trendColor(shipData), vcolor:'#0D2B5E' },
+    { label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           delta:momDelta(teuData),  deltaLabel:'vs prior period', data:teuData,  spark:trendColor(teuData),  vcolor:'#0D2B5E' },
+    { label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  delta:momDelta(tonsData), deltaLabel:'vs prior period', data:tonsData, spark:trendColor(tonsData), vcolor:'#0D2B5E' },
+    { label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                delta:momDelta(gpData),   deltaLabel:'vs prior period', data:gpData,   spark:trendColor(gpData),   vcolor:'#0D2B5E' },
     { label:'GP TARGET',       value:fmtCur(M.tgtGrand),                               delta:null, deltaLabel:'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), data:tgtData, spark:BRAND_A1, vcolor:'#0D2B5E' },
     { label:'ACHIEVEMENT',     value:M.achGrand+'%',                                   delta:null, deltaLabel:'vs target', data:achData, spark:trendColor(achData), vcolor:achColor },
   ];
