@@ -40,7 +40,7 @@
   @keyframes spin{to{transform:rotate(360deg);}}
 
   .navlink:hover{background:rgba(255,255,255,0.08) !important;}
-  .btnq:hover{background:#E9EFFA !important;}
+  .btnq:hover{box-shadow:0 3px 8px rgba(13,43,94,0.14),0 1px 2px rgba(13,43,94,0.08) !important;transform:translateY(-1px);}
   .sumrow{cursor:pointer;}
   .sumrow:hover td{filter:brightness(0.985);}
   .dcell{cursor:pointer;}
@@ -692,22 +692,25 @@ function topbar(){
     ? '<input id="rate-input" type="number" value="'+state.rate+'" step="0.01" min="0" data-act="rateCommit" style="width:50px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;color:#0D2B5E;background:#FFFFFF;border:1.5px solid #1D5FCC;border-radius:6px;padding:2px 5px;outline:none;" />'
     : '<span data-act="rateEdit" style="font-family:\'DM Mono\',monospace;color:#0D2B5E;font-weight:700;cursor:pointer;white-space:nowrap;">'+state.rate.toFixed(2)+'</span>';
 
+  // Reusable pill shadow — this is what lifts each control off the backdrop
+  var pillShadow = '0 1px 2px rgba(13,43,94,0.06),0 1px 1px rgba(13,43,94,0.04)';
+
   return '<header style="flex-shrink:0;background:#FFFFFF;border-bottom:1px solid #EDF1F8;position:relative;z-index:20;">'
 
-    // ── ROW 1: Live Data / Feedback / Sign Out — right-aligned, soft pills ──
-    +'<div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:8px 20px 7px;">'
-      +'<div style="display:flex;align-items:center;gap:6px;background:#EDFAF1;border-radius:999px;padding:5px 12px 5px 10px;font-size:11px;font-weight:700;color:#0A7E53;flex-shrink:0;white-space:nowrap;">'
+    // ── ROW 1: Live Data / Feedback / Sign Out — right-aligned, raised pills ──
+    +'<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:9px 20px 8px;background:#F7F9FD;">'
+      +'<div style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:5px 13px 5px 11px;font-size:11px;font-weight:700;color:#0A7E53;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+',0 0 0 1px rgba(34,197,116,0.14);">'
         +'<span style="width:6px;height:6px;border-radius:50%;background:#22C574;display:inline-block;box-shadow:0 0 0 3px rgba(34,197,116,0.18);flex-shrink:0;"></span>Live Data'
       +'</div>'
-      +'<button data-act="feedbackOpen" class="btnq" style="display:flex;align-items:center;gap:6px;background:#F3F6FB;border:none;border-radius:999px;padding:6px 13px;font-size:11px;font-weight:700;color:#3C5275;cursor:pointer;transition:background 0.15s;flex-shrink:0;white-space:nowrap;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Feedback</button>'
-      +'<button class="btnq" style="display:flex;align-items:center;gap:6px;background:#F3F6FB;border:none;border-radius:999px;padding:6px 13px;font-size:11px;font-weight:700;color:#3C5275;cursor:pointer;transition:background 0.15s,color 0.15s;flex-shrink:0;white-space:nowrap;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign Out</button>'
+      +'<button data-act="feedbackOpen" class="btnq" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border:none;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#3C5275;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Feedback</button>'
+      +'<button class="btnq" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border:none;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#3C5275;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign Out</button>'
     +'</div>'
 
     // ── ROW 2: View / Dates / Currency / Rate / Filters / Refresh ──
-    +'<div style="display:flex;align-items:center;gap:8px;padding:6px 20px 12px;overflow-x:auto;overflow-y:hidden;">'
+    +'<div style="display:flex;align-items:center;gap:10px;padding:10px 20px 14px;overflow-x:auto;overflow-y:hidden;background:#F7F9FD;">'
       // Report View dropdown — pill with icon
       +'<div style="position:relative;display:inline-block;flex-shrink:0;">'
-        +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#F3F6FB;border-radius:999px;padding:7px 13px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:background 0.15s;white-space:nowrap;">'
+        +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;box-shadow:'+pillShadow+';">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7C93B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
           +state.reportView+' View'
           +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;"><path d="M6 9l6 6 6-6"/></svg>'
@@ -722,7 +725,7 @@ function topbar(){
           : '')
       +'</div>'
       // Date range — single pill
-      +'<div style="display:flex;align-items:center;gap:6px;background:#F3F6FB;border-radius:999px;padding:7px 14px;flex-shrink:0;white-space:nowrap;">'
+      +'<div style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 15px;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
         +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7C93B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
         +(isCustom
           ? '<select data-act="setFrom" style="background:transparent;border:none;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;color:#0D2B5E;outline:none;">'
@@ -737,17 +740,17 @@ function topbar(){
           : '<span style="font-size:12px;font-weight:700;color:#0D2B5E;">'+state.dateTo+'</span>')
       +'</div>'
       // Currency toggle — smooth segmented pill
-      +'<div style="display:flex;align-items:center;background:#F3F6FB;border-radius:999px;padding:3px;gap:1px;flex-shrink:0;white-space:nowrap;">'
+      +'<div style="display:flex;align-items:center;background:#FFFFFF;border-radius:999px;padding:4px;gap:1px;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
         +'<button data-act="cur" data-cur="INR" style="border:none;cursor:pointer;font-size:11.5px;padding:6px 13px;border-radius:999px;white-space:nowrap;transition:all 0.15s;'+seg(state.currency==='INR')+'">INR</button>'
         +'<button data-act="cur" data-cur="USD" style="border:none;cursor:pointer;font-size:11.5px;padding:6px 13px;border-radius:999px;white-space:nowrap;transition:all 0.15s;'+seg(state.currency==='USD')+'">USD</button>'
       +'</div>'
       // Rate — small chip
-      +'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#F8FAFD;border-radius:999px;padding:6px 12px;">Rate '+rateEl+'</div>'
+      +'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#FFFFFF;border-radius:999px;padding:7px 13px;box-shadow:'+pillShadow+';">Rate '+rateEl+'</div>'
       // Filters
-      +'<button class="btnq" style="display:flex;align-items:center;gap:6px;background:#F3F6FB;border:none;border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;color:#3C5275;cursor:pointer;transition:background 0.15s;flex-shrink:0;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>Filters</button>'
+      +'<button class="btnq" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border:none;border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:#3C5275;cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>Filters</button>'
       +'<div style="flex:1;min-width:8px;"></div>'
-      // Refresh — pushed to the far right, filled accent style
-      +'<button data-act="refreshData" id="refresh-btn" class="btnq" style="display:flex;align-items:center;gap:6px;background:#EAF1FE;border:none;border-radius:999px;padding:7px 15px;font-size:11.5px;font-weight:700;color:#1D5FCC;cursor:pointer;transition:background 0.15s;flex-shrink:0;white-space:nowrap;"><svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s ease;flex-shrink:0;"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>'
+      // Refresh — pushed to the far right, filled accent style with stronger shadow
+      +'<button data-act="refreshData" id="refresh-btn" class="btnq" style="display:flex;align-items:center;gap:6px;background:#1D5FCC;border:none;border-radius:999px;padding:8px 16px;font-size:11.5px;font-weight:700;color:#FFFFFF;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:0 2px 5px rgba(29,95,204,0.28),0 1px 2px rgba(29,95,204,0.2);"><svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s ease;flex-shrink:0;"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>'
     +'</div>'
   +'</header>';
 }
