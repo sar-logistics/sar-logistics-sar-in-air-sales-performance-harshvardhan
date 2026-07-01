@@ -732,18 +732,22 @@ function topbar(){
 
     // ── ROW 2: View / Dates / Currency / Rate / Filters / Refresh ──
     +'<div style="display:flex;align-items:center;gap:10px;padding:10px 20px 14px;overflow-x:auto;overflow-y:hidden;background:linear-gradient(180deg,#F9FBFE,#F2F6FB);">'
-      // Report View dropdown — pill with icon
+      // Report View dropdown — pill with icon, dropdown uses fixed position to escape overflow:auto clipping
       +'<div style="position:relative;display:inline-block;flex-shrink:0;">'
-        +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;box-shadow:'+pillShadow+';">'
-          +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7C93B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
+        +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;box-shadow:'+pillShadow+';'+(state.viewDropOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+pillShadow+';':'')+'">'
+          +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+(state.viewDropOpen?'#1D5FCC':'#7C93B8')+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
           +state.reportView+' View'
-          +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;"><path d="M6 9l6 6 6-6"/></svg>'
+          +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;transition:transform 0.2s;'+(state.viewDropOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
         +'</div>'
         +(state.viewDropOpen
-          ? '<div style="position:absolute;top:calc(100% + 6px);left:0;background:#FFFFFF;border-radius:12px;box-shadow:0 16px 40px rgba(13,43,94,0.18);z-index:200;min-width:150px;overflow:hidden;padding:4px;">'
+          ? '<div id="view-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
             +['Monthly','Weekly','Quarterly','Yearly','Custom'].map(function(v){
-              var active=state.reportView===v;
-              return '<div data-act="setView" data-val="'+v+'" style="padding:8px 12px;border-radius:8px;font-size:12px;font-weight:'+(active?'700':'500')+';color:'+(active?'#fff':'#0D2B5E')+';background:'+(active?'#1D5FCC':'transparent')+';cursor:pointer;white-space:nowrap;">'+v+' View</div>';
+              var active = state.reportView===v;
+              var desc = v==='Monthly'?'Month by month':v==='Weekly'?'Week by week':v==='Quarterly'?'Quarter view':v==='Yearly'?'Full year':'Custom range';
+              return '<div data-act="setView" data-val="'+v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;transition:background 0.1s;">'
+                +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';">'+v+' View</div>'
+                +'<div style="font-size:10px;color:#9AAFC8;margin-top:1px;">'+desc+'</div>'
+              +'</div>';
             }).join('')
           +'</div>'
           : '')
@@ -1722,6 +1726,16 @@ function feedbackModal(){
 }
 
 
+function positionViewDrop(){
+  var drop = document.getElementById('view-drop');
+  if (!drop) return;
+  var btn = document.querySelector('[data-act="toggleViewDrop"]');
+  if (!btn) return;
+  var rect = btn.getBoundingClientRect();
+  drop.style.top  = (rect.bottom + 6) + 'px';
+  drop.style.left = rect.left + 'px';
+}
+
 function render(){
   var M=model();
   var app=document.getElementById('app');
@@ -1739,6 +1753,8 @@ function render(){
     : kpiRow(M)+(state.page==='leaderboard'?leaderboard():salesTable(M));
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
+  // Position the view dropdown if open (uses fixed positioning to escape overflow clipping)
+  requestAnimationFrame(positionViewDrop);
 }
 function renderKeepTopbar(){
   // Re-render everything EXCEPT topbar — used when date inputs change
@@ -1907,8 +1923,33 @@ document.addEventListener('click', function(ev){
     state.feedbackSent=true;
     render();
   }
-  else if(act==='toggleViewDrop'){ ev.stopPropagation(); state.viewDropOpen=!state.viewDropOpen; render(); }
-  else if(act==='setView'){ ev.stopPropagation(); state.reportView=el.getAttribute('data-val'); state.viewDropOpen=false; render(); }
+  else if(act==='toggleViewDrop'){ ev.stopPropagation(); state.viewDropOpen=!state.viewDropOpen; render(); positionViewDrop(); }
+  else if(act==='setView'){
+    ev.stopPropagation();
+    var v = el.getAttribute('data-val');
+    state.reportView = v;
+    state.viewDropOpen = false;
+    // Auto-set a sensible date window for each view mode
+    var allM = months26;
+    var last = allM[allM.length-1];
+    var first = allM[0];
+    if (v === 'Monthly') {
+      // Keep whatever the user had, or default to last 6 months
+      var fi = allM.indexOf(state.dateFrom), ti = allM.indexOf(state.dateTo);
+      if (fi < 0 || ti < 0 || fi > ti) {
+        state.dateTo   = last;
+        state.dateFrom = allM[Math.max(0, allM.length - 6)];
+      }
+    } else if (v === 'Yearly') {
+      state.dateFrom = first; state.dateTo = last;
+    } else if (v === 'Quarterly') {
+      state.dateTo = last; state.dateFrom = allM[Math.max(0, allM.length - 3)];
+    } else if (v === 'Weekly') {
+      state.dateTo = last; state.dateFrom = allM[Math.max(0, allM.length - 1)];
+    }
+    // Custom: leave dateFrom/dateTo as-is so user keeps their selection
+    render();
+  }
   else if(act==='cur'){ ev.stopPropagation(); ev.preventDefault(); state.currency=el.getAttribute('data-cur'); render(); }
   else if(act==='shipToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.shipOpen[n]=!state.shipOpen[n]; render(); }
   else if(act==='zoneToggle'){ ev.stopPropagation(); var zn=el.getAttribute('data-zone'); state.zoneOpen[zn] = (state.zoneOpen[zn]===false) ? true : false; render(); }
@@ -1924,6 +1965,8 @@ document.addEventListener('click', function(ev){
   else if(act==='close'){ if(ev.target.closest('[data-stop]') && !el.matches('[data-act="close"]')) return; state.drill=null; render(); }
 });
 document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ if(state.viewDropOpen){ state.viewDropOpen=false; render(); } else if(state.drill){ state.drill=null; render(); } } });
+window.addEventListener('resize', positionViewDrop);
+window.addEventListener('scroll', positionViewDrop, true);
 document.addEventListener('click', function(e){ if(state.viewDropOpen && !e.target.closest('[data-act="toggleViewDrop"]') && !e.target.closest('[data-act="setView"]')){ state.viewDropOpen=false; render(); } }, true);
 
 
