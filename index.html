@@ -794,12 +794,13 @@ function kpiRow(M){
     +'</svg>';
   }
 
-  // MoM delta — compare last month vs month before
+  // MoM delta — compare last month vs month before, only if meaningful
   function momDelta(data){
     if (!data || data.length < 2) return null;
     var last = data[data.length-1], prev = data[data.length-2];
-    if (!prev) return null;
-    var pct = Math.round((last - prev) / (Math.abs(prev) || 1) * 100);
+    if (!prev || prev === 0) return null;
+    var pct = Math.round((last - prev) / Math.abs(prev) * 100);
+    if (Math.abs(pct) < 1) return null; // suppress noise
     return pct;
   }
 
@@ -817,61 +818,35 @@ function kpiRow(M){
     +'</div>';
   }
 
+  // Trend colour: green if last value > first, red if down, neutral blue if flat
+  function trendColor(data){
+    if (!data || data.length < 2) return BRAND_A1;
+    var first = data[0], last = data[data.length-1];
+    if (last > first) return '#1D9E6F';
+    if (last < first) return '#D94F4F';
+    return BRAND_A1;
+  }
+
   var achColor = M.achGrand >= 100 ? '#0A7E53' : M.achGrand < 0 ? '#C0392B' : '#0D2B5E';
 
+  var shipData  = months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); });
+  var teuData   = months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); });
+  var tonsData  = months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0); });
+  var gpData    = months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0); });
+  var tgtData   = months26.map(function(){ return M.tgtGrand / n; });
+  var achData   = months26.map(function(_,i){
+    var gp  = repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0);
+    var tgt = repsRaw.reduce(function(s,r){return s+r.tgt;},0);
+    return tgt > 0 ? Math.round(gp/tgt*100) : 0;
+  });
+
   var kpis = [
-    {
-      label: 'TOTAL SHIPMENTS',
-      value: String(M.shipGrand),
-      delta: momDelta(repsRaw.length ? months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); }) : null),
-      deltaLabel: 'vs last month',
-      data: months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); }),
-      spark: BRAND_A1, vcolor: '#0D2B5E'
-    },
-    {
-      label: 'TOTAL TEUS',
-      value: M.teusGrand.toFixed(2),
-      delta: momDelta(months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); })),
-      deltaLabel: 'vs last month',
-      data: months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); }),
-      spark: BRAND_A1, vcolor: '#0D2B5E'
-    },
-    {
-      label: 'TONS (AIR)',
-      value: M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',
-      delta: momDelta(months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0); })),
-      deltaLabel: 'vs last month',
-      data: months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+((r.tons&&r.tons[i])||0);},0); }),
-      spark: BRAND_A1, vcolor: '#0D2B5E'
-    },
-    {
-      label: 'GROSS PROFIT',
-      value: fmtCur(M.gpGrand),
-      delta: momDelta(months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0); })),
-      deltaLabel: 'vs last month',
-      data: months26.map(function(_,i){ return repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0); }),
-      spark: '#1D9E6F', vcolor: '#0D2B5E'
-    },
-    {
-      label: 'GP TARGET',
-      value: fmtCur(M.tgtGrand),
-      delta: null,
-      deltaLabel: 'monthly avg '+fmtCur(Math.round(M.tgtGrand/n)),
-      data: months26.map(function(){ return M.tgtGrand / n; }),
-      spark: BRAND_A1, vcolor: '#0D2B5E'
-    },
-    {
-      label: 'ACHIEVEMENT',
-      value: M.achGrand+'%',
-      delta: null,
-      deltaLabel: 'vs target',
-      data: months26.map(function(_,i){
-        var gp = repsRaw.reduce(function(s,r){return s+(r.gp[i]||0);},0);
-        var tgt = repsRaw.reduce(function(s,r){return s+r.tgt;},0);
-        return tgt > 0 ? Math.round(gp/tgt*100) : 0;
-      }),
-      spark: achColor, vcolor: achColor
-    },
+    { label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              delta:momDelta(shipData), deltaLabel:'vs last month', data:shipData, spark:trendColor(shipData), vcolor:'#0D2B5E' },
+    { label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           delta:momDelta(teuData),  deltaLabel:'vs last month', data:teuData,  spark:trendColor(teuData),  vcolor:'#0D2B5E' },
+    { label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  delta:momDelta(tonsData), deltaLabel:'vs last month', data:tonsData, spark:trendColor(tonsData), vcolor:'#0D2B5E' },
+    { label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                delta:momDelta(gpData),   deltaLabel:'vs last month', data:gpData,   spark:trendColor(gpData),   vcolor:'#0D2B5E' },
+    { label:'GP TARGET',       value:fmtCur(M.tgtGrand),                               delta:null, deltaLabel:'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), data:tgtData, spark:BRAND_A1, vcolor:'#0D2B5E' },
+    { label:'ACHIEVEMENT',     value:M.achGrand+'%',                                   delta:null, deltaLabel:'vs target', data:achData, spark:trendColor(achData), vcolor:achColor },
   ];
 
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px;">'
@@ -879,7 +854,7 @@ function kpiRow(M){
       var spark = sparkline(k.data, k.spark);
       return '<div class="kpi-card" style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:16px;padding:14px 14px 0 14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);overflow:hidden;transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;display:flex;flex-direction:column;">'
         // Label
-        +'<div style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#9AAFC8;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
+        +'<div style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5B7298;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
         // Big value
         +'<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:700;color:'+k.vcolor+';line-height:1.1;margin-bottom:5px;letter-spacing:-0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.value+'</div>'
         // Delta / sub
