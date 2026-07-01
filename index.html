@@ -698,7 +698,7 @@ function topbar(){
   return '<header style="flex-shrink:0;background:#FFFFFF;border-bottom:1px solid #EDF1F8;position:relative;z-index:20;">'
 
     // ── ROW 1: Live Data / Feedback / Sign Out — right-aligned, raised pills ──
-    +'<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:9px 20px 8px;background:#F7F9FD;">'
+    +'<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:9px 20px 8px;background:linear-gradient(180deg,#F9FBFE,#F4F7FC);">'
       +'<div style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:5px 13px 5px 11px;font-size:11px;font-weight:700;color:#0A7E53;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+',0 0 0 1px rgba(34,197,116,0.14);">'
         +'<span style="width:6px;height:6px;border-radius:50%;background:#22C574;display:inline-block;box-shadow:0 0 0 3px rgba(34,197,116,0.18);flex-shrink:0;"></span>Live Data'
       +'</div>'
@@ -707,7 +707,7 @@ function topbar(){
     +'</div>'
 
     // ── ROW 2: View / Dates / Currency / Rate / Filters / Refresh ──
-    +'<div style="display:flex;align-items:center;gap:10px;padding:10px 20px 14px;overflow-x:auto;overflow-y:hidden;background:#F7F9FD;">'
+    +'<div style="display:flex;align-items:center;gap:10px;padding:10px 20px 14px;overflow-x:auto;overflow-y:hidden;background:linear-gradient(180deg,#F9FBFE,#F2F6FB);">'
       // Report View dropdown — pill with icon
       +'<div style="position:relative;display:inline-block;flex-shrink:0;">'
         +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;box-shadow:'+pillShadow+';">'
@@ -739,10 +739,11 @@ function topbar(){
             +'</select>'
           : '<span style="font-size:12px;font-weight:700;color:#0D2B5E;">'+state.dateTo+'</span>')
       +'</div>'
-      // Currency toggle — smooth segmented pill
-      +'<div style="display:flex;align-items:center;background:#FFFFFF;border-radius:999px;padding:4px;gap:1px;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
-        +'<button data-act="cur" data-cur="INR" style="border:none;cursor:pointer;font-size:11.5px;padding:6px 13px;border-radius:999px;white-space:nowrap;transition:all 0.15s;'+seg(state.currency==='INR')+'">INR</button>'
-        +'<button data-act="cur" data-cur="USD" style="border:none;cursor:pointer;font-size:11.5px;padding:6px 13px;border-radius:999px;white-space:nowrap;transition:all 0.15s;'+seg(state.currency==='USD')+'">USD</button>'
+      // Currency toggle — sliding thumb, not an instant colour swap
+      +'<div style="position:relative;display:flex;align-items:center;background:#FFFFFF;border-radius:999px;padding:4px;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';width:104px;">'
+        +'<div style="position:absolute;top:4px;left:'+(state.currency==='USD'?'50%':'4px')+';width:calc(50% - 4px);height:calc(100% - 8px);background:linear-gradient(135deg,#123A7A,#0D2B5E);border-radius:999px;transition:left 0.28s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 2px 6px rgba(13,43,94,0.28);"></div>'
+        +'<button data-act="cur" data-cur="INR" style="position:relative;z-index:1;flex:1;border:none;background:transparent;cursor:pointer;font-size:11.5px;padding:6px 0;border-radius:999px;white-space:nowrap;font-weight:700;color:'+(state.currency==='INR'?'#FFFFFF':'#9AAFC8')+';transition:color 0.2s;">INR</button>'
+        +'<button data-act="cur" data-cur="USD" style="position:relative;z-index:1;flex:1;border:none;background:transparent;cursor:pointer;font-size:11.5px;padding:6px 0;border-radius:999px;white-space:nowrap;font-weight:700;color:'+(state.currency==='USD'?'#FFFFFF':'#9AAFC8')+';transition:color 0.2s;">USD</button>'
       +'</div>'
       // Rate — small chip
       +'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#FFFFFF;border-radius:999px;padding:7px 13px;box-shadow:'+pillShadow+';">Rate '+rateEl+'</div>'
@@ -759,15 +760,15 @@ function topbar(){
 function kpiRow(M){
   var n = months26.length || 1;
   // Unified palette: navy accent for primary metric values, muted ink-mid for secondary.
-  // Single top-border accent colour per card — drawn from a controlled 2-step ramp
-  // so the row reads as one cohesive unit rather than a colour wheel.
+  // Two accent pairs (light + dark) per group so icon chips get a real gradient,
+  // not a flat tint — this is what gives them visual weight instead of feeling flat.
   var kpis = [
-    {label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              sub:'Jobs · Period',                              accent:'#1D5FCC', icon:IC_KPI.box},
-    {label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           sub:'Sea + ISO Tank · Period',                    accent:'#1D5FCC', icon:IC_KPI.container},
-    {label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  sub:'Chargeable wt · Air only',                   accent:'#1D5FCC', icon:IC_KPI.plane},
-    {label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                sub:state.currency+' · Period',                   accent:'#0D2B5E', icon:IC_KPI.coin},
-    {label:'GP TARGET',       value:fmtCur(M.tgtGrand),                               sub:'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)),accent:'#0D2B5E', icon:IC_KPI.target},
-    {label:'ACHIEVEMENT',     value:M.achGrand+'%',                                   sub:'vs Target',                                  accent:'#0D2B5E', icon:IC_KPI.trend},
+    {label:'TOTAL SHIPMENTS', value:String(M.shipGrand),                              sub:'Jobs · Period',                              a1:'#2B6FE0', a2:'#123A7A', icon:IC_KPI.box},
+    {label:'TOTAL TEUS',      value:M.teusGrand.toFixed(2),                           sub:'Sea + ISO Tank · Period',                    a1:'#2B6FE0', a2:'#123A7A', icon:IC_KPI.container},
+    {label:'TONS (AIR)',      value:M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014',  sub:'Chargeable wt · Air only',                   a1:'#2B6FE0', a2:'#123A7A', icon:IC_KPI.plane},
+    {label:'GROSS PROFIT',    value:fmtCur(M.gpGrand),                                sub:state.currency+' · Period',                   a1:'#173F80', a2:'#0A1F42', icon:IC_KPI.coin},
+    {label:'GP TARGET',       value:fmtCur(M.tgtGrand),                               sub:'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)),a1:'#173F80', a2:'#0A1F42', icon:IC_KPI.target},
+    {label:'ACHIEVEMENT',     value:M.achGrand+'%',                                   sub:'vs Target',                                  a1:'#173F80', a2:'#0A1F42', icon:IC_KPI.trend},
   ];
 
   // Value colour: positive achievement green, negative red — everything else navy
@@ -780,13 +781,15 @@ function kpiRow(M){
 
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:16px;">'
     + kpis.map(function(k){
-      return '<div class="kpi-card" style="background:#FFFFFF;border:1px solid #EEF2F8;border-radius:14px;padding:12px 14px;box-shadow:0 1px 2px rgba(13,43,94,0.03),0 2px 8px rgba(13,43,94,0.04);position:relative;overflow:hidden;transition:box-shadow 0.2s ease,transform 0.2s ease,border-color 0.2s ease;">'
-        +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">'
-          +'<div style="width:26px;height:26px;border-radius:9px;background:linear-gradient(135deg,'+k.accent+'22,'+k.accent+'0D);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:'+k.accent+';">'+k.icon+'</div>'
-          +'<div style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;line-height:1.3;">'+k.label+'</div>'
+      return '<div class="kpi-card" style="background:linear-gradient(165deg,#FFFFFF 0%,'+k.a1+'08 150%);border:1px solid #EEF2F8;border-radius:14px;padding:12px 14px;box-shadow:0 1px 2px rgba(13,43,94,0.03),0 3px 10px rgba(13,43,94,0.05);position:relative;overflow:hidden;transition:box-shadow 0.2s ease,transform 0.2s ease,border-color 0.2s ease;">'
+        // ghost watermark icon for subtle depth — sits behind everything, barely visible
+        +'<div style="position:absolute;right:-8px;bottom:-10px;color:'+k.a1+';opacity:0.06;transform:scale(3.4) rotate(-6deg);pointer-events:none;">'+k.icon+'</div>'
+        +'<div style="position:relative;display:flex;align-items:center;gap:9px;margin-bottom:9px;">'
+          +'<div style="width:28px;height:28px;border-radius:9px;background:linear-gradient(135deg,'+k.a1+','+k.a2+');display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#FFFFFF;box-shadow:0 3px 8px '+k.a1+'40;">'+k.icon+'</div>'
+          +'<div style="font-size:8px;font-weight:700;letter-spacing:0.06em;color:#8B9DBB;text-transform:uppercase;line-height:1.3;">'+k.label+'</div>'
         +'</div>'
-        +'<div style="font-family:\'DM Mono\',monospace;font-size:17px;font-weight:700;color:'+valColor(k)+';line-height:1.1;margin-bottom:3px;letter-spacing:-0.01em;">'+k.value+'</div>'
-        +'<div style="font-size:9px;color:#B0BFD4;font-weight:600;">'+k.sub+'</div>'
+        +'<div style="position:relative;font-family:\'DM Mono\',monospace;font-size:17.5px;font-weight:700;color:'+valColor(k)+';line-height:1.1;margin-bottom:3px;letter-spacing:-0.01em;">'+k.value+'</div>'
+        +'<div style="position:relative;font-size:9px;color:#ABB9D1;font-weight:600;">'+k.sub+'</div>'
       +'</div>';
     }).join('')
   +'</div>';
