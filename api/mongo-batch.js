@@ -7,6 +7,7 @@ const { MongoClient } = require("mongodb");
 
 const MONGO_URI = process.env.MONGO_URI;
 const DB_NAME   = "sar-in-air-sales";
+const USD_TO_INR = 94; // Exchange rate used to convert USD targets → INR (same base as GP values)
 
 const COLLECTIONS = {
   "Sea Export":        "jobs_sea_export",
@@ -308,7 +309,7 @@ async function getDrillRows(db, entity, metric, month) {
 
     repLookupByFY[fy][norm] = { displayName, zone,
       lob: String(row["LOB"] || "").trim(),
-      monthlyTarget: parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0,
+      monthlyTarget: (parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR,
       email: String(row["Email ID"] || "").toLowerCase().trim(),
     };
     if (!repsByZoneByFY[fy][zone]) repsByZoneByFY[fy][zone] = [];
@@ -496,7 +497,7 @@ async function computeSalesAggregate(db) {
       displayName:   String(row["Display Name"] || row["Sales Rep Name"] || "").trim(),
       zone:          String(row["Zone"] || "Unassigned").trim(),
       lob:           String(row["LOB"] || "").trim(),
-      monthlyTarget: parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0,
+      monthlyTarget: (parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR,
       email:         String(row["Email ID"] || "").toLowerCase().trim(),
     };
   }
@@ -510,8 +511,8 @@ async function computeSalesAggregate(db) {
     const fy = (row._fy === "FY27") ? "FY27" : "FY26";
     if (!zoneTargetsByFY[fy]) zoneTargetsByFY[fy] = {};
     zoneTargetsByFY[fy][zone] = {
-      yearlyTarget:  parseFloat(row["Yearly Target (USD)"]  || 0) || 0,
-      monthlyTarget: parseFloat(row["Monthly Target (USD)"] || 0) || 0,
+      yearlyTarget:  (parseFloat(row["Yearly Target (USD)"]  || 0) || 0) * USD_TO_INR,
+      monthlyTarget: (parseFloat(row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR,
     };
   }
 
