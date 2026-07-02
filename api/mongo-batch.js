@@ -343,6 +343,9 @@ async function getDrillRows(db, entity, metric, month) {
   }
 
   const isFYTotal      = month === "FY Total";
+  // YEAR:25 → filter to all months in calendar year 2025
+  const isYearGroup    = month && month.startsWith("YEAR:");
+  const yearGroupSuffix = isYearGroup ? month.split(":")[1] : null; // "25" or "26"
   const isAirMetric    = metric === "Tons (Air)";
   const isTeuLclMetric = metric === "TEUs (Ocean)" || metric === "LCL (Ocean in CBM)";
 
@@ -386,7 +389,8 @@ async function getDrillRows(db, entity, metric, month) {
       if (isNaN(d.getTime())) continue;
       const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
       if (!FY_MONTHS.includes(monthLabel)) continue;
-      if (!isFYTotal && monthLabel !== month) continue;
+      if (!isFYTotal && !isYearGroup && monthLabel !== month) continue;
+      if (isYearGroup && yearGroupSuffix && !monthLabel.endsWith('-' + yearGroupSuffix)) continue;
 
       // ── FY-aware mapping — EXACT same as computeSalesAggregate ─────────
       const rowFY  = fyForMonthLabel(monthLabel);
