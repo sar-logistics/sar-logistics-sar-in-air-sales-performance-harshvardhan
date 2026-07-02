@@ -228,6 +228,18 @@ function classifyRow(job, collName) {
 // Tons metric is calculated only for AIR rows (Export or Import)
 function isAirRow(cls) { return cls.kind === "AIR"; }
 
+// Pick the correct GP field based on lock status
+// Air (Import/Export): if "Financial Lock" is empty → Provisional; else Actual
+// All others:          if "Operation Lock" is empty → Provisional; else Actual
+function pickGP(job, cls) {
+  const isAir = cls.kind === "AIR";
+  const lockField = isAir ? "Financial Lock" : "Operation Lock";
+  const isLocked  = job[lockField] !== undefined && job[lockField] !== null && String(job[lockField]).trim() !== "";
+  const actual      = parseFloat(job["Actual Profit (J=C-G)"]     || 0) || 0;
+  const provisional = parseFloat(job["Provisional Profit (I=A-E)"] || 0) || 0;
+  return { gp: isLocked ? actual : provisional, isProvisional: !isLocked };
+}
+
 // TEU and LCL(CBM) metrics are calculated only for SEA and ISOTANK rows
 function hasTeuLclRow(cls) { return cls.kind === "SEA" || cls.kind === "ISOTANK"; }
 
@@ -367,7 +379,7 @@ async function getDrillRows(db, entity, metric, month) {
     "ETD Loading Port":1,"ETA Discharge":1,
     "Chargeable Weight":1,"Chargeable Weight Unit":1,
     "Container TEU":1,"Volume":1,"Volume Unit":1,
-    "Billed Revenue (C)":1,"Actual Cost (G)":1,
+    "Billed Revenue (C)":1,"Actual Cost (G)":1,"Provisional Profit (I=A-E)":1,"Financial Lock":1,"Operation Lock":1,
   };
 
   const queryPromises = relevantCollections.map(collName => {
@@ -461,8 +473,8 @@ async function getDrillRows(db, entity, metric, month) {
       }
       if (metric !== "Shipments" && metric !== "GP" && metricVal === 0) continue;
 
-      const rowGP      = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0;
-      const rowRevenue = parseFloat(job["Billed Revenue (C)"]    || 0) || 0;
+      const { gp: rowGP, isProvisional } = pickGP(job, cls);
+      const rowRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
       const rowCost    = rowRevenue - rowGP;
 
       matchedRows.push({
@@ -475,6 +487,7 @@ async function getDrillRows(db, entity, metric, month) {
         dt: d.toISOString().slice(0,10),       // date (date-only, saves ~15 chars)
         g: rowGP,
         r: rowRevenue,
+        prov: isProvisional ? 1 : 0, // 1=provisional, 0=actual
         x: rowCost,
         t: parseFloat(job["Container TEU"] || 0) || 0,
         m: metricVal,
@@ -572,7 +585,7 @@ async function computeSalesAggregate(db) {
       {},
       { projection: {
           "Sales Person": 1, "Shipment No": 1, "Job Date": 1, "LOB": 1, "Location": 1, "Cargo Type": 1,
-          "Actual Profit (J=C-G)": 1,
+          "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1, "Financial Lock": 1, "Operation Lock": 1,
           "ETD Loading Port": 1, "ETA Discharge": 1,
           "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
           "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
@@ -612,7 +625,9 @@ async function computeSalesAggregate(db) {
       const repLookup = repLookupByFY[rowFY] || {};
       const mapped = repLookup[salesPerson];
 
-      const gp = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0;
+      const { gp, isProvisional } = pickGP(job, cls);
+      const gpProv   = isProvisional ? gp : 0;
+      const gpActual = isProvisional ? 0 : gp;
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
@@ -653,8 +668,10 @@ async function computeSalesAggregate(db) {
 
         const branch = String(job["Location"] || "Unspecified").trim() || "Unspecified";
         if (!branchMonthData[branch]) branchMonthData[branch] = {};
-        if (!branchMonthData[branch][monthLabel]) branchMonthData[branch][monthLabel] = { gp: 0, ship: 0, tons: 0, teu: 0, lcl: 0 };
+        if (!branchMonthData[branch][monthLabel]) branchMonthData[branch][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0 };
         branchMonthData[branch][monthLabel].gp   += gp;
+        branchMonthData[branch][monthLabel].gpProv   += gpProv;
+        branchMonthData[branch][monthLabel].gpActual += gpActual;
         branchMonthData[branch][monthLabel].ship += 1;
         branchMonthData[branch][monthLabel].tons += tons;
         branchMonthData[branch][monthLabel].teu  += teu;
@@ -663,8 +680,8 @@ async function computeSalesAggregate(db) {
         if (dayOfMonth) {
           const wk = weekLabel(monthLabel, dayOfMonth);
           if (!branchWeekData[branch]) branchWeekData[branch] = {};
-          if (!branchWeekData[branch][wk]) branchWeekData[branch][wk] = { gp:0, ship:0, tons:0, teu:0, lcl:0 };
-          branchWeekData[branch][wk].gp += gp; branchWeekData[branch][wk].ship += 1;
+          if (!branchWeekData[branch][wk]) branchWeekData[branch][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+          branchWeekData[branch][wk].gp += gp; branchWeekData[branch][wk].gpProv += gpProv; branchWeekData[branch][wk].gpActual += gpActual; branchWeekData[branch][wk].ship += 1;
           branchWeekData[branch][wk].tons += tons; branchWeekData[branch][wk].teu += teu; branchWeekData[branch][wk].lcl += lcl;
         }
         continue;
@@ -673,8 +690,10 @@ async function computeSalesAggregate(db) {
       const repKey = mapped.displayName + "||" + mapped.zone;
 
       if (!repMonthData[repKey]) repMonthData[repKey] = {};
-      if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, ship: 0, tons: 0, teu: 0, lcl: 0 };
+      if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0 };
       repMonthData[repKey][monthLabel].gp   += gp;
+      repMonthData[repKey][monthLabel].gpProv   += gpProv;
+      repMonthData[repKey][monthLabel].gpActual += gpActual;
       repMonthData[repKey][monthLabel].ship += 1;
       repMonthData[repKey][monthLabel].tons += tons;
       repMonthData[repKey][monthLabel].teu  += teu;
@@ -683,8 +702,8 @@ async function computeSalesAggregate(db) {
       if (dayOfMonth) {
         const wk = weekLabel(monthLabel, dayOfMonth);
         if (!repWeekData[repKey]) repWeekData[repKey] = {};
-        if (!repWeekData[repKey][wk]) repWeekData[repKey][wk] = { gp:0, ship:0, tons:0, teu:0, lcl:0 };
-        repWeekData[repKey][wk].gp += gp; repWeekData[repKey][wk].ship += 1;
+        if (!repWeekData[repKey][wk]) repWeekData[repKey][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+        repWeekData[repKey][wk].gp += gp; repWeekData[repKey][wk].gpProv += gpProv; repWeekData[repKey][wk].gpActual += gpActual; repWeekData[repKey][wk].ship += 1;
         repWeekData[repKey][wk].tons += tons; repWeekData[repKey][wk].teu += teu; repWeekData[repKey][wk].lcl += lcl;
       }
 
@@ -701,7 +720,9 @@ async function computeSalesAggregate(db) {
   const repsRaw = [];
   for (const [repKey, monthData] of Object.entries(repMonthData)) {
     const meta = repMeta[repKey];
-    const gp   = activeMonths.map(m => monthData[m]?.gp || 0);
+    const gp      = activeMonths.map(m => monthData[m]?.gp      || 0);
+    const gpProv  = activeMonths.map(m => monthData[m]?.gpProv  || 0);
+    const gpActual= activeMonths.map(m => monthData[m]?.gpActual|| 0);
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
     const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
     const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
@@ -713,16 +734,18 @@ async function computeSalesAggregate(db) {
       lob:   meta.lob,
       email: meta.email,
       hue:   zoneHue(meta.zone),
-      gp, ship, tons, teu, lcl,
+      gp, gpProv, gpActual, ship, tons, teu, lcl,
       tank:  activeMonths.map(() => 0),
       tgt:   0,
-      weekData: repWeekData[repKey] || {}, // { "Apr-25:W1" → { gp, ship, ... } }
+      weekData: repWeekData[repKey] || {},
     });
   }
 
   // Cross Sales branches
   for (const [branchName, monthData] of Object.entries(branchMonthData)) {
-    const gp   = activeMonths.map(m => monthData[m]?.gp || 0);
+    const gp      = activeMonths.map(m => monthData[m]?.gp      || 0);
+    const gpProv  = activeMonths.map(m => monthData[m]?.gpProv  || 0);
+    const gpActual= activeMonths.map(m => monthData[m]?.gpActual|| 0);
     const ship = activeMonths.map(m => monthData[m]?.ship || 0);
     const tons = activeMonths.map(m => Math.round((monthData[m]?.tons || 0) * 100) / 100);
     const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
@@ -734,7 +757,7 @@ async function computeSalesAggregate(db) {
       lob:   "",
       email: "",
       hue:   zoneHue(CROSS_SALES_ZONE + branchName),
-      gp, ship, tons, teu, lcl,
+      gp, gpProv, gpActual, ship, tons, teu, lcl,
       tank:  activeMonths.map(() => 0),
       tgt:   0,
       isBranch: true,
@@ -821,7 +844,7 @@ async function computeCustomerAggregate(db) {
       { projection: {
           "Customer": 1,
           "Billed Revenue (C)": 1,
-          "Actual Profit (J=C-G)": 1,
+          "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1, "Financial Lock": 1, "Operation Lock": 1,
         }
       }
     ).toArray();
@@ -831,7 +854,7 @@ async function computeCustomerAggregate(db) {
       if (!customer) continue;
 
       const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      const gp      = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0;
+      const { gp }  = pickGP(job, cls);
 
       if (!custMap[customer]) custMap[customer] = { shipments: 0, revenue: 0, gp: 0 };
       custMap[customer].shipments += 1;
