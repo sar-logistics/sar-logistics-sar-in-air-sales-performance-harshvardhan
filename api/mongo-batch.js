@@ -350,6 +350,27 @@ async function getDrillRows(db, entity, metric, month) {
     const bits = month.split(":");
     rangeParts = { start: bits[1], end: bits[2] };
   }
+  // WEEK:2026-W14 → include only jobs whose date falls in that exact ISO
+  // week's Monday-Sunday range (a true calendar week, can span two months)
+  const isWeek = month && month.startsWith("WEEK:");
+  let weekRange = null;
+  if (isWeek) {
+    const isoKey = month.slice(5); // "2026-W14"
+    const parts = isoKey.split("-W");
+    const isoYear = parseInt(parts[0], 10);
+    const weekNum = parseInt(parts[1], 10);
+    // ISO week Monday: Jan 4th is always in week 1; walk from there
+    const jan4 = new Date(Date.UTC(isoYear, 0, 4));
+    const jan4DayNum = (jan4.getUTCDay() + 6) % 7;
+    const week1Monday = new Date(jan4);
+    week1Monday.setUTCDate(jan4.getUTCDate() - jan4DayNum);
+    const monday = new Date(week1Monday);
+    monday.setUTCDate(week1Monday.getUTCDate() + (weekNum - 1) * 7);
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    sunday.setUTCHours(23, 59, 59, 999);
+    weekRange = { start: monday, end: sunday };
+  }
   const isAirMetric    = metric === "Tons (Air)";
   const isTeuLclMetric = metric === "TEUs (Ocean)" || metric === "LCL (Ocean in CBM)";
 
@@ -397,7 +418,7 @@ async function getDrillRows(db, entity, metric, month) {
       if (isNaN(d.getTime())) continue;
       const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
       if (!FY_MONTHS.includes(monthLabel)) continue;
-      if (!isFYTotal && !isYearGroup && !isRange && monthLabel !== month) continue;
+      if (!isFYTotal && !isYearGroup && !isRange && !isWeek && monthLabel !== month) continue;
       if (isYearGroup && yearGroupSuffix && !monthLabel.endsWith('-' + yearGroupSuffix)) continue;
       if (isRange && rangeParts) {
         const allM = FY_MONTHS;
@@ -405,6 +426,9 @@ async function getDrillRows(db, entity, metric, month) {
         const ti = allM.indexOf(rangeParts.end);
         const mi = allM.indexOf(monthLabel);
         if (fi < 0 || ti < 0 || mi < fi || mi > ti) continue;
+      }
+      if (isWeek && weekRange) {
+        if (d < weekRange.start || d > weekRange.end) continue;
       }
 
       // ── FY-aware mapping — EXACT same as computeSalesAggregate ─────────
@@ -596,15 +620,30 @@ async function computeSalesAggregate(db) {
 
   const CROSS_SALES_ZONE = "Cross Sales";
   const branchMonthData = {}; // branchName → { monthLabel → { gp, ship, tons, teu, lcl } }
-  const repWeekData   = {}; // repKey → { "Apr-25:W1" → { gp, ship, tons, teu, lcl }, ... }
-  const branchWeekData= {}; // branchName → { "Apr-25:W1" → { gp, ship, tons, teu, lcl }, ... }
+  const repWeekData   = {}; // repKey → { "2026-W14" → { gp, ship, tons, teu, lcl }, ... }
+  const branchWeekData= {}; // branchName → { "2026-W14" → { gp, ship, tons, teu, lcl }, ... }
   const repLobData    = {}; // repKey → { "SEA EXPORT" → { "Apr-25" → {gp,ship,tons,teu,lcl} } }
   const branchLobData = {}; // branchName → { "SEA EXPORT" → { "Apr-25" → {...} } }
 
-  // Week label within a month: day 1-7=W1, 8-14=W2, 15-21=W3, 22+=W4
-  function weekLabel(monthLabel, day){
-    var w = day <= 7 ? 'W1' : day <= 14 ? 'W2' : day <= 21 ? 'W3' : 'W4';
-    return monthLabel + ':' + w;
+  // True ISO 8601 week number (Mon-Sun), independent of calendar month —
+  // a week is identified by "<isoYear>-W<NN>" and can span two months.
+  // Returns { key, weekNum, isoYear, monday (Date), sunday (Date) }.
+  function isoWeekInfo(date) {
+    var d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    var dayNum = (d.getUTCDay() + 6) % 7; // Mon=0 .. Sun=6
+    var thursday = new Date(d);
+    thursday.setUTCDate(d.getUTCDate() - dayNum + 3);
+    var isoYear = thursday.getUTCFullYear();
+    var firstThursday = new Date(Date.UTC(isoYear, 0, 4));
+    var fThDayNum = (firstThursday.getUTCDay() + 6) % 7;
+    firstThursday.setUTCDate(firstThursday.getUTCDate() - fThDayNum + 3);
+    var weekNum = 1 + Math.round((thursday - firstThursday) / (7 * 86400000));
+    var monday = new Date(d);
+    monday.setUTCDate(d.getUTCDate() - dayNum);
+    var sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    var key = isoYear + '-W' + String(weekNum).padStart(2, '0');
+    return { key: key, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
   }
 
   for (const collName of JOB_COLLECTIONS) {
@@ -634,7 +673,7 @@ async function computeSalesAggregate(db) {
 
       // Primary date column for this row's classification, falling back to Job Date if blank
       let monthLabel = null;
-      let dayOfMonth = null;
+      let rowDate = null;
       const primaryDate = job[dateCol];
       const fallbackDate = job["Job Date"];
       const rawDate = primaryDate || fallbackDate;
@@ -642,7 +681,7 @@ async function computeSalesAggregate(db) {
         const d = new Date(rawDate);
         if (!isNaN(d.getTime())) {
           monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
-          dayOfMonth = d.getDate();
+          rowDate = d;
         }
       }
       if (!monthLabel || !FY_MONTHS.includes(monthLabel)) continue;
@@ -705,9 +744,9 @@ async function computeSalesAggregate(db) {
         branchMonthData[branch][monthLabel].tons += tons;
         branchMonthData[branch][monthLabel].teu  += teu;
         branchMonthData[branch][monthLabel].lcl  += lcl;
-        // Weekly accumulation
-        if (dayOfMonth) {
-          const wk = weekLabel(monthLabel, dayOfMonth);
+        // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
+        if (rowDate) {
+          const wk = isoWeekInfo(rowDate).key;
           if (!branchWeekData[branch]) branchWeekData[branch] = {};
           if (!branchWeekData[branch][wk]) branchWeekData[branch][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
           branchWeekData[branch][wk].gp += gp; branchWeekData[branch][wk].gpProv += gpProv; branchWeekData[branch][wk].gpActual += gpActual; branchWeekData[branch][wk].ship += 1;
@@ -741,9 +780,9 @@ async function computeSalesAggregate(db) {
       repMonthData[repKey][monthLabel].tons += tons;
       repMonthData[repKey][monthLabel].teu  += teu;
       repMonthData[repKey][monthLabel].lcl  += lcl;
-      // Weekly accumulation
-      if (dayOfMonth) {
-        const wk = weekLabel(monthLabel, dayOfMonth);
+      // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
+      if (rowDate) {
+        const wk = isoWeekInfo(rowDate).key;
         if (!repWeekData[repKey]) repWeekData[repKey] = {};
         if (!repWeekData[repKey][wk]) repWeekData[repKey][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
         repWeekData[repKey][wk].gp += gp; repWeekData[repKey][wk].gpProv += gpProv; repWeekData[repKey][wk].gpActual += gpActual; repWeekData[repKey][wk].ship += 1;
