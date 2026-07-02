@@ -975,10 +975,16 @@ module.exports = async function handler(req, res) {
   const action = req.query?.action || req.body?.action;
   if (!action) return res.status(400).json({ error: "action required: jobs | mapping | users | sales" });
 
-  // Lightweight ping — warms up the serverless function + DB connection
-  // Called every 4 minutes by the frontend to prevent cold starts
+  // Lightweight ping — warms up the serverless function + DB connection.
+  // Also proactively refreshes the sales cache in the background so users
+  // never hit a cold, slow full-aggregation on their first page load.
   if (action === "ping") {
-    await getDB(); // ensures connection is alive
+    const db = await getDB(); // ensures connection is alive
+    // Fire-and-forget cache warm-up — don't block the ping response on it.
+    // Only refreshes if the cache is close to expiring, to avoid redundant work.
+    if (!salesCache || (Date.now() - salesCacheTime) > (SALES_CACHE_TTL_MS - 5 * 60 * 1000)) {
+      getSalesAggregate(db, false).catch(() => {}); // best-effort, errors ignored
+    }
     return res.status(200).json({ ok: true, ts: Date.now() });
   }
 
