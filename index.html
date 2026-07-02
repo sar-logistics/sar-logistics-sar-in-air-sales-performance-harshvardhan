@@ -1434,60 +1434,27 @@ function kpiRow(M){
   var fmtPct  = function(v){ return Math.round(v)+'%'; };
 
   var kpis = [
-    { label:'TOTAL SHIPMENTS', value: noData ? '—' : String(M.shipGrand),                              delta: noData ? null : momDelta(shipData), deltaLabel:periodLabel, vcolor:'#0D2B5E', icon:'ship',   iconBg:'#EEF3FC', iconColor:'#5678C2' },
-    { label:'TOTAL TEUS',      value: noData ? '—' : M.teusGrand.toFixed(2),                           delta: noData ? null : momDelta(teuData),  deltaLabel:periodLabel, vcolor:'#0D2B5E', icon:'container', iconBg:'#EDF7F2', iconColor:'#1D9E6F' },
-    { label:'TONS (AIR)',      value: noData ? '—' : (M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014'),delta: noData ? null : momDelta(tonsData), deltaLabel:periodLabel, vcolor:'#0D2B5E', icon:'plane',  iconBg:'#F0F0FC', iconColor:'#7C6FE0' },
-    { label:'GROSS PROFIT',    value: noData ? '—' : fmtCur(M.gpGrand),                                delta: noData ? null : momDelta(gpData),   deltaLabel:periodLabel, vcolor:'#0D2B5E', icon:'coin',   iconBg:'#FCF3E3', iconColor:'#D4941E' },
-    { label:'GP TARGET',       value: noData ? '—' : fmtCur(M.tgtGrand),                               delta:null, deltaLabel: noData ? 'No data' : 'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), vcolor:'#0D2B5E', icon:'target', iconBg:'#FCEBEA', iconColor:'#D4574A' },
-    { label:'ACHIEVEMENT',     value: noData ? '—' : M.achGrand+'%',                                   delta:null, deltaLabel: noData ? 'No data' : 'vs target', vcolor: noData ? '#9AAFC8' : achColor, icon:'gauge', achPct: M.achGrand },
+    { label:'TOTAL SHIPMENTS', value: noData ? '—' : String(M.shipGrand),                              delta: noData ? null : momDelta(shipData), deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#5678C2' },
+    { label:'TOTAL TEUS',      value: noData ? '—' : M.teusGrand.toFixed(2),                           delta: noData ? null : momDelta(teuData),  deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#1D9E6F' },
+    { label:'TONS (AIR)',      value: noData ? '—' : (M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014'),delta: noData ? null : momDelta(tonsData), deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#7C6FE0' },
+    { label:'GROSS PROFIT',    value: noData ? '—' : fmtCur(M.gpGrand),                                delta: noData ? null : momDelta(gpData),   deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#D4941E' },
+    { label:'GP TARGET',       value: noData ? '—' : fmtCur(M.tgtGrand),                               delta:null, deltaLabel: noData ? 'No data' : 'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), vcolor:'#0D2B5E', tint:'#D4574A' },
+    { label:'ACHIEVEMENT',     value: noData ? '—' : M.achGrand+'%',                                   delta:null, deltaLabel: noData ? 'No data' : 'vs target', vcolor: noData ? '#9AAFC8' : achColor, tint: achColor },
   ];
-
-  // Icon set — each metric gets a purpose-built glyph instead of a data graph
-  var ICONS = {
-    ship: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>',
-    container: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="12" rx="1.5"/><path d="M3 11h18M9 7v12M15 7v12"/></svg>',
-    plane: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5c.8-.8.8-2 0-2.8-.8-.8-2-.8-2.8 0L13.2 8 5 6.2 3.5 7.7l6.7 4.3-3 3-2.5-.5L3 16.3l3 1.7 1.7 3 1.8-1.7-.5-2.5 3-3 4.3 6.7 1.5-1.5z"/></svg>',
-    coin: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.3 9.3c0-1.1 1.1-1.9 2.7-1.9s2.7.8 2.7 1.9c0 2.8-5.4 1.4-5.4 4.2 0 1.1 1.1 1.9 2.7 1.9s2.7-.8 2.7-1.9"/></svg>',
-    target: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.2"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>',
-  };
-
-  // Circular achievement gauge — a ring that fills proportionally to the %,
-  // capped visually at 100% (values over 100 show a filled ring + badge)
-  function achievementGauge(pct, color){
-    var clamped = Math.max(0, Math.min(100, pct));
-    var r = 17, circumference = 2 * Math.PI * r;
-    var dash = (clamped / 100) * circumference;
-    return '<svg width="44" height="44" viewBox="0 0 44 44" style="flex-shrink:0;transform:rotate(-90deg);">'
-      +'<circle cx="22" cy="22" r="'+r+'" fill="none" stroke="#EEF2F8" stroke-width="4"/>'
-      +'<circle cx="22" cy="22" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="4" stroke-linecap="round" '
-        +'stroke-dasharray="'+dash.toFixed(1)+' '+circumference.toFixed(1)+'" style="transition:stroke-dasharray 0.5s ease;"/>'
-    +'</svg>';
-  }
 
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:14px;">'
     + kpis.map(function(k){
-      var iconEl = k.icon === 'gauge'
-        ? '<div style="position:relative;width:44px;height:44px;flex-shrink:0;display:flex;align-items:center;justify-content:center;">'
-            +achievementGauge(noData ? 0 : k.achPct, k.vcolor)
-            +'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">'
-              +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+k.vcolor+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 6h6v6"/></svg>'
-            +'</div>'
-          +'</div>'
-        : '<div style="width:36px;height:36px;border-radius:10px;background:'+k.iconBg+';color:'+k.iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ICONS[k.icon]+'</div>';
-
-      return '<div class="kpi-card" style="background:#FFFFFF;border:1.5px solid #D8E1F0;border-radius:16px;padding:14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;display:flex;flex-direction:column;gap:10px;">'
-        // Top row: icon + label
-        +'<div style="display:flex;align-items:center;gap:10px;">'
-          +iconEl
-          +'<div style="min-width:0;">'
-            +'<div style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5B7298;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
-            +'<div style="font-family:\'DM Mono\',monospace;font-size:17px;font-weight:700;color:'+k.vcolor+';line-height:1.2;letter-spacing:-0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">'+k.value+'</div>'
-          +'</div>'
-        +'</div>'
-        // Bottom: delta / sub label
+      return '<div class="kpi-card" style="position:relative;background:#FFFFFF;border:1.5px solid #D8E1F0;border-radius:16px;padding:14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;overflow:hidden;">'
+        // Subtle radial gradient wash in the corner — decorative, matches each metric's colour, no data encoded
+        +'<div style="position:absolute;top:-20px;right:-20px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,'+k.tint+'22 0%,'+k.tint+'00 70%);pointer-events:none;"></div>'
+        // Label
+        +'<div style="position:relative;font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5B7298;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
+        // Big value
+        +'<div style="position:relative;font-family:\'DM Mono\',monospace;font-size:18px;font-weight:700;color:'+k.vcolor+';line-height:1.1;margin-bottom:5px;letter-spacing:-0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.value+'</div>'
+        // Delta / sub
         +(k.delta !== null
-          ? deltaEl(k.delta, k.deltaLabel)
-          : '<div style="font-size:10px;color:#6B82A0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.deltaLabel+'</div>')
+          ? '<div style="position:relative;">'+deltaEl(k.delta, k.deltaLabel)+'</div>'
+          : '<div style="position:relative;font-size:10px;color:#6B82A0;font-weight:600;height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.deltaLabel+'</div>')
       +'</div>';
     }).join('')
   +'</div>';
