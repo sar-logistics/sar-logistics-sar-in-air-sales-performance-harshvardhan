@@ -364,10 +364,16 @@ async function getDrillRows(db, entity, metric, month) {
   };
 
   const queryPromises = relevantCollections.map(collName => {
-    const filter = useCrossSalesPath ? {}
-      : (allRelevantRawNames.size > 0
-          ? { "Sales Person": { $in: Array.from(allRelevantRawNames) } }
-          : { "Sales Person": { $in: [] } });
+    let filter;
+    if (isGrandTotal) {
+      filter = {}; // Grand Total: fetch every row, no Sales Person filter
+    } else if (useCrossSalesPath) {
+      filter = {}; // Cross Sales: also fetch all, filter in-memory by mapped/unmapped
+    } else if (allRelevantRawNames.size > 0) {
+      filter = { "Sales Person": { $in: Array.from(allRelevantRawNames) } };
+    } else {
+      filter = { "Sales Person": { $in: [] } }; // empty result
+    }
     return db.collection(collName).find(filter, { projection: baseProjection }).toArray()
       .then(rows => ({ collName, rows }));
   });
@@ -397,22 +403,21 @@ async function getDrillRows(db, entity, metric, month) {
       const repLookup = repLookupByFY[rowFY] || {};
       const mapped    = repLookup[salesPerson];
 
-      // ── Entity membership — mirrors computeSalesAggregate exactly ───────
-      if (useCrossSalesPath) {
+      // ── Entity membership ────────────────────────────────────────────────
+      if (isGrandTotal) {
+        // Grand Total = every valid job row, mapped or unmapped — no filter
+      } else if (useCrossSalesPath) {
+        // Cross Sales zone or branch: only unmapped reps
         if (allMappedNames.has(salesPerson)) continue;
         if (isCrossSalesBranch) {
           const branch = String(job["Location"] || "Unspecified").trim() || "Unspecified";
           if (branch !== entity) continue;
         }
       } else {
-        if (isGrandTotal) {
-          // Grand Total includes ALL jobs — both mapped reps AND cross sales (unmapped)
-          // No entity membership filter needed
-        } else {
-          if (!mapped) continue;  // unmapped reps don't belong to any named zone/rep
-          if (isKnownZone && mapped.zone !== entity)         continue;
-          if (isKnownRep  && mapped.displayName !== entity)  continue;
-        }
+        // Named zone or rep: must be mapped AND belong to that entity
+        if (!mapped) continue;
+        if (isKnownZone && mapped.zone !== entity)        continue;
+        if (isKnownRep  && mapped.displayName !== entity) continue;
       }
 
       // ── Metric filtering ────────────────────────────────────────────────
