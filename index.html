@@ -2099,15 +2099,26 @@ function drawer(){
       + th('Cost','right')
       + th('GP','right');
 
-    // Compute displayed totals from rows
+    // Compute counts and totals FIRST before building any HTML
+    var displayedCount = d.rows ? d.rows.length : 0;
+    var totalCount     = d.count || 0;
+    var isTruncated    = totalCount > displayedCount;
+
+    // Displayed sums (for per-row verification only)
     var dRevSum=0, dCostSum=0, dGpSum=0, dTeuSum=0, dMetricSum=0;
     d.rows.forEach(function(r){
-      dRevSum    += r.revenue  || 0;
-      dCostSum   += r.cost     || 0;
-      dGpSum     += r.gp       || 0;
-      dTeuSum    += r.teu      || 0;
-      dMetricSum += r.metricVal|| 0;
+      dRevSum    += r.revenue   || 0;
+      dCostSum   += r.cost      || 0;
+      dGpSum     += r.gp        || 0;
+      dTeuSum    += r.teu       || 0;
+      dMetricSum += r.metricVal || 0;
     });
+
+    // BACKEND totals = full dataset (all matched rows, not just 5000 shown)
+    var fullRevSum    = d.totalRevenue || 0;
+    var fullCostSum   = d.totalCost    || 0;
+    var fullGpSum     = d.totalGP      || 0;
+    var fullMetricSum = d.totalMetric  || 0;
 
     var bodyRows = d.rows.map(function(s, idx){
       var dt = new Date(s.date);
@@ -2136,21 +2147,23 @@ function drawer(){
       +'</tr>';
     }).join('');
 
-    // Sticky total row at the bottom
+    // Sticky total row — always shows FULL totals from backend (all matched jobs)
     var totalRow = '<tr style="background:#EEF3FC;border-top:2px solid #CBD5E1;position:sticky;bottom:0;">'
-      +'<td style="padding:8px 12px;font-size:11.5px;font-weight:800;color:#0D2B5E;" colspan="'+(showMetricCol?2:1)+'">TOTAL</td>'
-      +'<td style="padding:8px 12px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+dTeuSum.toFixed(1)+'</td>'
-      +'<td colspan="4" style="padding:8px 12px;font-size:11px;color:#64748B;font-style:italic;">'
-        +(isTruncated ? 'Showing '+displayedCount+' of '+totalCount+' jobs' : displayedCount+' jobs')
+      +'<td style="padding:9px 12px;font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;" colspan="'+(showMetricCol?2:1)+'">TOTAL</td>'
+      +'<td style="padding:9px 12px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+dTeuSum.toFixed(1)+(isTruncated?'*':'')+'</td>'
+      +'<td colspan="4" style="padding:9px 12px;font-size:11px;color:#64748B;">'
+        +(isTruncated
+          ? '<span style="background:#FEF3C7;color:#92610A;font-weight:700;border-radius:4px;padding:2px 8px;">'+totalCount.toLocaleString()+' jobs (showing '+displayedCount.toLocaleString()+')</span>'
+          : '<span style="color:#64748B;font-weight:500;">'+totalCount.toLocaleString()+' jobs</span>')
       +'</td>'
-      +'<td style="padding:8px 12px;"></td>'
-      +'<td style="padding:8px 12px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+fmtCur(dRevSum)+'</td>'
-      +'<td style="padding:8px 12px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+fmtCur(dCostSum)+'</td>'
-      +'<td style="padding:8px 12px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:800;color:'+(dGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dGpSum)+'</td>'
+      +'<td style="padding:9px 12px;"></td>'
+      +'<td style="padding:9px 12px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+fmtCur(fullRevSum)+'</td>'
+      +'<td style="padding:9px 12px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+fmtCur(fullCostSum)+'</td>'
+      +'<td style="padding:9px 12px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(fullGpSum)+'</td>'
     +'</tr>'
     +(isTruncated
-      ? '<tr style="background:#FFF8E7;border-top:1px dashed #F0D9A8;">'
-          +'<td colspan="'+(showMetricCol?11:10)+'" style="padding:6px 12px;font-size:11px;color:#92610A;font-weight:600;">⚠ Full total (all '+totalCount+' jobs): GP '+fmtCur(d.totalGP)+' · Revenue '+fmtCur(d.totalRevenue||0)+'</td>'
+      ? '<tr style="background:#FFFBEB;">'
+          +'<td colspan="'+(showMetricCol?11:10)+'" style="padding:5px 12px;font-size:10.5px;color:#92610A;">* TEU shown for first '+displayedCount.toLocaleString()+' rows only. Revenue, Cost &amp; GP are totals across ALL '+totalCount.toLocaleString()+' jobs.</td>'
         +'</tr>'
       : '');
 
@@ -2163,13 +2176,9 @@ function drawer(){
     +'</div>';
   }
 
-  var displayedCount = d.rows ? d.rows.length : 0;
-  var totalCount = d.count || 0;
-  var isTruncated = totalCount > displayedCount;
-
   var subtitle = d.loading ? 'Loading…'
     : d.count !== undefined
-      ? d.count + ' job' + (d.count === 1 ? '' : 's') + ' matching' + (isTruncated ? ' (showing first ' + displayedCount + ')' : '')
+      ? d.count.toLocaleString() + ' job' + (d.count === 1 ? '' : 's') + ' matching' + (isTruncated ? ' (showing first ' + displayedCount.toLocaleString() + ')' : '')
       : '';
 
   // Footer: shows sum of DISPLAYED rows + full total if truncated
