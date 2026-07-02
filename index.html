@@ -31,22 +31,24 @@
     top: 50%;
     transform: translateY(-50%);
     left: 240px;
-    width: 18px;
-    height: 44px;
+    width: 24px;
+    height: 56px;
     background: #1E3A66;
-    border: none;
-    border-radius: 0 7px 7px 0;
+    border: 1.5px solid rgba(255,255,255,0.15);
+    border-left: none;
+    border-radius: 0 10px 10px 0;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 200;
+    opacity: 1;
     transition: left 0.26s cubic-bezier(0.4,0,0.2,1), background 0.15s ease;
-    box-shadow: 3px 0 8px rgba(13,43,94,0.2);
+    box-shadow: 3px 0 10px rgba(13,43,94,0.3), 0 0 0 1px rgba(13,43,94,0.08);
   }
   #sb-toggle:hover { background: #2D5296; }
   #sb-toggle svg { transition: transform 0.26s ease; }
-  #sb-toggle.collapsed { left: 0; border-radius: 0 7px 7px 0; }
+  #sb-toggle.collapsed { left: 0; border-radius: 0 10px 10px 0; }
   #sb-toggle.collapsed svg { transform: rotate(180deg); }
   /* Prevent layout recalc on animating elements */
   .kpi-card { will-change: transform; contain: layout style; }
@@ -1826,8 +1828,8 @@ function tableRows(){
     rows.push(metric('GP', 0, 'cur', '#374151', dispGp, sum(dispGp), 'gp'));
 
     if (gpOpen) {
-      rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
       rows.push(metric('Actual Profit',      1, 'cur', '#1D5FCC', dispGpActual, sum(dispGpActual), false));
+      rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
     }
 
     rows.push(metric('Target',        0, 'cur', '#374151', tgtArr,  sum(tgtArr), false));
@@ -2454,7 +2456,7 @@ function render(){
   if(!app.querySelector('aside')){
     app.innerHTML = sidebar()
       + '<button id="sb-toggle" onclick="toggleSidebar()" title="Toggle sidebar">'
-          + '<svg width="9" height="14" viewBox="0 0 9 14" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6,1 2,7 6,13"/></svg>'
+          + '<svg width="12" height="18" viewBox="0 0 12 18" fill="none" stroke="white" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="8,1 3,9 8,17"/></svg>'
         + '</button>'
       + '<div id="main-col" style="flex:1;display:flex;flex-direction:column;height:100%;overflow:hidden;">'
           + '<div id="topbar-slot"></div>'
@@ -2528,9 +2530,7 @@ function toggleSidebar(){
   if (!sb || !btn) return;
   var collapsed = sb.classList.toggle('collapsed');
   btn.classList.toggle('collapsed', collapsed);
-  // Flip the chevron SVG direction
-  var poly = btn.querySelector('polyline');
-  if (poly) poly.setAttribute('points', collapsed ? '3,1 7,7 3,13' : '6,1 2,7 6,13');
+  // Arrow direction flips via CSS transform:rotate(180deg) on .collapsed
 }
 
 // Sidebar tooltip — shows nav item label on hover when sidebar is collapsed
