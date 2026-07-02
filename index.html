@@ -2331,22 +2331,17 @@ function renderKeepTopbar(){
 }
 
 function openDrill(entity, metric, col, valueFmt){
+  console.log('[DRILL] entity:', entity, '| metric:', metric, '| col:', col, '| valueFmt:', valueFmt);
   // col can be:
   //   "FY Total"    → all months
   //   "Apr-25"      → specific month label
-  //   "YEAR:25"     → all months of calendar year 2025 → send as "YEAR:25" and handle in backend
-  //   "Week 1" etc  → already resolved to actual month label by rawColKeys
+  //   "YEAR:25"     → all months of calendar year 2025
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null };
   render();
 
-  // Resolve YEAR: keys — tell backend which months to include
   var monthParam = col;
-  if (col && col.startsWith('YEAR:')) {
-    // Pass as-is — backend will handle it
-    monthParam = col;
-  }
-
   var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(monthParam);
+  console.log('[DRILL] Fetching:', qs);
   fetch('/api/mongo-batch'+qs, { priority: 'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
@@ -2361,6 +2356,7 @@ function openDrill(entity, metric, col, valueFmt){
       state.drill.count = data.count;
       state.drill.totalMetric = data.totalMetric;
       state.drill.totalGP = data.totalGP;
+      console.log('[DRILL] Response: count='+data.count+' totalMetric='+data.totalMetric+' totalGP='+data.totalGP);
       render();
     })
     .catch(function(err){
