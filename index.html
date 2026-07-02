@@ -16,40 +16,11 @@
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700&family=DM+Mono:wght@500;700&display=swap"></noscript>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
-  /* ── Sidebar collapse ── */
+  /* Sidebar is always visible — fixed width, no collapse/toggle */
   #sidebar-el {
     width: 240px;
     flex-shrink: 0;
-    transition: width 0.26s cubic-bezier(0.4,0,0.2,1),
-                min-width 0.26s cubic-bezier(0.4,0,0.2,1);
-    overflow: hidden;
-    position: relative;
   }
-  #sidebar-el.collapsed { width: 0; min-width: 0; }
-  #sb-toggle {
-    position: fixed;
-    top: 50%;
-    transform: translateY(-50%);
-    left: 240px;
-    width: 24px;
-    height: 56px;
-    background: #1E3A66;
-    border: 1.5px solid rgba(255,255,255,0.15);
-    border-left: none;
-    border-radius: 0 10px 10px 0;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 200;
-    opacity: 1;
-    transition: left 0.26s cubic-bezier(0.4,0,0.2,1), background 0.15s ease;
-    box-shadow: 3px 0 10px rgba(13,43,94,0.3), 0 0 0 1px rgba(13,43,94,0.08);
-  }
-  #sb-toggle:hover { background: #2D5296; }
-  #sb-toggle svg { transition: transform 0.26s ease; }
-  #sb-toggle.collapsed { left: 0; border-radius: 0 10px 10px 0; }
-  #sb-toggle.collapsed svg { transform: rotate(180deg); }
   /* Prevent layout recalc on animating elements */
   .kpi-card { will-change: transform; contain: layout style; }
   /* Off-screen table rows don't need to paint — saves ~30% render time on large tables */
@@ -97,7 +68,6 @@
   .shipcard:hover{border-color:#C9D4E2 !important;background:#FCFDFF;}
   .kpi-card:hover{box-shadow:0 1px 2px rgba(13,43,94,0.05),0 12px 28px -6px rgba(13,43,94,0.14) !important;transform:translateY(-2px);border-color:#CDD6EA !important;}
   .kpi-card:hover .kpi-icon{transform:rotate(-6deg) scale(1.08);}
-  .sp-dot{filter:drop-shadow(0 1px 2px rgba(0,0,0,0.15));}
 
   /* ── Login screen ── */
   #login-screen{
@@ -543,6 +513,52 @@ function fetchLiveData(callback, force){
     });
 }
 
+var _weekDataFetched = false;
+var _lobDataFetched  = false;
+
+// Lazily fetch the heavy per-rep weekData breakdown — only called the first
+// time the user switches to Weekly view. Merges into repsRawOriginal by
+// matching name+zone so nothing else needs to change.
+function fetchWeekDataIfNeeded(callback){
+  if (_weekDataFetched || repsRawOriginal.length === 0) { if (callback) callback(); return; }
+  fetch('/api/mongo-batch?action=sales&includeWeek=1', { priority: 'high' })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.repsRaw && data.repsRaw.length > 0) {
+        var byKey = {};
+        data.repsRaw.forEach(function(r){ byKey[r.name+'||'+r.zone] = r.weekData; });
+        repsRawOriginal.forEach(function(r){
+          var wd = byKey[r.name+'||'+r.zone];
+          if (wd) r.weekData = wd;
+        });
+        _weekDataFetched = true;
+      }
+      if (callback) callback();
+    })
+    .catch(function(){ if (callback) callback(); });
+}
+
+// Lazily fetch the heavy per-rep lobData breakdown — only called the first
+// time the user opens the Filters panel (where LOB selection lives).
+function fetchLobDataIfNeeded(callback){
+  if (_lobDataFetched || repsRawOriginal.length === 0) { if (callback) callback(); return; }
+  fetch('/api/mongo-batch?action=sales&includeLob=1', { priority: 'high' })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.repsRaw && data.repsRaw.length > 0) {
+        var byKey = {};
+        data.repsRaw.forEach(function(r){ byKey[r.name+'||'+r.zone] = r.lobData; });
+        repsRawOriginal.forEach(function(r){
+          var ld = byKey[r.name+'||'+r.zone];
+          if (ld) r.lobData = ld;
+        });
+        _lobDataFetched = true;
+      }
+      if (callback) callback();
+    })
+    .catch(function(){ if (callback) callback(); });
+}
+
 function fetchCustomerData(callback, force){
   fetch('/api/mongo-batch?action=customers' + (force ? '&force=1' : ''))
     .then(function(r){ return r.json(); })
@@ -621,7 +637,6 @@ var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:f
   quarterDropOpen: false,
   qyrDropOpen: false,
   yearTypeDropOpen: false,
-  sidebarCollapsed: false,
   gpOpen: {},
   filtersOpen: false,
   filterLobDropOpen: false,
@@ -1345,74 +1360,6 @@ function kpiRow(M){
   var n = idxs.length || 1;
   var noData = !hasDataForIndices(idxs);
 
-  // Build sparkline SVG with area fill — matches the reference card style exactly
-  // Build point labels from current view + filtered months
-  var pointLabels = (function(){
-    var v = state.reportView;
-    if (v === 'Weekly') return ['Week 1','Week 2','Week 3','Week 4'];
-    if (v === 'Quarterly') {
-      var qm = {'Q1':['Apr','May','Jun'],'Q2':['Jul','Aug','Sep'],'Q3':['Oct','Nov','Dec'],'Q4':['Jan','Feb','Mar']};
-      return (qm[state.selectedQuarter]||[]).map(function(m){ return m+' ('+state.selectedQuarter+')'; });
-    }
-    if (v === 'Yearly') return filteredMonths();
-    return filteredMonths();
-  })();
-
-  var sparkUid = 0; // unique id counter per sparkline to avoid gradient id collisions
-  function sparkline(data, color, labels, fmt){
-    if (!data || data.length < 2) return '';
-    sparkUid++;
-    var uid = sparkUid;
-    var W = 120, H = 36, pad = 2;
-    var max = Math.max.apply(null, data), min = Math.min.apply(null, data);
-    var isFlat = max === min;
-    var range = isFlat ? 1 : (max - min);
-    var pts = data.map(function(v, i){
-      var x = pad + i * ((W - 2*pad) / (data.length - 1));
-      // Flat data: render line at 60% height so it looks like a calm line, not a bottom edge
-      var y = isFlat ? (H * 0.6) : ((H - pad) - ((v - min) / range) * (H - 2*pad));
-      return {x: parseFloat(x.toFixed(1)), y: parseFloat(y.toFixed(1)), v: v, label: (labels && labels[i]) || '', fmt: fmt};
-    });
-    var ptsStr = pts.map(function(p){ return p.x+','+p.y; }).join(' ');
-    var first = pts[0], last = pts[pts.length-1];
-    var areaPath = 'M'+first.x+','+(H-pad)+' L'+ptsStr.replace(/ /g,' L')+' L'+last.x+','+(H-pad)+' Z';
-    var gradId = 'sg'+uid;
-    var zoneW = (W - 2*pad) / Math.max(data.length - 1, 1);
-
-    // Hover dots + tooltip
-    var circles = pts.map(function(p, i){
-      return '<circle class="sp-dot" cx="'+p.x+'" cy="'+p.y+'" r="3" fill="#FFFFFF" stroke="'+color+'" stroke-width="2"'
-        +' style="opacity:0;transition:opacity 0.15s;cursor:default;"/>'
-        +'<rect x="'+(p.x - zoneW/2)+'" y="0" width="'+zoneW+'" height="'+H+'" fill="transparent"'
-        +' onmouseenter="this.previousSibling.style.opacity=1;var tt=this.parentNode.querySelector(\'.sp-tt-'+uid+'-'+i+'\');if(tt)tt.style.opacity=1;"'
-        +' onmouseleave="this.previousSibling.style.opacity=0;var tt=this.parentNode.querySelector(\'.sp-tt-'+uid+'-'+i+'\');if(tt)tt.style.opacity=0;"/>';
-    }).join('');
-
-    // Tooltip: small pill above each dot with the value
-    var tooltips = pts.map(function(p, i){
-      var numStr = p.fmt ? p.fmt(p.v) : (typeof p.v === 'number' ? (p.v % 1 === 0 ? String(p.v) : p.v.toFixed(1)) : String(p.v));
-      var lbl = p.label ? p.label : '';
-      var ttX = Math.min(Math.max(p.x, 16), W - 16);
-      var ttY = Math.max(p.y - 14, 6);
-      var bgW = Math.max(numStr.length * 5 + 8, 28);
-      return '<g class="sp-tt-'+uid+'-'+i+'" style="opacity:0;transition:opacity 0.15s;pointer-events:none;">'
-        +'<rect x="'+(ttX - bgW/2)+'" y="'+(ttY - 8)+'" width="'+bgW+'" height="11" rx="3" fill="'+color+'" opacity="0.92"/>'
-        +'<text x="'+ttX+'" y="'+(ttY + 0.5)+'" text-anchor="middle" font-size="7" font-weight="700" fill="#FFFFFF">'+numStr+'</text>'
-      +'</g>';
-    }).join('');
-
-    return '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="display:block;overflow:visible;" preserveAspectRatio="none">'
-      +'<defs><linearGradient id="'+gradId+'" x1="0" y1="0" x2="0" y2="1">'
-        +'<stop offset="0%" stop-color="'+color+'" stop-opacity="0.22"/>'
-        +'<stop offset="100%" stop-color="'+color+'" stop-opacity="0.0"/>'
-      +'</linearGradient></defs>'
-      +'<path d="'+areaPath+'" fill="url(#'+gradId+')" />'
-      +'<polyline points="'+ptsStr+'" fill="none" stroke="'+color+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
-      +circles
-      +tooltips
-    +'</svg>';
-  }
-
   // MoM delta — compare last month vs month before, only if meaningful
   function momDelta(data){
     if (!data || data.length < 2) return null;
@@ -1487,28 +1434,60 @@ function kpiRow(M){
   var fmtPct  = function(v){ return Math.round(v)+'%'; };
 
   var kpis = [
-    { label:'TOTAL SHIPMENTS', value: noData ? '—' : String(M.shipGrand),                              delta: noData ? null : momDelta(shipData), deltaLabel:periodLabel, data:shipData, spark:trendColor(shipData), vcolor:'#0D2B5E', fmt:fmtInt },
-    { label:'TOTAL TEUS',      value: noData ? '—' : M.teusGrand.toFixed(2),                           delta: noData ? null : momDelta(teuData),  deltaLabel:periodLabel, data:teuData,  spark:trendColor(teuData),  vcolor:'#0D2B5E', fmt:fmtTeu },
-    { label:'TONS (AIR)',      value: noData ? '—' : (M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014'),delta: noData ? null : momDelta(tonsData), deltaLabel:periodLabel, data:tonsData, spark:trendColor(tonsData), vcolor:'#0D2B5E', fmt:fmtTon },
-    { label:'GROSS PROFIT',    value: noData ? '—' : fmtCur(M.gpGrand),                                delta: noData ? null : momDelta(gpData),   deltaLabel:periodLabel, data:gpData,   spark:trendColor(gpData),   vcolor:'#0D2B5E', fmt:fmtCur },
-    { label:'GP TARGET',       value: noData ? '—' : fmtCur(M.tgtGrand),                               delta:null, deltaLabel: noData ? 'No data' : 'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), data:tgtData, spark:BRAND_A1, vcolor:'#0D2B5E', fmt:fmtCur },
-    { label:'ACHIEVEMENT',     value: noData ? '—' : M.achGrand+'%',                                   delta:null, deltaLabel: noData ? 'No data' : 'vs target', data:achData, spark:trendColor(achData), vcolor: noData ? '#9AAFC8' : achColor, fmt:fmtPct },
+    { label:'TOTAL SHIPMENTS', value: noData ? '—' : String(M.shipGrand),                              delta: noData ? null : momDelta(shipData), deltaLabel:periodLabel, vcolor:'#0D2B5E', icon:'ship',   iconBg:'#EEF3FC', iconColor:'#5678C2' },
+    { label:'TOTAL TEUS',      value: noData ? '—' : M.teusGrand.toFixed(2),                           delta: noData ? null : momDelta(teuData),  deltaLabel:periodLabel, vcolor:'#0D2B5E', icon:'container', iconBg:'#EDF7F2', iconColor:'#1D9E6F' },
+    { label:'TONS (AIR)',      value: noData ? '—' : (M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014'),delta: noData ? null : momDelta(tonsData), deltaLabel:periodLabel, vcolor:'#0D2B5E', icon:'plane',  iconBg:'#F0F0FC', iconColor:'#7C6FE0' },
+    { label:'GROSS PROFIT',    value: noData ? '—' : fmtCur(M.gpGrand),                                delta: noData ? null : momDelta(gpData),   deltaLabel:periodLabel, vcolor:'#0D2B5E', icon:'coin',   iconBg:'#FCF3E3', iconColor:'#D4941E' },
+    { label:'GP TARGET',       value: noData ? '—' : fmtCur(M.tgtGrand),                               delta:null, deltaLabel: noData ? 'No data' : 'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), vcolor:'#0D2B5E', icon:'target', iconBg:'#FCEBEA', iconColor:'#D4574A' },
+    { label:'ACHIEVEMENT',     value: noData ? '—' : M.achGrand+'%',                                   delta:null, deltaLabel: noData ? 'No data' : 'vs target', vcolor: noData ? '#9AAFC8' : achColor, icon:'gauge', achPct: M.achGrand },
   ];
+
+  // Icon set — each metric gets a purpose-built glyph instead of a data graph
+  var ICONS = {
+    ship: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>',
+    container: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="12" rx="1.5"/><path d="M3 11h18M9 7v12M15 7v12"/></svg>',
+    plane: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5c.8-.8.8-2 0-2.8-.8-.8-2-.8-2.8 0L13.2 8 5 6.2 3.5 7.7l6.7 4.3-3 3-2.5-.5L3 16.3l3 1.7 1.7 3 1.8-1.7-.5-2.5 3-3 4.3 6.7 1.5-1.5z"/></svg>',
+    coin: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.3 9.3c0-1.1 1.1-1.9 2.7-1.9s2.7.8 2.7 1.9c0 2.8-5.4 1.4-5.4 4.2 0 1.1 1.1 1.9 2.7 1.9s2.7-.8 2.7-1.9"/></svg>',
+    target: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.2"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>',
+  };
+
+  // Circular achievement gauge — a ring that fills proportionally to the %,
+  // capped visually at 100% (values over 100 show a filled ring + badge)
+  function achievementGauge(pct, color){
+    var clamped = Math.max(0, Math.min(100, pct));
+    var r = 17, circumference = 2 * Math.PI * r;
+    var dash = (clamped / 100) * circumference;
+    return '<svg width="44" height="44" viewBox="0 0 44 44" style="flex-shrink:0;transform:rotate(-90deg);">'
+      +'<circle cx="22" cy="22" r="'+r+'" fill="none" stroke="#EEF2F8" stroke-width="4"/>'
+      +'<circle cx="22" cy="22" r="'+r+'" fill="none" stroke="'+color+'" stroke-width="4" stroke-linecap="round" '
+        +'stroke-dasharray="'+dash.toFixed(1)+' '+circumference.toFixed(1)+'" style="transition:stroke-dasharray 0.5s ease;"/>'
+    +'</svg>';
+  }
 
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:14px;">'
     + kpis.map(function(k){
-      var spark = sparkline(k.data, k.spark, pointLabels, k.fmt);
-      return '<div class="kpi-card" style="background:#FFFFFF;border:1.5px solid #D8E1F0;border-radius:16px;padding:14px 14px 0 14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);overflow:visible;transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;display:flex;flex-direction:column;">'
-        // Label
-        +'<div style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5B7298;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
-        // Big value
-        +'<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:700;color:'+k.vcolor+';line-height:1.1;margin-bottom:5px;letter-spacing:-0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.value+'</div>'
-        // Delta / sub
+      var iconEl = k.icon === 'gauge'
+        ? '<div style="position:relative;width:44px;height:44px;flex-shrink:0;display:flex;align-items:center;justify-content:center;">'
+            +achievementGauge(noData ? 0 : k.achPct, k.vcolor)
+            +'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">'
+              +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="'+k.vcolor+'" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 6h6v6"/></svg>'
+            +'</div>'
+          +'</div>'
+        : '<div style="width:36px;height:36px;border-radius:10px;background:'+k.iconBg+';color:'+k.iconColor+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ICONS[k.icon]+'</div>';
+
+      return '<div class="kpi-card" style="background:#FFFFFF;border:1.5px solid #D8E1F0;border-radius:16px;padding:14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;display:flex;flex-direction:column;gap:10px;">'
+        // Top row: icon + label
+        +'<div style="display:flex;align-items:center;gap:10px;">'
+          +iconEl
+          +'<div style="min-width:0;">'
+            +'<div style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5B7298;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
+            +'<div style="font-family:\'DM Mono\',monospace;font-size:17px;font-weight:700;color:'+k.vcolor+';line-height:1.2;letter-spacing:-0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">'+k.value+'</div>'
+          +'</div>'
+        +'</div>'
+        // Bottom: delta / sub label
         +(k.delta !== null
           ? deltaEl(k.delta, k.deltaLabel)
-          : '<div style="font-size:10px;color:#6B82A0;font-weight:600;height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.deltaLabel+'</div>')
-        // Sparkline — flush to card bottom, full width
-        +'<div style="margin:8px -14px 0;line-height:0;">'+spark+'</div>'
+          : '<div style="font-size:10px;color:#6B82A0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.deltaLabel+'</div>')
       +'</div>';
     }).join('')
   +'</div>';
@@ -2601,9 +2580,6 @@ function render(){
   // Only rebuild sidebar on first load — avoids sidebar scroll jump
   if(!app.querySelector('aside')){
     app.innerHTML = sidebar()
-      + '<button id="sb-toggle" onclick="toggleSidebar()" title="Toggle sidebar">'
-          + '<svg width="12" height="18" viewBox="0 0 12 18" fill="none" stroke="white" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="8,1 3,9 8,17"/></svg>'
-        + '</button>'
       + '<div id="main-col" style="flex:1;display:flex;flex-direction:column;height:100%;overflow:hidden;">'
           + '<div id="topbar-slot"></div>'
           + '<main id="main-slot" style="flex:1;overflow-y:auto;padding:4px 18px 24px;"></main>'
@@ -2667,32 +2643,6 @@ function openDrill(entity, metric, col, valueFmt){
       state.drill.error = 'Could not reach the server.';
       render();
     });
-}
-
-// Sidebar toggle — direct DOM manipulation, no re-render needed
-function toggleSidebar(){
-  var sb = document.getElementById('sidebar-el');
-  var btn = document.getElementById('sb-toggle');
-  if (!sb || !btn) return;
-  var collapsed = sb.classList.toggle('collapsed');
-  btn.classList.toggle('collapsed', collapsed);
-  // Arrow direction flips via CSS transform:rotate(180deg) on .collapsed
-}
-
-// Sidebar tooltip — shows nav item label on hover when sidebar is collapsed
-function sbTooltip(el, show){
-  var tt = document.getElementById('sb-tooltip-el');
-  if(!tt) return;
-  if(show && state.sidebarCollapsed){
-    var label = el.getAttribute('data-label') || '';
-    tt.textContent = label;
-    var rect = el.getBoundingClientRect();
-    tt.style.top = (rect.top + rect.height/2 - 14) + 'px';
-    tt.style.left = '60px';
-    tt.classList.add('visible');
-  } else {
-    tt.classList.remove('visible');
-  }
 }
 
 document.addEventListener('change', function(ev){ var el=ev.target; if(el.getAttribute('data-act')==='rateCommit'){ var v=parseFloat(el.value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); } });
@@ -2799,7 +2749,12 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleQyrDrop'){ ev.stopPropagation(); state.qyrDropOpen=!state.qyrDropOpen; state.quarterDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setYearType'){ ev.stopPropagation(); state.yearType=el.getAttribute('data-val'); state.yearTypeDropOpen=false; render(); }
   else if(act==='toggleYearTypeDrop'){ ev.stopPropagation(); state.yearTypeDropOpen=!state.yearTypeDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='toggleFiltersDrop'){ ev.stopPropagation(); state.filtersOpen=!state.filtersOpen; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='toggleFiltersDrop'){
+    ev.stopPropagation();
+    state.filtersOpen=!state.filtersOpen;
+    render(); requestAnimationFrame(positionAllDrops);
+    if (state.filtersOpen) fetchLobDataIfNeeded(function(){ render(); requestAnimationFrame(positionAllDrops); });
+  }
   else if(act==='toggleFilterLobDrop'){ ev.stopPropagation(); state.filterLobDropOpen=!state.filterLobDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterRepDrop'){ ev.stopPropagation(); state.filterRepDropOpen=!state.filterRepDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='filterLobAll'){ ev.stopPropagation(); state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
@@ -2876,6 +2831,9 @@ document.addEventListener('click', function(ev){
       syncDateRangeToData();
     }
     render();
+    if (v === 'Weekly') {
+      fetchWeekDataIfNeeded(function(){ render(); }); // lazy-load weekly breakdown only when needed
+    }
   }
   else if(act==='cur'){ ev.stopPropagation(); ev.preventDefault(); state.currency=el.getAttribute('data-cur'); render(); }
   else if(act==='shipToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.shipOpen[n]=!state.shipOpen[n]; render(); }
