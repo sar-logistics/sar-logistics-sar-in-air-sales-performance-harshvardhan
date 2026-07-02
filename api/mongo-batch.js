@@ -371,6 +371,17 @@ async function getDrillRows(db, entity, metric, month) {
     sunday.setUTCHours(23, 59, 59, 999);
     weekRange = { start: monday, end: sunday };
   }
+  // DATERANGE:2026-04-01:2026-05-03 → explicit start/end dates (inclusive),
+  // used by Weekly view's FY-Total column which spans a set of ISO weeks
+  // that don't align neatly to month-label boundaries.
+  const isDateRange = month && month.startsWith("DATERANGE:");
+  let dateRangeParts = null;
+  if (isDateRange) {
+    const bits = month.split(":");
+    const start = new Date(bits[1] + "T00:00:00.000Z");
+    const end = new Date(bits[2] + "T23:59:59.999Z");
+    dateRangeParts = { start: start, end: end };
+  }
   const isAirMetric    = metric === "Tons (Air)";
   const isTeuLclMetric = metric === "TEUs (Ocean)" || metric === "LCL (Ocean in CBM)";
 
@@ -418,7 +429,7 @@ async function getDrillRows(db, entity, metric, month) {
       if (isNaN(d.getTime())) continue;
       const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
       if (!FY_MONTHS.includes(monthLabel)) continue;
-      if (!isFYTotal && !isYearGroup && !isRange && !isWeek && monthLabel !== month) continue;
+      if (!isFYTotal && !isYearGroup && !isRange && !isWeek && !isDateRange && monthLabel !== month) continue;
       if (isYearGroup && yearGroupSuffix && !monthLabel.endsWith('-' + yearGroupSuffix)) continue;
       if (isRange && rangeParts) {
         const allM = FY_MONTHS;
@@ -429,6 +440,9 @@ async function getDrillRows(db, entity, metric, month) {
       }
       if (isWeek && weekRange) {
         if (d < weekRange.start || d > weekRange.end) continue;
+      }
+      if (isDateRange && dateRangeParts) {
+        if (d < dateRangeParts.start || d > dateRangeParts.end) continue;
       }
 
       // ── FY-aware mapping — EXACT same as computeSalesAggregate ─────────
