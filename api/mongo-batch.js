@@ -448,6 +448,10 @@ async function getDrillRows(db, entity, metric, month) {
       }
       if (metric !== "Shipments" && metric !== "GP" && metricVal === 0) continue;
 
+      const rowGP      = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0;
+      const rowRevenue = parseFloat(job["Billed Revenue (C)"]    || 0) || 0;
+      const rowCost    = rowRevenue - rowGP; // J=C-G → G(cost)=C(revenue)-J(profit)
+
       matchedRows.push({
         shipmentNo:  job["Shipment No"]    || "—",
         salesPerson: job["Sales Person"]   || "",
@@ -457,10 +461,10 @@ async function getDrillRows(db, entity, metric, month) {
         lob:   cls.kind + (cls.direction ? " " + cls.direction : ""),
         month: monthLabel,
         date:  d.toISOString(),
-        gp:      parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0,
-        revenue: parseFloat(job["Billed Revenue (C)"]    || 0) || 0,
-        cost:    parseFloat(job["Actual Cost (G)"]        || 0) || 0,
-        teu:     parseFloat(job["Container TEU"]          || 0) || 0,
+        gp:      rowGP,
+        revenue: rowRevenue,
+        cost:    rowCost,
+        teu:     parseFloat(job["Container TEU"] || 0) || 0,
         metricVal,
         metricUnit,
       });
