@@ -328,6 +328,9 @@ async function getDrillRows(db, entity, metric, month) {
   const isCrossSalesBranch = !isCrossSalesZone && !isGrandTotal && !isKnownZone && !isKnownRep;
   const useCrossSalesPath  = isCrossSalesZone || isCrossSalesBranch;
 
+  console.log('[DRILL DEBUG] entity:', entity, '| month:', month, '| metric:', metric);
+  console.log('[DRILL DEBUG] isGrandTotal:', isGrandTotal, '| isKnownZone:', isKnownZone, '| isKnownRep:', isKnownRep, '| isCrossSalesBranch:', isCrossSalesBranch);
+
   // ── 3. Build MongoDB $in filter ──────────────────────────────────────
   const allRelevantRawNames = new Set();
   if (!useCrossSalesPath) {
@@ -342,7 +345,8 @@ async function getDrillRows(db, entity, metric, month) {
     });
   }
 
-  const isFYTotal      = month === "FY Total";
+  console.log('[DRILL DEBUG] allRelevantRawNames count:', allRelevantRawNames.size, '| useCrossSalesPath:', useCrossSalesPath);
+  console.log('[DRILL DEBUG] relevantCollections:', relevantCollections.map(c => c));
   // YEAR:25 → filter to all months in calendar year 2025
   const isYearGroup    = month && month.startsWith("YEAR:");
   const yearGroupSuffix = isYearGroup ? month.split(":")[1] : null; // "25" or "26"
