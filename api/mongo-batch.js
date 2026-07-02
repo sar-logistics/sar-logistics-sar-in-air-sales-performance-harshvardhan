@@ -374,12 +374,17 @@ async function getDrillRows(db, entity, metric, month) {
   });
 
   const baseProjection = {
-    "Shipment No":1,"Sales Person":1,"Job Date":1,"LOB":1,"Location":1,"Cargo Type":1,
-    "Customer":1,"Loading Port":1,"Discharge Port":1,"Actual Profit (J=C-G)":1,
-    "ETD Loading Port":1,"ETA Discharge":1,
-    "Chargeable Weight":1,"Chargeable Weight Unit":1,
-    "Container TEU":1,"Volume":1,"Volume Unit":1,
-    "Billed Revenue (C)":1,"Actual Cost (G)":1,"Provisional Profit (I=A-E)":1,"Financial Lock":1,"Operation Lock":1,
+    "Shipment No":1, "Job Date":1, "LOB":1, "Master No.":1, "House No.":1, "Consol No.":1,
+    "Cargo Type":1, "Carrier":1, "Carrier Name":1,
+    "Provisional Revenue (A)":1, "Billed Revenue (C)":1, "Unbilled Revenue (D=A-C)":1,
+    "Provisional Cost (E)":1, "Posted Cost (G)":1, "Unposted Cost (H = E-G)":1,
+    "Provisional Profit (I=A-E)":1, "Actual Profit (J=C-G)":1,
+    "Customer":1, "ATA Discharge":1, "ATD Loading Port":1, "Location":1,
+    "Consignee":1, "Consol Type":1, "Container TEU":1, "Destination Agent":1,
+    "ETA Discharge":1, "ETD Loading Port":1, "Job Owner":1, "Job Rev Recognition Date":1,
+    "Origin Agent":1, "Sales Person":1, "Shipper":1, "Volume":1, "Volume Unit":1,
+    "Operation Lock":1, "Financial Lock":1,
+    "Loading Port":1, "Discharge Port":1, "Chargeable Weight":1, "Chargeable Weight Unit":1,
   };
 
   const queryPromises = relevantCollections.map(collName => {
@@ -474,21 +479,65 @@ async function getDrillRows(db, entity, metric, month) {
       if (metric !== "Shipments" && metric !== "GP" && metricVal === 0) continue;
 
       const { gp: rowGP, isProvisional } = pickGP(job, cls);
-      const rowRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      const rowCost    = rowRevenue - rowGP;
+      const provRevenue = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
+      const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const provCost = parseFloat(job["Provisional Cost (E)"] || 0) || 0;
+      // "Posted Cost (G)" is the real field name; fall back to computed value if absent/blank
+      const postedCostRaw = job["Posted Cost (G)"];
+      const postedCost = (postedCostRaw !== undefined && postedCostRaw !== null && String(postedCostRaw).trim() !== "")
+        ? (parseFloat(postedCostRaw) || 0)
+        : (billedRevenue - (parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0));
+      const unbilledRevenue = job["Unbilled Revenue (D=A-C)"] !== undefined
+        ? (parseFloat(job["Unbilled Revenue (D=A-C)"]) || 0)
+        : (provRevenue - billedRevenue);
+      const unpostedCost = job["Unposted Cost (H = E-G)"] !== undefined
+        ? (parseFloat(job["Unposted Cost (H = E-G)"]) || 0)
+        : (provCost - postedCost);
+      const provisionalProfit = parseFloat(job["Provisional Profit (I=A-E)"] || 0) || 0;
+      const actualProfit      = parseFloat(job["Actual Profit (J=C-G)"]      || 0) || 0;
 
       matchedRows.push({
-        s: job["Shipment No"]    || "—",      // shipmentNo
-        p: job["Sales Person"]   || "",        // salesPerson
-        c: job["Customer"]       || "",        // customer
-        o: job["Loading Port"]   || "",        // origin
-        d: job["Discharge Port"] || "",        // destination
-        l: cls.kind + (cls.direction ? " " + cls.direction : ""), // lob
-        dt: d.toISOString().slice(0,10),       // date (date-only, saves ~15 chars)
+        shipmentNo: job["Shipment No"] || "—",
+        jobDate: job["Job Date"] || "",
+        lob: cls.kind + (cls.direction ? " " + cls.direction : ""),
+        masterNo: job["Master No."] || "",
+        houseNo: job["House No."] || "",
+        consolNo: job["Consol No."] || "",
+        cargoType: job["Cargo Type"] || "",
+        carrier: job["Carrier"] || job["Carrier Name"] || "",
+        provRevenue: provRevenue,
+        billedRevenue: billedRevenue,
+        unbilledRevenue: unbilledRevenue,
+        provCost: provCost,
+        postedCost: postedCost,
+        unpostedCost: unpostedCost,
+        provisionalProfit: provisionalProfit,
+        actualProfit: actualProfit,
+        customer: job["Customer"] || "",
+        ataDischarge: job["ATA Discharge"] || "",
+        atdLoading: job["ATD Loading Port"] || "",
+        location: job["Location"] || "",
+        consignee: job["Consignee"] || "",
+        consolType: job["Consol Type"] || "",
+        teu: parseFloat(job["Container TEU"] || 0) || 0,
+        destAgent: job["Destination Agent"] || "",
+        etaDischarge: job["ETA Discharge"] || "",
+        etdLoading: job["ETD Loading Port"] || "",
+        jobOwner: job["Job Owner"] || "",
+        jobRevRecogDate: job["Job Rev Recognition Date"] || "",
+        originAgent: job["Origin Agent"] || "",
+        salesPerson: job["Sales Person"] || "",
+        shipper: job["Shipper"] || "",
+        volume: parseFloat(job["Volume"] || 0) || 0,
+        volumeUnit: job["Volume Unit"] || "",
+        operationLock: job["Operation Lock"] || "",
+        financialLock: job["Financial Lock"] || "",
+        // Kept for backward-compat with existing aggregate/total logic
+        dt: d.toISOString().slice(0,10),
         g: rowGP,
-        r: rowRevenue,
-        prov: isProvisional ? 1 : 0, // 1=provisional, 0=actual
-        x: rowCost,
+        r: billedRevenue,
+        x: postedCost,
+        prov: isProvisional ? 1 : 0,
         t: parseFloat(job["Container TEU"] || 0) || 0,
         m: metricVal,
       });
@@ -505,7 +554,7 @@ async function getDrillRows(db, entity, metric, month) {
     success: true, entity, metric, month,
     count: matchedRows.length,
     totalMetric, totalGP, totalRevenue, totalCost,
-    rows: matchedRows.slice(0, 25000),
+    rows: matchedRows.slice(0, 6000), // reduced from 25000 — each row now carries ~34 fields (was ~12), keeping response under Vercel's 4.5MB limit
   };
 }
 
