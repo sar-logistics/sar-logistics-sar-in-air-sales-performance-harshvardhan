@@ -405,8 +405,11 @@ async function getDrillRows(db, entity, metric, month) {
           if (branch !== entity) continue;
         }
       } else {
-        if (!mapped) continue;
-        if (!isGrandTotal) {
+        if (isGrandTotal) {
+          // Grand Total includes ALL jobs — both mapped reps AND cross sales (unmapped)
+          // No entity membership filter needed
+        } else {
+          if (!mapped) continue;  // unmapped reps don't belong to any named zone/rep
           if (isKnownZone && mapped.zone !== entity)         continue;
           if (isKnownRep  && mapped.displayName !== entity)  continue;
         }
