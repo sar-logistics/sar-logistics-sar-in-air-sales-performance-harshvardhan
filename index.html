@@ -2245,7 +2245,8 @@ function drawer(){
       +'<div style="font-size:12.5px;color:#94A3B8;font-weight:600;">No matching job rows found for this cell.</div>'
     +'</div>';
   } else {
-    // ── Column definitions — order matches exactly what was requested ──
+    // ── Column definitions — order matches exactly what was requested, plus
+    // three derived OL-status columns matching the reference layout ──
     var COLS = [
       { k:'shipmentNo', l:'Shipment No', t:'mono', color:'#2563EB' },
       { k:'jobDate', l:'Job Date', t:'date' },
@@ -2255,6 +2256,10 @@ function drawer(){
       { k:'consolNo', l:'Consol No.', t:'text' },
       { k:'cargoType', l:'Cargo Type', t:'text' },
       { k:'carrier', l:'Carrier', t:'text', truncate:130 },
+      { k:'gp', l:'GP', t:'cur', signed:true, derived:function(s){ return s.g; } },
+      { k:'gpOlDone', l:'GP (OL Done)', t:'cur', signed:true, derived:function(s){ return s.operationLock ? s.actualProfit : null; } },
+      { k:'gpOlNotDone', l:'GP (OL Not Done)', t:'cur', signed:true, derived:function(s){ return !s.operationLock ? s.provisionalProfit : null; } },
+      { k:'firstOlStatus', l:'First OL Status', t:'olbadge', derived:function(s){ return !!s.operationLock; } },
       { k:'provRevenue', l:'Provisional Revenue (A)', t:'cur' },
       { k:'billedRevenue', l:'Billed Revenue (C)', t:'cur', color:'#2563EB' },
       { k:'unbilledRevenue', l:'Unbilled Revenue (D=A-C)', t:'cur' },
@@ -2284,13 +2289,44 @@ function drawer(){
       { k:'financialLock', l:'Financial Lock', t:'text' },
     ];
 
-    function th(label, align){
-      return '<th style="position:sticky;top:0;background:#F8FAFC;text-align:'+(align||'left')+';padding:9px 12px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid #E2E8F0;white-space:nowrap;user-select:none;z-index:1;">'+label+'</th>';
+    function cellVal(c, s){ return c.derived ? c.derived(s) : s[c.k]; }
+
+    // ── LOB tabs — computed from whatever LOB values actually appear ──
+    var lobCounts = {};
+    d.rows.forEach(function(r){ lobCounts[r.lob] = (lobCounts[r.lob]||0) + 1; });
+    var lobTabs = ['ALL'].concat(Object.keys(lobCounts).sort());
+    var activeLobTab = state.drill.lobTab || 'ALL';
+    if (lobTabs.indexOf(activeLobTab) === -1) activeLobTab = 'ALL';
+
+    // ── Apply LOB tab + per-column filters to determine the visible row set ──
+    var columnFilters = state.drill.columnFilters || {};
+    var visibleRows = d.rows.filter(function(s){
+      if (activeLobTab !== 'ALL' && s.lob !== activeLobTab) return false;
+      for (var colKey in columnFilters) {
+        var allowed = columnFilters[colKey];
+        if (!allowed || allowed.length === 0) continue; // no restriction
+        var col = COLS.filter(function(c){ return c.k === colKey; })[0];
+        if (!col) continue;
+        var v = String(cellVal(col, s) == null ? '' : cellVal(col, s));
+        if (allowed.indexOf(v) === -1) return false;
+      }
+      return true;
+    });
+
+    function th(c){
+      var hasFilter = columnFilters[c.k] && columnFilters[c.k].length > 0;
+      var isOpen = state.drill.openFilterCol === c.k;
+      return '<th style="position:sticky;top:0;background:'+(hasFilter?'#EEF3FC':'#F8FAFC')+';text-align:'+((c.t==='cur'||c.t==='num')?'right':'left')+';padding:9px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:'+(hasFilter?'#1E3A66':'#64748B')+';text-transform:uppercase;border-bottom:2px solid #E2E8F0;white-space:nowrap;user-select:none;z-index:1;">'
+        +'<span style="display:inline-flex;align-items:center;gap:4px;">'
+          +esc(c.l)
+          +'<span data-act="toggleDrillColFilter" data-col="'+c.k+'" style="cursor:pointer;display:inline-flex;padding:2px;border-radius:3px;'+(hasFilter||isOpen?'background:'+BRAND_A1+';':'')+'">'
+            +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="'+(hasFilter||isOpen?'#FFFFFF':'#9AAFC8')+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+          +'</span>'
+        +'</span>'
+      +'</th>';
     }
 
-    var headCells = COLS.map(function(c){
-      return th(esc(c.l), (c.t==='cur'||c.t==='num') ? 'right' : 'left');
-    }).join('');
+    var headCells = COLS.map(th).join('');
 
     // Compute counts and totals FIRST before building any HTML
     var displayedCount = d.rows ? d.rows.length : 0;
@@ -2298,7 +2334,7 @@ function drawer(){
     var isTruncated    = totalCount > displayedCount;
 
     var dTeuSum=0;
-    d.rows.forEach(function(r){ dTeuSum += r.t || 0; });
+    visibleRows.forEach(function(r){ dTeuSum += r.t || 0; });
 
     // BACKEND totals = full dataset (all matched rows, not just capped rows shown)
     var fullRevSum    = d.totalRevenue || 0;
@@ -2313,6 +2349,9 @@ function drawer(){
       return dt.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
     }
     function fmtCell(c, val){
+      if (val === null || val === undefined) {
+        if (c.t === 'cur' || c.t === 'num') return '<span style="color:#C7CEDA;">—</span>';
+      }
       if (c.t === 'cur') {
         var color = c.color || (c.signed ? (val>=0?'#15875A':'#DC2626') : '#374151');
         return '<span style="font-family:\'DM Mono\',monospace;font-weight:600;color:'+color+';">'+fmtCur(val||0)+'</span>';
@@ -2321,6 +2360,9 @@ function drawer(){
       if (c.t === 'date') return '<span style="color:#64748B;">'+fmtDate(val)+'</span>';
       if (c.t === 'mono') return '<span style="font-family:\'DM Mono\',monospace;font-weight:600;color:'+(c.color||'#374151')+';">'+esc(val||'—')+'</span>';
       if (c.t === 'badge') return '<span style="font-size:9.5px;font-weight:700;color:#5678C2;background:#EEF2FF;border-radius:4px;padding:2px 7px;text-transform:uppercase;white-space:nowrap;">'+esc(val||'—')+'</span>';
+      if (c.t === 'olbadge') return val
+        ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:#0A7E53;background:#E8F7EF;border-radius:5px;padding:3px 8px;white-space:nowrap;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0A7E53" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>OL Done</span>'
+        : '<span style="font-size:10px;font-weight:600;color:#9AAFC8;background:#F4F7FA;border-radius:5px;padding:3px 8px;white-space:nowrap;">Pending</span>';
       if (c.truncate) return '<span style="color:#374151;max-width:'+c.truncate+'px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;" title="'+esc(val||'')+'">'+esc(val||'—')+'</span>';
       return '<span style="color:#374151;">'+esc(val||'—')+'</span>';
     }
@@ -2328,11 +2370,12 @@ function drawer(){
     var SEARCHABLE_KEYS = ['shipmentNo','masterNo','houseNo','consolNo','cargoType','carrier','customer',
       'location','consignee','consolType','destAgent','jobOwner','originAgent','salesPerson','shipper','lob'];
 
-    var bodyRows = d.rows.map(function(s, idx){
+    var bodyRows = visibleRows.map(function(s, idx){
       var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
       var searchBlob = SEARCHABLE_KEYS.map(function(k){ return (s[k]||'').toString().toLowerCase(); }).join(' ');
       var cells = COLS.map(function(c){
-        return '<td style="padding:7px 12px;font-size:11.5px;white-space:nowrap;text-align:'+((c.t==='cur'||c.t==='num')?'right':'left')+';">'+fmtCell(c, s[c.k])+'</td>';
+        var v = cellVal(c, s);
+        return '<td style="padding:7px 10px;font-size:11.5px;white-space:nowrap;text-align:'+((c.t==='cur'||c.t==='num')?'right':'left')+';">'+fmtCell(c, v)+'</td>';
       }).join('');
       return '<tr class="drill-row" data-search="'+esc(searchBlob)+'" style="background:'+rowBg+';border-bottom:1px solid #F1F5F9;">'+cells+'</tr>';
     }).join('');
@@ -2340,18 +2383,28 @@ function drawer(){
     // Sticky total row — Revenue/Cost/GP always shown regardless of which metric was clicked
     var totalRow = '<tr style="background:#EEF3FC;border-top:2.5px solid #0D2B5E;">'
       + COLS.map(function(c, i){
-          if (i === 0) return '<td style="padding:10px 12px;font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;">TOTAL<div style="font-size:9.5px;font-weight:500;color:#64748B;margin-top:1px;">'+totalCount.toLocaleString()+' jobs</div></td>';
-          if (c.k === 'teu') return '<td style="padding:10px 12px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+dTeuSum.toFixed(1)+'</td>';
-          if (c.k === 'billedRevenue') return '<td style="padding:10px 12px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+fmtCur(fullRevSum)+'</td>';
-          if (c.k === 'postedCost') return '<td style="padding:10px 12px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+fmtCur(fullCostSum)+'</td>';
-          if (c.k === 'actualProfit') return '<td style="padding:10px 12px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(fullGpSum)+'</td>';
-          return '<td style="padding:10px 12px;"></td>';
+          if (i === 0) return '<td style="padding:10px 10px;font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;">TOTAL ('+visibleRows.length.toLocaleString()+')</td>';
+          if (c.k === 'teu') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+dTeuSum.toFixed(1)+'</td>';
+          if (c.k === 'billedRevenue') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+fmtCur(fullRevSum)+'</td>';
+          if (c.k === 'postedCost') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+fmtCur(fullCostSum)+'</td>';
+          if (c.k === 'actualProfit') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(fullGpSum)+'</td>';
+          return '<td style="padding:10px 10px;"></td>';
         }).join('')
     +'</tr>';
     totalRow = '<tfoot style="position:sticky;bottom:0;z-index:3;">'+totalRow+'</tfoot>';
 
-    // Search bar — filters visible rows live via direct DOM show/hide (no re-render,
-    // so the input never loses focus mid-keystroke)
+    // ── LOB tab bar ──
+    var tabBar = '<div style="padding:10px 24px 0;background:#FFFFFF;flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+      + lobTabs.map(function(tab){
+          var active = tab === activeLobTab;
+          var count = tab === 'ALL' ? d.rows.length : (lobCounts[tab]||0);
+          return '<button data-act="setDrillLobTab" data-val="'+esc(tab)+'" style="background:'+(active?BRAND_A1:'#F4F7FA')+';color:'+(active?'#FFFFFF':'#374151')+';border:none;border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;">'
+            +esc(tab)+' <span style="opacity:0.75;font-weight:600;">'+count+'</span>'
+          +'</button>';
+        }).join('')
+    +'</div>';
+
+    // ── Search bar ──
     var searchBar = '<div style="padding:10px 24px;border-bottom:1px solid #EEF2F8;background:#FAFBFD;flex-shrink:0;display:flex;align-items:center;gap:10px;">'
       +'<div style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border:1.5px solid #E3E9F2;border-radius:8px;padding:8px 12px;flex:1;max-width:340px;">'
         +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
@@ -2359,15 +2412,62 @@ function drawer(){
           +'style="border:none;outline:none;font-size:12.5px;color:#374151;flex:1;min-width:0;background:transparent;" />'
       +'</div>'
       +'<span id="drill-search-count" style="font-size:11px;color:#9AAFC8;font-weight:600;white-space:nowrap;"></span>'
+      +(Object.keys(columnFilters).some(function(k){ return columnFilters[k] && columnFilters[k].length>0; })
+        ? '<button data-act="clearDrillColFilters" style="background:#FEF3C7;border:none;border-radius:999px;padding:6px 12px;font-size:11px;font-weight:700;color:#92610A;cursor:pointer;white-space:nowrap;">Clear column filters</button>'
+        : '')
     +'</div>';
 
-    bodyContent = searchBar
-      + '<div style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;">'
-      +'<table style="width:100%;border-collapse:collapse;min-width:3600px;">'
+    // ── Column filter dropdown popup (only one open at a time) ──
+    var filterPopup = '';
+    if (state.drill.openFilterCol) {
+      var fCol = COLS.filter(function(c){ return c.k === state.drill.openFilterCol; })[0];
+      if (fCol) {
+        var uniqueVals = Array.from(new Set(d.rows.map(function(s){
+          var v = cellVal(fCol, s);
+          return v === null || v === undefined ? '' : String(v);
+        }))).sort();
+        var draft = state.drill.filterDraft[fCol.k];
+        if (!draft) {
+          // Initialise draft from active filter, or "all selected" if none active
+          var active = columnFilters[fCol.k];
+          draft = active && active.length > 0 ? active.slice() : uniqueVals.slice();
+          state.drill.filterDraft[fCol.k] = draft;
+        }
+        filterPopup = '<div id="drill-filter-popup" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 16px 40px rgba(13,43,94,0.25),0 0 0 1px rgba(13,43,94,0.08);z-index:9999;width:280px;padding:16px;">'
+          +'<div style="font-size:13px;font-weight:800;color:#0D2B5E;margin-bottom:10px;">Filter: '+esc(fCol.l)+'</div>'
+          +'<div style="display:flex;align-items:center;gap:7px;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:7px 10px;margin-bottom:10px;">'
+            +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
+            +'<input type="text" id="drill-colfilter-search" placeholder="Search…" autocomplete="off" oninput="filterDrillFilterOptions(this)" style="border:none;outline:none;font-size:12px;color:#374151;flex:1;min-width:0;background:transparent;" />'
+          +'</div>'
+          +'<div style="display:flex;gap:8px;margin-bottom:10px;">'
+            +'<button data-act="drillFilterSelectAll" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:6px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;">Select All</button>'
+            +'<button data-act="drillFilterClearAll" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:6px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;">Clear All</button>'
+          +'</div>'
+          +'<div id="drill-colfilter-list" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;margin-bottom:10px;">'
+            + uniqueVals.map(function(v){
+                var checked = draft.indexOf(v) > -1;
+                var displayV = v === '' ? '(blank)' : v;
+                return '<div data-act="drillFilterToggleVal" data-val="'+esc(v)+'" data-search="'+esc(displayV.toLowerCase())+'" class="drill-filter-opt" style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;" onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'">'
+                  +'<div style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(checked?BRAND_A1:'#C5D0E0')+';background:'+(checked?BRAND_A1:'#FFFFFF')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+                    +(checked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '')
+                  +'</div>'
+                  +'<span style="font-size:12px;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(displayV)+'</span>'
+                +'</div>';
+              }).join('')
+          +'</div>'
+          +'<button data-act="drillFilterApply" style="width:100%;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:8px;color:#fff;font-size:12.5px;font-weight:700;padding:10px;cursor:pointer;">Apply</button>'
+        +'</div>';
+      }
+    }
+
+    bodyContent = tabBar + searchBar
+      + '<div style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;position:relative;">'
+      +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
         +'<thead><tr>'+headCells+'</tr></thead>'
         +'<tbody id="drill-tbody">'+bodyRows+'</tbody>'
         +totalRow
       +'</table>'
+      + filterPopup
     +'</div>';
   }
 
@@ -2639,7 +2739,8 @@ function renderKeepTopbar(){
 }
 
 function openDrill(entity, metric, col, valueFmt){
-  state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null };
+  state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
+    lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
   render();
 
   var monthParam = col;
@@ -2667,6 +2768,18 @@ function openDrill(entity, metric, col, valueFmt){
       state.drill.error = 'Could not reach the server.';
       render();
     });
+}
+
+// Live-filters the option checklist inside an open drill column-filter popup
+function filterDrillFilterOptions(inputEl){
+  var query = inputEl.value.toLowerCase().trim();
+  var list = document.getElementById('drill-colfilter-list');
+  if (!list) return;
+  var opts = list.querySelectorAll('.drill-filter-opt');
+  opts.forEach(function(opt){
+    var match = query === '' || (opt.getAttribute('data-search') || '').indexOf(query) > -1;
+    opt.style.display = match ? 'flex' : 'none';
+  });
 }
 
 // Live-filters the drill-down table as the user types — pure DOM show/hide,
@@ -2911,6 +3024,56 @@ document.addEventListener('click', function(ev){
     render();
   }
   else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
+  else if(act==='setDrillLobTab'){
+    ev.stopPropagation();
+    state.drill.lobTab = el.getAttribute('data-val');
+    render(); requestAnimationFrame(positionDrillFilterDrop);
+  }
+  else if(act==='toggleDrillColFilter'){
+    ev.stopPropagation();
+    var colKey = el.getAttribute('data-col');
+    state.drill.openFilterCol = (state.drill.openFilterCol === colKey) ? null : colKey;
+    delete state.drill.filterDraft[colKey]; // re-init draft fresh each time it's opened
+    render();
+    if (state.drill.openFilterCol) requestAnimationFrame(function(){ positionDrillFilterDrop(el); });
+  }
+  else if(act==='drillFilterToggleVal'){
+    ev.stopPropagation();
+    var fk = state.drill.openFilterCol;
+    var v = el.getAttribute('data-val');
+    var draft = state.drill.filterDraft[fk] || [];
+    var idx = draft.indexOf(v);
+    if (idx > -1) draft.splice(idx,1); else draft.push(v);
+    state.drill.filterDraft[fk] = draft;
+    render(); requestAnimationFrame(function(){ positionDrillFilterDrop(); });
+  }
+  else if(act==='drillFilterSelectAll'){
+    ev.stopPropagation();
+    var fk2 = state.drill.openFilterCol;
+    var opts = document.querySelectorAll('#drill-colfilter-list .drill-filter-opt');
+    var allVals = [];
+    opts.forEach(function(o){ allVals.push(o.getAttribute('data-val')); });
+    state.drill.filterDraft[fk2] = allVals;
+    render(); requestAnimationFrame(function(){ positionDrillFilterDrop(); });
+  }
+  else if(act==='drillFilterClearAll'){
+    ev.stopPropagation();
+    state.drill.filterDraft[state.drill.openFilterCol] = [];
+    render(); requestAnimationFrame(function(){ positionDrillFilterDrop(); });
+  }
+  else if(act==='drillFilterApply'){
+    ev.stopPropagation();
+    var fk3 = state.drill.openFilterCol;
+    state.drill.columnFilters[fk3] = (state.drill.filterDraft[fk3] || []).slice();
+    state.drill.openFilterCol = null;
+    render();
+  }
+  else if(act==='clearDrillColFilters'){
+    ev.stopPropagation();
+    state.drill.columnFilters = {};
+    state.drill.filterDraft = {};
+    render();
+  }
   else if(act==='close'){ if(ev.target.closest('[data-stop]') && !el.matches('[data-act="close"]')) return; state.drill=null; render(); }
 });
 document.addEventListener('keydown', function(e){ 
@@ -2922,6 +3085,23 @@ document.addEventListener('keydown', function(e){
     } else if(state.drill){ state.drill=null; render(); } 
   } 
 });
+// Positions the drill-down column-filter popup below its triggering column header
+function positionDrillFilterDrop(triggerEl){
+  var popup = document.getElementById('drill-filter-popup');
+  if (!popup) return;
+  var btn = triggerEl || document.querySelector('[data-act="toggleDrillColFilter"][data-col="'+(state.drill && state.drill.openFilterCol)+'"]');
+  if (!btn) return;
+  var rect = btn.getBoundingClientRect();
+  var top = rect.bottom + 6;
+  var left = rect.left;
+  // Keep the popup within the viewport horizontally
+  var maxLeft = window.innerWidth - 296;
+  if (left > maxLeft) left = maxLeft;
+  if (left < 8) left = 8;
+  popup.style.top = top + 'px';
+  popup.style.left = left + 'px';
+}
+
 function positionAllDrops(){
   var pairs = [
     ['toggleViewDrop','view-drop'],['toggleFromDrop','from-drop'],
@@ -2963,6 +3143,18 @@ window.addEventListener('scroll', function(e){
   }
 }, true);
 document.addEventListener('click', function(e){
+  // Drill column-filter popup: close it if the click landed outside the popup
+  // itself and wasn't the toggle trigger (checked BEFORE the generic data-stop
+  // guard below, since the popup lives inside the drawer's own data-stop box)
+  if (state.drill && state.drill.openFilterCol) {
+    var insidePopup  = e.target.closest('#drill-filter-popup');
+    var isToggleBtn  = e.target.closest('[data-act="toggleDrillColFilter"]');
+    if (!insidePopup && !isToggleBtn) {
+      state.drill.openFilterCol = null;
+      render();
+      return;
+    }
+  }
   if(e.target.closest('[data-act]')) return;
   if(e.target.closest('[data-stop]')) return; // clicks inside a panel (e.g. filters) shouldn't bubble-close it
   var changed = false;
