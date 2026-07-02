@@ -463,38 +463,36 @@ async function getDrillRows(db, entity, metric, month) {
 
       const rowGP      = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0;
       const rowRevenue = parseFloat(job["Billed Revenue (C)"]    || 0) || 0;
-      const rowCost    = rowRevenue - rowGP; // J=C-G → G(cost)=C(revenue)-J(profit)
+      const rowCost    = rowRevenue - rowGP;
 
       matchedRows.push({
-        shipmentNo:  job["Shipment No"]    || "—",
-        salesPerson: job["Sales Person"]   || "",
-        customer:    job["Customer"]       || "",
-        origin:      job["Loading Port"]   || "",
-        destination: job["Discharge Port"] || "",
-        lob:   cls.kind + (cls.direction ? " " + cls.direction : ""),
-        month: monthLabel,
-        date:  d.toISOString(),
-        gp:      rowGP,
-        revenue: rowRevenue,
-        cost:    rowCost,
-        teu:     parseFloat(job["Container TEU"] || 0) || 0,
-        metricVal,
-        metricUnit,
+        s: job["Shipment No"]    || "—",      // shipmentNo
+        p: job["Sales Person"]   || "",        // salesPerson
+        c: job["Customer"]       || "",        // customer
+        o: job["Loading Port"]   || "",        // origin
+        d: job["Discharge Port"] || "",        // destination
+        l: cls.kind + (cls.direction ? " " + cls.direction : ""), // lob
+        dt: d.toISOString().slice(0,10),       // date (date-only, saves ~15 chars)
+        g: rowGP,
+        r: rowRevenue,
+        x: rowCost,
+        t: parseFloat(job["Container TEU"] || 0) || 0,
+        m: metricVal,
       });
     }
   }
 
-  matchedRows.sort((a, b) => new Date(b.date) - new Date(a.date));
-  const totalMetric  = matchedRows.reduce((s, r) => s + (r.metricVal || 0), 0);
-  const totalGP      = matchedRows.reduce((s, r) => s + (r.gp      || 0), 0);
-  const totalRevenue = matchedRows.reduce((s, r) => s + (r.revenue  || 0), 0);
-  const totalCost    = totalRevenue - totalGP; // G = C - J
+  matchedRows.sort((a, b) => new Date(b.dt) - new Date(a.dt));
+  const totalMetric  = matchedRows.reduce((s, r) => s + (r.m || 0), 0);
+  const totalGP      = matchedRows.reduce((s, r) => s + (r.g || 0), 0);
+  const totalRevenue = matchedRows.reduce((s, r) => s + (r.r || 0), 0);
+  const totalCost    = totalRevenue - totalGP;
 
   return {
     success: true, entity, metric, month,
     count: matchedRows.length,
     totalMetric, totalGP, totalRevenue, totalCost,
-    rows: matchedRows.slice(0, 5000),
+    rows: matchedRows.slice(0, 25000),
   };
 }
 
