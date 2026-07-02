@@ -448,10 +448,13 @@ function computeFilteredRepsRaw(){
   var filterLobs = state.filterLobs || [];
 
   var base = repsRawOriginal;
-  // 1. Filter by rep name (applies to individual reps only; branches/cross-sales always pass through
-  //    since they represent aggregated unmapped names, not a single selectable rep)
+  // 1. Filter by rep/branch name — strict selection. When a Rep filter is
+  //    active, ONLY the selected names are shown (branches included only if
+  //    explicitly checked, same as any individual rep). This is what makes
+  //    checking/unchecking a rep actually move the Grand Total — nothing is
+  //    exempted from the filter.
   if (filterReps.length > 0) {
-    base = base.filter(function(r){ return r.isBranch || filterReps.indexOf(r.name) > -1; });
+    base = base.filter(function(r){ return filterReps.indexOf(r.name) > -1; });
   }
 
   // 2. Filter by LOB — rebuild gp/gpProv/gpActual/ship/tons/teu/lcl arrays from lobData
@@ -1258,7 +1261,11 @@ function topbar(){
         if (isFOpen) {
           var LOB_KEYS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'];
           var LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import'};
-          var allRepNames = Array.from(new Set(repsRaw.map(function(r){ return r.name; }))).sort();
+          // Always list from the FULL unfiltered dataset — otherwise once you filter
+          // down to a subset, you could never see/re-select the excluded reps again
+          var allRepEntries = Array.from(
+            new Map(repsRawOriginal.map(function(r){ return [r.name, r.isBranch]; })).entries()
+          ).sort(function(a,b){ return a[0].localeCompare(b[0]); });
 
           function checkRow(label, checked, act, val){
             return '<div data-act="'+act+'" data-val="'+esc(val)+'" style="display:flex;align-items:center;gap:9px;padding:7px 10px;cursor:pointer;border-radius:7px;transition:background 0.1s;" onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'">'
@@ -1288,7 +1295,11 @@ function topbar(){
           var repSection = sectionHeader('Reps', state.filterReps.length, repOpen, 'toggleFilterRepDrop')
             + (repOpen ? '<div style="max-height:220px;overflow-y:auto;border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
                 + checkRow('All Reps', state.filterReps.length===0, 'filterRepAll', '')
-                + allRepNames.map(function(n){ return checkRow(n, state.filterReps.indexOf(n)>-1, 'toggleFilterRep', n); }).join('')
+                + allRepEntries.map(function(entry){
+                    var name = entry[0], isBranch = entry[1];
+                    var label = isBranch ? name + ' (Cross Sales)' : name;
+                    return checkRow(label, state.filterReps.indexOf(name)>-1, 'toggleFilterRep', name);
+                  }).join('')
               + '</div>' : '');
 
           var panelHtml = '<div id="filters-drop" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:14px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;width:280px;padding:16px;pointer-events:auto;">'
@@ -2769,15 +2780,21 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleFilterLob'){
     ev.stopPropagation();
     var lv = el.getAttribute('data-val');
-    var idx = state.filterLobs.indexOf(lv);
-    if (idx > -1) state.filterLobs.splice(idx,1); else state.filterLobs.push(lv);
+    if (state.filterLobs.indexOf(lv) > -1) {
+      state.filterLobs = state.filterLobs.filter(function(x){ return x !== lv; });
+    } else {
+      state.filterLobs = state.filterLobs.concat([lv]);
+    }
     render(); requestAnimationFrame(positionAllDrops);
   }
   else if(act==='toggleFilterRep'){
     ev.stopPropagation();
     var rv = el.getAttribute('data-val');
-    var ridx = state.filterReps.indexOf(rv);
-    if (ridx > -1) state.filterReps.splice(ridx,1); else state.filterReps.push(rv);
+    if (state.filterReps.indexOf(rv) > -1) {
+      state.filterReps = state.filterReps.filter(function(x){ return x !== rv; });
+    } else {
+      state.filterReps = state.filterReps.concat([rv]);
+    }
     render(); requestAnimationFrame(positionAllDrops);
   }
   else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobs=[]; state.filterReps=[]; render(); requestAnimationFrame(positionAllDrops); }
