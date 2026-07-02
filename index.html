@@ -1823,7 +1823,7 @@ function tableRows(){
       rows.push(metric('LCL (Ocean in CBM)', 1, 'cbm',  '#9AA4B2', lcl, sum(lcl), false));
     }
 
-    rows.push(metric('GP', 0, 'cur', '#374151', dispGp, sum(dispGp), 'gp', repInfo));
+    rows.push(metric('GP', 0, 'cur', '#374151', dispGp, sum(dispGp), 'gp'));
 
     if (gpOpen) {
       rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
