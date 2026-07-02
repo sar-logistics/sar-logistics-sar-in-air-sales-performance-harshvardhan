@@ -571,6 +571,8 @@ async function computeSalesAggregate(db) {
   const branchMonthData = {}; // branchName → { monthLabel → { gp, ship, tons, teu, lcl } }
   const repWeekData   = {}; // repKey → { "Apr-25:W1" → { gp, ship, tons, teu, lcl }, ... }
   const branchWeekData= {}; // branchName → { "Apr-25:W1" → { gp, ship, tons, teu, lcl }, ... }
+  const repLobData    = {}; // repKey → { "SEA EXPORT" → { "Apr-25" → {gp,ship,tons,teu,lcl} } }
+  const branchLobData = {}; // branchName → { "SEA EXPORT" → { "Apr-25" → {...} } }
 
   // Week label within a month: day 1-7=W1, 8-14=W2, 15-21=W3, 22+=W4
   function weekLabel(monthLabel, day){
@@ -684,6 +686,20 @@ async function computeSalesAggregate(db) {
           branchWeekData[branch][wk].gp += gp; branchWeekData[branch][wk].gpProv += gpProv; branchWeekData[branch][wk].gpActual += gpActual; branchWeekData[branch][wk].ship += 1;
           branchWeekData[branch][wk].tons += tons; branchWeekData[branch][wk].teu += teu; branchWeekData[branch][wk].lcl += lcl;
         }
+        // LOB accumulation (Sea Export/Import, ISOTANK Export/Import, Air Export/Import)
+        {
+          const lobKey = cls.kind + (cls.direction ? " " + cls.direction : "");
+          if (!branchLobData[branch]) branchLobData[branch] = {};
+          if (!branchLobData[branch][lobKey]) branchLobData[branch][lobKey] = {};
+          if (!branchLobData[branch][lobKey][monthLabel]) branchLobData[branch][lobKey][monthLabel] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+          branchLobData[branch][lobKey][monthLabel].gp   += gp;
+          branchLobData[branch][lobKey][monthLabel].gpProv   += gpProv;
+          branchLobData[branch][lobKey][monthLabel].gpActual += gpActual;
+          branchLobData[branch][lobKey][monthLabel].ship += 1;
+          branchLobData[branch][lobKey][monthLabel].tons += tons;
+          branchLobData[branch][lobKey][monthLabel].teu  += teu;
+          branchLobData[branch][lobKey][monthLabel].lcl  += lcl;
+        }
         continue;
       }
 
@@ -705,6 +721,20 @@ async function computeSalesAggregate(db) {
         if (!repWeekData[repKey][wk]) repWeekData[repKey][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
         repWeekData[repKey][wk].gp += gp; repWeekData[repKey][wk].gpProv += gpProv; repWeekData[repKey][wk].gpActual += gpActual; repWeekData[repKey][wk].ship += 1;
         repWeekData[repKey][wk].tons += tons; repWeekData[repKey][wk].teu += teu; repWeekData[repKey][wk].lcl += lcl;
+      }
+      // LOB accumulation
+      {
+        const lobKey = cls.kind + (cls.direction ? " " + cls.direction : "");
+        if (!repLobData[repKey]) repLobData[repKey] = {};
+        if (!repLobData[repKey][lobKey]) repLobData[repKey][lobKey] = {};
+        if (!repLobData[repKey][lobKey][monthLabel]) repLobData[repKey][lobKey][monthLabel] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+        repLobData[repKey][lobKey][monthLabel].gp   += gp;
+        repLobData[repKey][lobKey][monthLabel].gpProv   += gpProv;
+        repLobData[repKey][lobKey][monthLabel].gpActual += gpActual;
+        repLobData[repKey][lobKey][monthLabel].ship += 1;
+        repLobData[repKey][lobKey][monthLabel].tons += tons;
+        repLobData[repKey][lobKey][monthLabel].teu  += teu;
+        repLobData[repKey][lobKey][monthLabel].lcl  += lcl;
       }
 
       if (!repMeta[repKey]) repMeta[repKey] = mapped;
@@ -738,6 +768,7 @@ async function computeSalesAggregate(db) {
       tank:  activeMonths.map(() => 0),
       tgt:   0,
       weekData: repWeekData[repKey] || {},
+      lobData: repLobData[repKey] || {}, // { "SEA EXPORT" → { "Apr-25" → {gp,ship,tons,teu,lcl} } }
     });
   }
 
@@ -762,6 +793,7 @@ async function computeSalesAggregate(db) {
       tgt:   0,
       isBranch: true,
       weekData: branchWeekData[branchName] || {},
+      lobData: branchLobData[branchName] || {},
     });
   }
 
