@@ -200,7 +200,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v4'; // bumped: repsRaw now includes gpProv/gpActual (GP lock logic)
+var CACHE_VERSION = 'v5'; // bumped: repsRaw now includes lobData for LOB filtering
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -302,7 +302,7 @@ function showDashboard() {
     // it lives until MongoDB actually has newer data
     var cached = getCachedSalesData();
     if (cached) {
-      repsRaw   = cached.repsRaw;
+      repsRawOriginal = cached.repsRaw;
       zonesRaw  = cached.zones || [];
       months26  = cached.months || months26;
       syncDateRangeToData();
@@ -436,7 +436,52 @@ var _dropdownPanels = ''; // panels collected by topbar(), written to portal by 
 var BRAND_A2 = '#1E3A66'; // muted deep navy — not near-black
 
 var months26 = ['Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26'];
-var repsRaw  = [];
+var repsRawOriginal = []; // unfiltered data straight from backend
+var repsRaw  = [];         // filtered view — recomputed every render() based on active filters
+
+// Recompute the working `repsRaw` from `repsRawOriginal` based on active
+// Rep and LOB filters. Called at the top of every render() so all downstream
+// code (grandEntity, zoneEntity, repEntity, kpiRow, model, etc.) automatically
+// sees filtered data without needing any changes themselves.
+function computeFilteredRepsRaw(){
+  var filterReps = state.filterReps || [];
+  var filterLobs = state.filterLobs || [];
+
+  var base = repsRawOriginal;
+  // 1. Filter by rep name (applies to individual reps only; branches/cross-sales always pass through
+  //    since they represent aggregated unmapped names, not a single selectable rep)
+  if (filterReps.length > 0) {
+    base = base.filter(function(r){ return r.isBranch || filterReps.indexOf(r.name) > -1; });
+  }
+
+  // 2. Filter by LOB — rebuild gp/gpProv/gpActual/ship/tons/teu/lcl arrays from lobData
+  if (filterLobs.length === 0) {
+    repsRaw = base;
+    return;
+  }
+
+  repsRaw = base.map(function(r){
+    var n = r.gp.length;
+    var lobData = r.lobData || {};
+    var gp = [], gpProv = [], gpActual = [], ship = [], tons = [], teu = [], lcl = [];
+    for (var i = 0; i < n; i++) {
+      var m = months26[i];
+      var g=0, gpv=0, gac=0, sh=0, tn=0, tu=0, lc=0;
+      filterLobs.forEach(function(lobKey){
+        var bucket = lobData[lobKey] && lobData[lobKey][m];
+        if (bucket) {
+          g += bucket.gp || 0; gpv += bucket.gpProv || 0; gac += bucket.gpActual || 0;
+          sh += bucket.ship || 0; tn += bucket.tons || 0; tu += bucket.teu || 0; lc += bucket.lcl || 0;
+        }
+      });
+      gp.push(g); gpProv.push(gpv); gpActual.push(gac);
+      ship.push(sh); tons.push(tn); teu.push(tu); lcl.push(lc);
+    }
+    // Weekly data isn't tracked per-LOB — when a LOB filter is active, Weekly view
+    // will show zero for filtered reps (acceptable trade-off; documented behaviour)
+    return Object.assign({}, r, { gp:gp, gpProv:gpProv, gpActual:gpActual, ship:ship, tons:tons, teu:teu, lcl:lcl, weekData: {} });
+  });
+}
 var zonesRaw = [];
 var dataReady = false;
 var customerData = null; // { topByShipments, topByRevenue, topByGP, topByGPPct, totalCustomers }
@@ -455,7 +500,7 @@ function fetchLiveData(callback, force){
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (data.repsRaw && data.repsRaw.length > 0) {
-        repsRaw   = data.repsRaw;
+        repsRawOriginal = data.repsRaw;
         zonesRaw  = data.zones  || [];
         months26  = data.months || months26;
         syncDateRangeToData();
@@ -468,7 +513,7 @@ function fetchLiveData(callback, force){
     .catch(function(e){
       console.warn('⚠️ Live data failed, using static fallback:', e.message);
       // Static fallback so dashboard isn't empty
-      repsRaw = [
+      repsRawOriginal = [
         { name:'Harshvardhan Rawat',  zone:'Thailand', hue:255, gp:[2800,4200,5100,2900,1900,870],   ship:[12,20,22,18,10,14], tank:[0,0,0,0,0,0], tgt:8483 },
         { name:'Anchalee Dubey',      zone:'Thailand', hue:215, gp:[541,736,2187,1762,1617,1483],    ship:[4,5,14,8,8,3],      tank:[0,0,3,0,0,0], tgt:0 },
         { name:'Priya Lekha',         zone:'India',    hue:165, gp:[1800,3600,3200,1900,900,1200],   ship:[8,16,18,14,5,6],    tank:[0,0,0,0,0,0], tgt:8483 },
@@ -557,7 +602,12 @@ var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:f
   qyrDropOpen: false,
   yearTypeDropOpen: false,
   sidebarCollapsed: false,
-  gpOpen: {}
+  gpOpen: {},
+  filtersOpen: false,
+  filterLobDropOpen: false,
+  filterRepDropOpen: false,
+  filterLobs: [],   // empty = All LOBs; else array of selected LOB keys e.g. ["SEA EXPORT"]
+  filterReps: []    // empty = All Reps; else array of selected rep names
 };
 
 /* ====================== HELPERS ====================== */
@@ -1195,8 +1245,64 @@ function topbar(){
       +'</div>'
       // Rate — small chip
       +'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#FFFFFF;border-radius:999px;padding:7px 13px;box-shadow:'+pillShadow+';">Rate '+rateEl+'</div>'
-      // Filters
-      +'<button class="btnq" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border:none;border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:#3C5275;cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>Filters</button>'
+      // Filters — functional button + panel
+      +(function(){
+        var activeCount = state.filterLobs.length + state.filterReps.length;
+        var isFOpen = state.filtersOpen;
+        var btnHtml = '<button data-act="toggleFiltersDrop" style="display:flex;align-items:center;gap:6px;background:'+(activeCount>0?'#EEF3FC':'#FFFFFF')+';border:1.5px solid '+(isFOpen?BRAND_A1:(activeCount>0?'#B7C8EA':'#D8E1F0'))+';border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:'+(activeCount>0?'#1E3A66':'#3C5275')+';cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
+          +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>'
+          +'Filters'
+          +(activeCount>0 ? '<span style="background:'+BRAND_A1+';color:#fff;border-radius:999px;font-size:9.5px;font-weight:800;padding:1px 6px;min-width:15px;text-align:center;">'+activeCount+'</span>' : '')
+        +'</button>';
+
+        if (isFOpen) {
+          var LOB_KEYS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'];
+          var LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import'};
+          var allRepNames = Array.from(new Set(repsRaw.map(function(r){ return r.name; }))).sort();
+
+          function checkRow(label, checked, act, val){
+            return '<div data-act="'+act+'" data-val="'+esc(val)+'" style="display:flex;align-items:center;gap:9px;padding:7px 10px;cursor:pointer;border-radius:7px;transition:background 0.1s;" onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'">'
+              +'<div style="width:16px;height:16px;border-radius:4px;border:1.5px solid '+(checked?BRAND_A1:'#C5D0E0')+';background:'+(checked?BRAND_A1:'#FFFFFF')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+                +(checked ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '')
+              +'</div>'
+              +'<span style="font-size:12.5px;color:#374151;font-weight:'+(checked?'600':'500')+';">'+esc(label)+'</span>'
+            +'</div>';
+          }
+
+          function sectionHeader(label, count, isOpen, toggleAct){
+            return '<div data-act="'+toggleAct+'" style="display:flex;align-items:center;justify-content:space-between;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:9px;padding:10px 12px;cursor:pointer;">'
+              +'<span style="font-size:12.5px;font-weight:600;color:#0D2B5E;">'+(count===0?'All '+label:count+' '+label+' selected')+'</span>'
+              +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5B6678" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.2s;transform:rotate('+(isOpen?'180':'0')+'deg);"><polyline points="6 9 12 15 18 9"/></svg>'
+            +'</div>';
+          }
+
+          var lobOpen = state.filterLobDropOpen;
+          var repOpen = state.filterRepDropOpen;
+
+          var lobSection = sectionHeader('LOBs', state.filterLobs.length, lobOpen, 'toggleFilterLobDrop')
+            + (lobOpen ? '<div style="max-height:220px;overflow-y:auto;border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
+                + checkRow('All LOBs', state.filterLobs.length===0, 'filterLobAll', '')
+                + LOB_KEYS.map(function(k){ return checkRow(LOB_LABELS[k], state.filterLobs.indexOf(k)>-1, 'toggleFilterLob', k); }).join('')
+              + '</div>' : '');
+
+          var repSection = sectionHeader('Reps', state.filterReps.length, repOpen, 'toggleFilterRepDrop')
+            + (repOpen ? '<div style="max-height:220px;overflow-y:auto;border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
+                + checkRow('All Reps', state.filterReps.length===0, 'filterRepAll', '')
+                + allRepNames.map(function(n){ return checkRow(n, state.filterReps.indexOf(n)>-1, 'toggleFilterRep', n); }).join('')
+              + '</div>' : '');
+
+          _dropdownPanels += '<div id="filters-drop" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:14px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;width:280px;padding:16px;pointer-events:auto;">'
+            +'<div style="font-size:10px;font-weight:800;letter-spacing:0.08em;color:#97A1B2;text-transform:uppercase;margin-bottom:12px;">Filters</div>'
+            +'<div style="display:flex;flex-direction:column;gap:8px;">'+lobSection+repSection+'</div>'
+            +'<div style="height:1px;background:#EEF2F8;margin:14px 0 12px;"></div>'
+            +'<div style="display:flex;align-items:center;justify-content:space-between;">'
+              +'<button data-act="filterResetAll" style="background:none;border:none;color:#94A3B8;font-size:12px;font-weight:600;cursor:pointer;padding:6px 4px;">Reset all</button>'
+              +'<button data-act="toggleFiltersDrop" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;color:#fff;font-size:12px;font-weight:700;padding:8px 20px;cursor:pointer;">Done</button>'
+            +'</div>'
+          +'</div>';
+        }
+        return btnHtml;
+      })()
       +'<div style="flex:1;min-width:8px;"></div>'
       // Refresh — pushed to the far right, filled accent style with stronger shadow
       +'<button data-act="refreshData" id="refresh-btn" class="btnq" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:8px 16px;font-size:11.5px;font-weight:700;color:#FFFFFF;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:0 2px 6px '+BRAND_A2+'45,0 1px 2px '+BRAND_A2+'30;"><svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s ease;flex-shrink:0;"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>'
@@ -2450,6 +2556,7 @@ function positionDrop(dropId, triggerAct){
 function positionViewDrop(){ positionAllDrops(); }
 
 function render(){
+  computeFilteredRepsRaw(); // apply active Rep/LOB filters before any downstream computation
   var M=model();
   var app=document.getElementById('app');
   // Only rebuild sidebar on first load — avoids sidebar scroll jump
@@ -2653,6 +2760,26 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleQyrDrop'){ ev.stopPropagation(); state.qyrDropOpen=!state.qyrDropOpen; state.quarterDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setYearType'){ ev.stopPropagation(); state.yearType=el.getAttribute('data-val'); state.yearTypeDropOpen=false; render(); }
   else if(act==='toggleYearTypeDrop'){ ev.stopPropagation(); state.yearTypeDropOpen=!state.yearTypeDropOpen; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='toggleFiltersDrop'){ ev.stopPropagation(); state.filtersOpen=!state.filtersOpen; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='toggleFilterLobDrop'){ ev.stopPropagation(); state.filterLobDropOpen=!state.filterLobDropOpen; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='toggleFilterRepDrop'){ ev.stopPropagation(); state.filterRepDropOpen=!state.filterRepDropOpen; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterLobAll'){ ev.stopPropagation(); state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterRepAll'){ ev.stopPropagation(); state.filterReps=[]; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='toggleFilterLob'){
+    ev.stopPropagation();
+    var lv = el.getAttribute('data-val');
+    var idx = state.filterLobs.indexOf(lv);
+    if (idx > -1) state.filterLobs.splice(idx,1); else state.filterLobs.push(lv);
+    render(); requestAnimationFrame(positionAllDrops);
+  }
+  else if(act==='toggleFilterRep'){
+    ev.stopPropagation();
+    var rv = el.getAttribute('data-val');
+    var ridx = state.filterReps.indexOf(rv);
+    if (ridx > -1) state.filterReps.splice(ridx,1); else state.filterReps.push(rv);
+    render(); requestAnimationFrame(positionAllDrops);
+  }
+  else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobs=[]; state.filterReps=[]; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
   else if(act==='rateCommit'){ var v=parseFloat(document.getElementById('rate-input').value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
   else if(act==='feedbackOpen'){ ev.stopPropagation(); state.feedbackOpen=true; state.feedbackSent=false; state.feedbackText=''; render(); }
@@ -2724,6 +2851,8 @@ document.addEventListener('keydown', function(e){
   if(e.key==='Escape'){ 
     if(state.viewDropOpen||state.fromDropOpen||state.toDropOpen||state.weeklyDropOpen){ 
       state.viewDropOpen=false; state.fromDropOpen=false; state.toDropOpen=false; state.weeklyDropOpen=false; render(); 
+    } else if(state.filtersOpen){
+      state.filtersOpen=false; state.filterLobDropOpen=false; state.filterRepDropOpen=false; render();
     } else if(state.drill){ state.drill=null; render(); } 
   } 
 });
@@ -2732,7 +2861,7 @@ function positionAllDrops(){
     ['toggleViewDrop','view-drop'],['toggleFromDrop','from-drop'],
     ['toggleToDrop','to-drop'],['toggleWeeklyDrop','weekly-drop'],
     ['toggleQyrDrop','qyr-drop'],['toggleQuarterDrop','quarter-drop'],
-    ['toggleYearTypeDrop','yeartype-drop']
+    ['toggleYearTypeDrop','yeartype-drop'],['toggleFiltersDrop','filters-drop']
   ];
   pairs.forEach(function(p){
     var drop = document.getElementById(p[1]);
@@ -2769,8 +2898,9 @@ window.addEventListener('scroll', function(e){
 }, true);
 document.addEventListener('click', function(e){
   if(e.target.closest('[data-act]')) return;
+  if(e.target.closest('[data-stop]')) return; // clicks inside a panel (e.g. filters) shouldn't bubble-close it
   var changed = false;
-  var dropKeys = ['viewDropOpen','fromDropOpen','toDropOpen','weeklyDropOpen','quarterDropOpen','qyrDropOpen','yearTypeDropOpen'];
+  var dropKeys = ['viewDropOpen','fromDropOpen','toDropOpen','weeklyDropOpen','quarterDropOpen','qyrDropOpen','yearTypeDropOpen','filtersOpen','filterLobDropOpen','filterRepDropOpen'];
   dropKeys.forEach(function(k){ if(state[k]){ state[k]=false; changed=true; } });
   if(changed) render();
 });
