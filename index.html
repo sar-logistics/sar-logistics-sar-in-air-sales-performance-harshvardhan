@@ -2283,7 +2283,8 @@ function drawer(){
       +'</tr>';
     }).join('');
 
-    // Sticky total row — columns match the metric being viewed
+    // Sticky total row — Revenue/Cost/GP always shown since every job row carries this data
+    // regardless of which metric (Shipments/GP/Tons/etc) was clicked to open the drill
     var isShipMetric = d.metric === 'Shipments';
     var totalRow = '<tr style="background:#EEF3FC;border-top:2.5px solid #0D2B5E;">'
       +'<td style="padding:10px 14px;font-size:12.5px;font-weight:800;color:#0D2B5E;white-space:nowrap;border-right:1px solid #CBD5E1;">'
@@ -2292,13 +2293,11 @@ function drawer(){
       +'</td>'
       +(showMetricCol ? '<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#5B8DEF;text-align:right;">'+(isShipMetric ? totalCount.toLocaleString() : fullMetricSum.toFixed(2))+'</td>' : '')
       +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+dTeuSum.toFixed(1)+'</td>'
-      +'<td colspan="4" style="padding:10px 14px;font-size:11px;color:#9AAFC8;font-style:italic;">'
-        +(isShipMetric ? totalCount.toLocaleString()+' shipments total' : '')
-      +'</td>'
+      +'<td colspan="4" style="padding:10px 14px;"></td>'
       +'<td style="padding:10px 14px;"></td>'
-      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+(isShipMetric?'—':fmtCur(fullRevSum))+'</td>'
-      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+(isShipMetric?'—':fmtCur(fullCostSum))+'</td>'
-      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+(isShipMetric?'—':fmtCur(fullGpSum))+'</td>'
+      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+fmtCur(fullRevSum)+'</td>'
+      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+fmtCur(fullCostSum)+'</td>'
+      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(fullGpSum)+'</td>'
     +'</tr>';
     // Wrap in sticky tfoot
     totalRow = '<tfoot style="position:sticky;bottom:0;z-index:3;">'+totalRow+'</tfoot>';
