@@ -2257,8 +2257,8 @@ function drawer(){
       { k:'cargoType', l:'Cargo Type', t:'text' },
       { k:'carrier', l:'Carrier', t:'text', truncate:130 },
       { k:'gp', l:'GP', t:'cur', signed:true, derived:function(s){ return s.g; } },
-      { k:'gpOlDone', l:'GP (OL Done)', t:'cur', signed:true, derived:function(s){ return s.operationLock ? s.actualProfit : null; } },
-      { k:'gpOlNotDone', l:'GP (OL Not Done)', t:'cur', signed:true, derived:function(s){ return !s.operationLock ? s.provisionalProfit : null; } },
+      { k:'gpOlDone', l:'Actual GP', t:'cur', signed:true, derived:function(s){ return s.operationLock ? s.actualProfit : null; } },
+      { k:'gpOlNotDone', l:'Provisional GP', t:'cur', signed:true, derived:function(s){ return !s.operationLock ? s.provisionalProfit : null; } },
       { k:'firstOlStatus', l:'First OL Status', t:'olbadge', derived:function(s){ return !!s.operationLock; } },
       { k:'provRevenue', l:'Provisional Revenue (A)', t:'cur' },
       { k:'billedRevenue', l:'Billed Revenue (C)', t:'cur', color:'#2563EB' },
@@ -3074,7 +3074,18 @@ document.addEventListener('click', function(ev){
     state.drill.filterDraft = {};
     render();
   }
-  else if(act==='close'){ if(ev.target.closest('[data-stop]') && !el.matches('[data-act="close"]')) return; state.drill=null; render(); }
+  else if(act==='close'){
+    // Only close the overlay if the click landed OUTSIDE any data-stop panel
+    // (i.e. on the dark backdrop itself), or directly ON a close button.
+    // Previously this checked el.matches(...) which resolves via closest()
+    // from anywhere inside the content — meaning a plain click on a table
+    // row with no nearby data-act ancestor would incorrectly walk all the
+    // way up to the backdrop's data-act="close" and close the whole drill
+    // overlay. Checking ev.target itself (not the resolved ancestor) fixes it.
+    var clickedCloseButtonDirectly = ev.target.matches && ev.target.matches('[data-act="close"]');
+    if (ev.target.closest('[data-stop]') && !clickedCloseButtonDirectly) return;
+    state.drill=null; render();
+  }
 });
 document.addEventListener('keydown', function(e){ 
   if(e.key==='Escape'){ 
