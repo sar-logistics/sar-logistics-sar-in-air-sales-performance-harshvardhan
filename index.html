@@ -401,9 +401,10 @@ function resetSignInButton() {
 // Single brand gradient pair — used consistently for every accented element
 // (KPI icon chips, Refresh button, currency toggle thumb) so nothing in the
 // header/KPI row looks like it belongs to a different colour family.
-var BRAND_A1 = '#5678C2';
+var BRAND_A1 = '#6488D6';
 var _dropdownPanels = ''; // panels collected by topbar(), written to portal by render() // muted mid slate-blue — softer than a saturated primary blue
-var BRAND_A2 = '#1E3A66'; // muted deep navy — not near-black
+var BRAND_A2 = '#2C4E82'; // lightened navy — was too dark before
+var SIDEBAR_BG = '#173E76'; // lightened sidebar navy — was #0D2B5E (too dark)
 
 var months26 = ['Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26'];
 var repsRawOriginal = []; // unfiltered data straight from backend
@@ -1030,7 +1031,7 @@ function sidebar(){
   var now = new Date();
   var ts = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0')+':'+now.getSeconds().toString().padStart(2,'0');
 
-  return '<aside id="sidebar-el" style="background:#0D2B5E;display:flex;flex-direction:column;height:100%;">'
+  return '<aside id="sidebar-el" style="background:'+SIDEBAR_BG+';display:flex;flex-direction:column;height:100%;">'
     +'<div style="padding:18px 18px 16px;border-bottom:1px solid rgba(255,255,255,0.08);min-width:240px;">'
       +'<img src="'+SAR_LOGO_URI+'" alt="SAR" style="height:38px;width:auto;filter:brightness(0) invert(1);display:block;margin-bottom:8px;" />'
       +'<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.45);letter-spacing:0.06em;text-transform:uppercase;" id="sidebar-subrole">Harshvardhan Rawat · Admin</div>'
@@ -1446,7 +1447,7 @@ function kpiRow(M){
     + kpis.map(function(k){
       return '<div class="kpi-card" style="position:relative;background:#FFFFFF;border:1.5px solid #D8E1F0;border-radius:16px;padding:14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;overflow:hidden;">'
         // Subtle radial gradient wash in the corner — decorative, matches each metric's colour, no data encoded
-        +'<div style="position:absolute;top:-20px;right:-20px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,'+k.tint+'22 0%,'+k.tint+'00 70%);pointer-events:none;"></div>'
+        +'<div style="position:absolute;top:-24px;right:-24px;width:110px;height:110px;border-radius:50%;background:radial-gradient(circle,'+k.tint+'55 0%,'+k.tint+'15 55%,'+k.tint+'00 75%);pointer-events:none;"></div>'
         // Label
         +'<div style="position:relative;font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5B7298;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
         // Big value
