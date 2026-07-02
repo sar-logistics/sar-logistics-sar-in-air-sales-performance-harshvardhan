@@ -6,7 +6,10 @@
 <title>SAR — Sales Performance</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://accounts.google.com">
+<link rel="dns-prefetch" href="https://accounts.google.com">
+<link rel="preload" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500;700&display=swap" as="style" onload="this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500;700&display=swap"></noscript>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   /* ── Design tokens — derived from SAR's navy blue brand ── */
@@ -2553,6 +2556,14 @@ window.addEventListener('load', function() {
       initGoogleAuth();
     }
   }, 100);
+
+  // Keep-alive ping every 4 minutes — prevents Vercel serverless cold starts
+  // so the MongoDB connection is always warm when users load the dashboard
+  function pingAPI(){
+    fetch('/api/mongo-batch?action=ping').catch(function(){});
+  }
+  pingAPI(); // immediate warm-up on page load
+  setInterval(pingAPI, 4 * 60 * 1000); // then every 4 minutes
 });
 
 </script>
