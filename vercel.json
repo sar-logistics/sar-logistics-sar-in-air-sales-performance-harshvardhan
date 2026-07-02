@@ -1,5 +1,10 @@
 {
   "version": 2,
+  "functions": {
+    "api/mongo-batch.js": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     { "source": "/favicon.ico", "destination": "/favicon.png" },
     { "source": "/(.*)", "destination": "/index.html" }
@@ -13,13 +18,17 @@
       ]
     },
     {
+      "source": "/",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+      ]
+    },
+    {
       "source": "/index.html",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" },
-        { "key": "Expires", "value": "0" },
+        { "key": "Cache-Control", "value": "no-cache, must-revalidate" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
-        { "key": "Content-Encoding", "value": "gzip" }
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" }
       ]
     },
     {
