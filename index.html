@@ -47,7 +47,7 @@
 
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;}
-  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:var(--surface);color:var(--ink);-webkit-font-smoothing:antialiased;}
+  body{font-family:'Plus Jakarta Sans',system-ui,sans-serif;background:linear-gradient(160deg,#EAF2FC 0%,#F6F9FE 45%,#EEF4FC 100%);color:var(--ink);-webkit-font-smoothing:antialiased;}
   a{text-decoration:none;}
   button{font-family:inherit;}
   ::-webkit-scrollbar{width:8px;height:8px;}
@@ -1445,7 +1445,7 @@ function kpiRow(M){
 
   return '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:14px;">'
     + kpis.map(function(k){
-      return '<div class="kpi-card" style="position:relative;background:#FFFFFF;border:1.5px solid #D8E1F0;border-radius:16px;padding:16px 14px 14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 4px 16px -4px rgba(13,43,94,0.08);transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;overflow:hidden;">'
+      return '<div class="kpi-card" style="position:relative;background:rgba(255,255,255,0.66);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.8);border-radius:16px;padding:16px 14px 14px;box-shadow:0 1px 2px rgba(13,43,94,0.04),0 8px 24px -6px rgba(93,138,206,0.18);transition:box-shadow 0.2s ease,transform 0.2s ease;min-width:0;overflow:hidden;">'
         // Slim colour accent bar at the top — clean, intentional, matches each metric's identity
         +'<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,'+k.tint+',' +k.tint+'88);"></div>'
         // Label
