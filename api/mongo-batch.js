@@ -361,6 +361,7 @@ async function getDrillRows(db, entity, metric, month) {
     "ETD Loading Port":1,"ETA Discharge":1,
     "Chargeable Weight":1,"Chargeable Weight Unit":1,
     "Container TEU":1,"Volume":1,"Volume Unit":1,
+    "Billed Revenue (C)":1,"Actual Cost (G)":1,
   };
 
   const queryPromises = relevantCollections.map(collName => {
@@ -456,7 +457,10 @@ async function getDrillRows(db, entity, metric, month) {
         lob:   cls.kind + (cls.direction ? " " + cls.direction : ""),
         month: monthLabel,
         date:  d.toISOString(),
-        gp:    parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0,
+        gp:      parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0,
+        revenue: parseFloat(job["Billed Revenue (C)"]    || 0) || 0,
+        cost:    parseFloat(job["Actual Cost (G)"]        || 0) || 0,
+        teu:     parseFloat(job["Container TEU"]          || 0) || 0,
         metricVal,
         metricUnit,
       });
@@ -464,13 +468,15 @@ async function getDrillRows(db, entity, metric, month) {
   }
 
   matchedRows.sort((a, b) => new Date(b.date) - new Date(a.date));
-  const totalMetric = matchedRows.reduce((s, r) => s + r.metricVal, 0);
-  const totalGP     = matchedRows.reduce((s, r) => s + r.gp,        0);
+  const totalMetric  = matchedRows.reduce((s, r) => s + r.metricVal, 0);
+  const totalGP      = matchedRows.reduce((s, r) => s + r.gp,        0);
+  const totalRevenue = matchedRows.reduce((s, r) => s + r.revenue,   0);
+  const totalCost    = matchedRows.reduce((s, r) => s + r.cost,      0);
 
   return {
     success: true, entity, metric, month,
     count: matchedRows.length,
-    totalMetric, totalGP,
+    totalMetric, totalGP, totalRevenue, totalCost,
     rows: matchedRows.slice(0, 5000),
   };
 }
