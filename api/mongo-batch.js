@@ -373,19 +373,7 @@ async function getDrillRows(db, entity, metric, month) {
     return true;
   });
 
-  const baseProjection = {
-    "Shipment No":1, "Job Date":1, "LOB":1, "Master No.":1, "House No.":1, "Consol No.":1,
-    "Cargo Type":1, "Carrier":1, "Carrier Name":1,
-    "Provisional Revenue (A)":1, "Billed Revenue (C)":1, "Unbilled Revenue (D=A-C)":1,
-    "Provisional Cost (E)":1, "Posted Cost (G)":1, "Unposted Cost (H = E-G)":1,
-    "Provisional Profit (I=A-E)":1, "Actual Profit (J=C-G)":1,
-    "Customer":1, "ATA Discharge":1, "ATD Loading Port":1, "Location":1,
-    "Consignee":1, "Consol Type":1, "Container TEU":1, "Destination Agent":1,
-    "ETA Discharge":1, "ETD Loading Port":1, "Job Owner":1, "Job Rev Recognition Date":1,
-    "Origin Agent":1, "Sales Person":1, "Shipper":1, "Volume":1, "Volume Unit":1,
-    "Operation Lock":1, "Financial Lock":1,
-    "Loading Port":1, "Discharge Port":1, "Chargeable Weight":1, "Chargeable Weight Unit":1,
-  };
+  // No field-level projection used — see note above the find() call for why.
 
   const queryPromises = relevantCollections.map(collName => {
     let filter;
@@ -398,7 +386,13 @@ async function getDrillRows(db, entity, metric, month) {
     } else {
       filter = { "Sales Person": { $in: [] } }; // empty result
     }
-    return db.collection(collName).find(filter, { projection: baseProjection }).toArray()
+    // NOTE: no projection restriction here — field names like "Master No.",
+    // "House No.", "Consol No." contain a literal trailing dot, which MongoDB's
+    // projection/query engine interprets as a nested-path separator (not a
+    // literal character), causing an invalid-projection batch error. Fetching
+    // full documents and reading fields via plain JS property access afterward
+    // sidesteps this entirely — dots in a JS object key are just characters.
+    return db.collection(collName).find(filter).toArray()
       .then(rows => ({ collName, rows }));
   });
 
