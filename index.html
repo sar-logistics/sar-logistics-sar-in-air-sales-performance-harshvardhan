@@ -2108,9 +2108,9 @@ function drawer(){
     var dRevSum=0, dCostSum=0, dGpSum=0, dTeuSum=0, dMetricSum=0;
     d.rows.forEach(function(r){
       dRevSum    += r.revenue   || 0;
-      dCostSum   += r.cost      || 0;
-      dGpSum     += r.gp        || 0;
-      dTeuSum    += r.teu       || 0;
+      dCostSum   += r.x || 0;
+      dGpSum     += r.g || 0;
+      dTeuSum    += r.t || 0;
       dMetricSum += r.metricVal || 0;
     });
 
@@ -2121,10 +2121,10 @@ function drawer(){
     var fullMetricSum = d.totalMetric  || 0;
 
     var bodyRows = d.rows.map(function(s, idx){
-      var dt = new Date(s.date);
+      var dt = new Date(s.dt);
       var dateFmt = dt.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
       var rowBg = idx % 2 === 0 ? '#FFFFFF' : '#F8FAFC';
-      var gpColor = s.gp >= 0 ? '#15875A' : '#DC2626';
+      var gpColor = s.g >= 0 ? '#15875A' : '#DC2626';
       var costColor = '#DC2626';
       var revColor = '#2563EB';
 
@@ -2133,17 +2133,17 @@ function drawer(){
       }
 
       return '<tr style="background:'+rowBg+';border-bottom:1px solid #F1F5F9;">'
-        +td('<span style="font-family:\'DM Mono\',monospace;font-weight:600;color:#2563EB;">'+esc(s.shipmentNo)+'</span>')
-        +(showMetricCol ? td('<span style="font-family:\'DM Mono\',monospace;font-weight:700;color:#5B8DEF;">'+s.metricVal.toFixed(2)+'</span>','right') : '')
-        +td('<span style="font-family:\'DM Mono\',monospace;color:#374151;">'+(s.teu||0).toFixed(1)+'</span>','right')
+        +td('<span style="font-family:\'DM Mono\',monospace;font-weight:600;color:#2563EB;">'+esc(s.s)+'</span>')
+        +(showMetricCol ? td('<span style="font-family:\'DM Mono\',monospace;font-weight:700;color:#5B8DEF;">'+s.m.toFixed(2)+'</span>','right') : '')
+        +td('<span style="font-family:\'DM Mono\',monospace;color:#374151;">'+(s.t||0).toFixed(1)+'</span>','right')
         +td('<span style="color:#64748B;">'+dateFmt+'</span>')
-        +td('<span style="color:#374151;font-weight:500;">'+esc(s.salesPerson||'—')+'</span>')
-        +td('<span style="color:#64748B;max-width:140px;display:inline-block;overflow:hidden;text-overflow:ellipsis;" title="'+esc(s.customer||'')+'">'+esc(s.customer||'—')+'</span>')
-        +td('<span style="color:#374151;font-size:11px;">'+esc((s.origin||'—')+' → '+(s.destination||'—'))+'</span>')
-        +td('<span style="font-size:9.5px;font-weight:700;color:#5678C2;background:#EEF2FF;border-radius:4px;padding:2px 7px;text-transform:uppercase;">'+esc(s.lob)+'</span>')
-        +td('<span style="font-family:\'DM Mono\',monospace;font-weight:600;color:'+revColor+';">'+fmtCur(s.revenue)+'</span>','right')
-        +td('<span style="font-family:\'DM Mono\',monospace;font-weight:600;color:'+costColor+';">'+fmtCur(s.cost)+'</span>','right')
-        +td('<span style="font-family:\'DM Mono\',monospace;font-weight:700;color:'+gpColor+';">'+fmtCur(s.gp)+'</span>','right')
+        +td('<span style="color:#374151;font-weight:500;">'+esc(s.p||'—')+'</span>')
+        +td('<span style="color:#64748B;max-width:140px;display:inline-block;overflow:hidden;text-overflow:ellipsis;" title="'+esc(s.c||'')+'">'+esc(s.c||'—')+'</span>')
+        +td('<span style="color:#374151;font-size:11px;">'+esc((s.o||'—')+' → '+(s.d||'—'))+'</span>')
+        +td('<span style="font-size:9.5px;font-weight:700;color:#5678C2;background:#EEF2FF;border-radius:4px;padding:2px 7px;text-transform:uppercase;">'+esc(s.l)+'</span>')
+        +td('<span style="font-family:\'DM Mono\',monospace;font-weight:600;color:'+revColor+';">'+fmtCur(s.r)+'</span>','right')
+        +td('<span style="font-family:\'DM Mono\',monospace;font-weight:600;color:'+costColor+';">'+fmtCur(s.x)+'</span>','right')
+        +td('<span style="font-family:\'DM Mono\',monospace;font-weight:700;color:'+gpColor+';">'+fmtCur(s.g)+'</span>','right')
       +'</tr>';
     }).join('');
 
