@@ -2021,20 +2021,35 @@ function drawer(){
   if(!state.drill) return '';
   var d=state.drill;
 
-  // Compute the total display value once — reused in both the header and footer
-  // so they always show the same number from the same source (backend totalMetric).
-  function metricTotalDisplay(){
-    var m = d.totalMetric || 0;
-    if (d.metric === 'Shipments')         return Math.round(m).toLocaleString('en-US');
-    if (d.metric === 'GP')                return fmtCur(m);
-    if (d.metric === 'Tons (Air)')        return m.toFixed(2);
-    if (d.metric === 'TEUs (Ocean)')      return m.toFixed(2);
-    if (d.metric === 'LCL (Ocean in CBM)') return m.toFixed(2);
+  // Two totals:
+  // 1. fullTotal = backend totalMetric (all matched rows, even beyond 500 limit)
+  // 2. displayedTotal = sum of the rows actually shown in the table
+  function metricTotalDisplay(val){
+    var m = val || 0;
+    if (d.metric === 'Shipments')          return Math.round(m).toLocaleString('en-US');
+    if (d.metric === 'GP')                 return fmtCur(m);
+    if (d.metric === 'Tons (Air)')         return m.toFixed(2) + ' t';
+    if (d.metric === 'TEUs (Ocean)')       return m.toFixed(2);
+    if (d.metric === 'LCL (Ocean in CBM)') return m.toFixed(2) + ' m³';
     return m.toFixed(2);
   }
+
+  // Compute displayed total from the actual rows array (real-time, no hardcoding)
+  var displayedMetricSum = 0;
+  var displayedGpSum = 0;
+  if (d.rows && d.rows.length > 0) {
+    d.rows.forEach(function(r){
+      displayedMetricSum += (r.metricVal || 0);
+      displayedGpSum     += (r.gp || 0);
+    });
+  }
+
+  var fullMetric = d.totalMetric || 0;
+  var fullGP     = d.totalGP     || 0;
+
   var totalDisplay = (d.loading)
     ? '<span style="display:inline-flex;align-items:center;gap:8px;color:#94A3B8;font-size:18px;">Calculating… <span class="login-spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;"></span></span>'
-    : (!d.error && d.totalMetric !== undefined) ? metricTotalDisplay()
+    : (!d.error && d.totalMetric !== undefined) ? metricTotalDisplay(d.metric === 'GP' ? fullGP : fullMetric)
     : esc(d.valueFmt);
 
   var bodyContent;
@@ -2087,19 +2102,41 @@ function drawer(){
     +'</div>';
   }
 
-  var subtitle = d.loading ? 'Loading…' : (d.count !== undefined ? d.count+' job'+(d.count===1?'':'s')+' contributing' : '');
+  var displayedCount = d.rows ? d.rows.length : 0;
+  var totalCount = d.count || 0;
+  var isTruncated = totalCount > displayedCount;
 
-  var footerLabel = d.metric === 'Shipments' ? 'Total Shipments in view'
-    : d.metric === 'GP' ? 'Total GP in view'
-    : d.metric === 'Tons (Air)' ? 'Total Tons (Air) in view'
-    : d.metric === 'TEUs (Ocean)' ? 'Total TEUs in view'
-    : d.metric === 'LCL (Ocean in CBM)' ? 'Total LCL in view'
-    : 'Total in view';
+  var subtitle = d.loading ? 'Loading…'
+    : d.count !== undefined
+      ? d.count + ' job' + (d.count === 1 ? '' : 's') + ' matching' + (isTruncated ? ' (showing first ' + displayedCount + ')' : '')
+      : '';
+
+  // Footer: shows sum of DISPLAYED rows + full total if truncated
+  var footerLabel = d.metric === 'Shipments' ? 'Total Shipments'
+    : d.metric === 'GP' ? 'Total GP'
+    : d.metric === 'Tons (Air)' ? 'Total Tons (Air)'
+    : d.metric === 'TEUs (Ocean)' ? 'Total TEUs'
+    : d.metric === 'LCL (Ocean in CBM)' ? 'Total LCL'
+    : 'Total';
 
   var footer = (!d.loading && !d.error && d.rows && d.rows.length > 0)
-    ? '<div style="padding:12px 22px;border-top:1px solid #F0F3F8;display:flex;align-items:center;justify-content:space-between;background:#FAFBFD;flex-shrink:0;">'
-        +'<span style="font-size:12.5px;font-weight:600;color:#5B6678;">'+footerLabel+'</span>'
-        +'<span style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:500;color:#15875A;">'+totalDisplay+'</span>'
+    ? '<div style="padding:12px 22px;border-top:1px solid #F0F3F8;background:#FAFBFD;flex-shrink:0;">'
+        +'<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">'
+          +'<span style="font-size:12px;font-weight:600;color:#5B6678;">'
+            +footerLabel+' <span style="color:#9AAFC8;font-weight:500;">('+displayedCount+' rows shown)</span>'
+          +'</span>'
+          +'<span style="font-family:\'DM Mono\',monospace;font-size:14px;font-weight:700;color:#15875A;">'
+            +metricTotalDisplay(d.metric === 'GP' ? displayedGpSum : displayedMetricSum)
+          +'</span>'
+        +'</div>'
+        +(isTruncated
+          ? '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;padding-top:4px;border-top:1px dashed #E8EDF6;">'
+              +'<span style="font-size:11px;color:#9AAFC8;">Full total (all '+totalCount+' jobs)</span>'
+              +'<span style="font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;">'
+                +metricTotalDisplay(d.metric === 'GP' ? fullGP : fullMetric)
+              +'</span>'
+            +'</div>'
+          : '')
       +'</div>'
     : '';
 
@@ -2109,8 +2146,8 @@ function drawer(){
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
           +'<div>'
             +'<div style="display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#97A1B2;text-transform:uppercase;"><span style="color:#2F6FED;">'+esc(d.entity)+'</span><span>·</span><span>'+esc(d.metric)+'</span><span>·</span><span>'+(d.col&&d.col.startsWith('YEAR:')?'Year 20'+d.col.split(':')[1]:esc(d.col))+'</span></div>'
-            +'<div style="font-family:\'DM Mono\',monospace;font-size:22px;font-weight:500;color:#15233B;margin-top:6px;letter-spacing:-0.02em;">'+totalDisplay+'</div>'
-            +'<div style="font-size:11.5px;color:#97A1B2;font-weight:500;margin-top:2px;">'+subtitle+'</div>'
+            +'<div style="font-family:\'DM Mono\',monospace;font-size:22px;font-weight:700;color:#15233B;margin-top:6px;letter-spacing:-0.02em;">'+totalDisplay+'</div>'
+            +'<div style="font-size:11px;color:#97A1B2;font-weight:500;margin-top:2px;">'+subtitle+'</div>'
           +'</div>'
           +'<button data-act="close" style="border:none;background:#F4F7FB;width:32px;height:32px;border-radius:8px;cursor:pointer;color:#5B6678;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✕</button>'
         +'</div>'
