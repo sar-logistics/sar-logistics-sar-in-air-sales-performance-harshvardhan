@@ -282,7 +282,7 @@ function normalizeName(name) {
 // In-memory cache — survives across warm Lambda invocations (same container)
 let salesCache = null;
 let salesCacheTime = 0;
-const SALES_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const SALES_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes — reduces cold fetches significantly
 
 // ── DRILL-DOWN: real job rows behind a clicked table cell ──────────
 // entity: "Grand Total" | zone name | rep display name
@@ -887,8 +887,15 @@ module.exports = async function handler(req, res) {
   const action = req.query?.action || req.body?.action;
   if (!action) return res.status(400).json({ error: "action required: jobs | mapping | users | sales" });
 
+  // Lightweight ping — warms up the serverless function + DB connection
+  // Called every 4 minutes by the frontend to prevent cold starts
+  if (action === "ping") {
+    await getDB(); // ensures connection is alive
+    return res.status(200).json({ ok: true, ts: Date.now() });
+  }
+
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org", "lobCheck", "drill"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org", "lobCheck", "drill", "ping"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
