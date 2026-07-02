@@ -1650,9 +1650,21 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
     else { val='\u2014'; isDash=true; }
     if(isDash) color='#C7CEDA';
     var isFY=i===0;
-    // rawKey: the actual month label sent to the drill API
-    // For FY Total col (i===0) always "FY Total"; for Yearly view use the year's months
-    var rawKey = keys[i] || colLabels[i];
+    // rawKey: what gets sent to the drill API as the month parameter
+    // i===0 is the "FY Total" column — pass the actual filtered month range
+    // so drill shows only the months visible in the table, not all months ever
+    var rawKey;
+    if (isFY) {
+      var fm = filteredMonths();
+      if (fm.length === 0 || fm.length === months26.length) {
+        rawKey = 'FY Total'; // all months = true FY Total
+      } else {
+        // Pass as a range: "RANGE:Jan-26:Jun-26" backend will filter inclusively
+        rawKey = 'RANGE:' + fm[0] + ':' + fm[fm.length-1];
+      }
+    } else {
+      rawKey = keys[i] || colLabels[i];
+    }
     return {val:val, color:color, bg:isFY?'#FFFBF0':'transparent', borderLeft:isFY?'2px solid #F0D9A8':'0', weight:isFY?600:500, entity:entityName, metric:metricLabel, col:rawKey, drillVal:val, clickable: isClickable && !isDash};
   });
 }
@@ -2194,7 +2206,12 @@ function drawer(){
       +'<div style="padding:18px 22px 14px;border-bottom:1px solid #F0F3F8;flex-shrink:0;">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
           +'<div>'
-            +'<div style="font-size:18px;font-weight:800;color:#0D2B5E;letter-spacing:-0.02em;">'+esc(d.entity)+' — '+esc(d.metric)+' — '+(d.col&&d.col.startsWith('YEAR:')?'Year 20'+d.col.split(':')[1]:esc(d.col))+'</div>'
+            +'<div style="font-size:18px;font-weight:800;color:#0D2B5E;letter-spacing:-0.02em;">'+esc(d.entity)+' — '+esc(d.metric)+' — '+(function(col){
+              if(!col) return 'All';
+              if(col.startsWith('YEAR:')) return 'Year 20'+col.split(':')[1];
+              if(col.startsWith('RANGE:')) { var p=col.split(':'); return p[1]+' – '+p[2]; }
+              return col;
+            })(d.col)+'</div>'
             +'<div style="font-size:12px;color:#64748B;font-weight:500;margin-top:3px;">'+subtitle+'</div>'
           +'</div>'
           +'<button data-act="close" style="border:none;background:#F4F7FB;width:32px;height:32px;border-radius:8px;cursor:pointer;color:#5B6678;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✕</button>'
