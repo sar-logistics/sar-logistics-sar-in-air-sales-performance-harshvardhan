@@ -2000,8 +2000,8 @@ function salesTable(M){
   var BORDER = '#D5DCE6';      // main grid border — softened
   var BORDER_STRONG = '#B0BAC8'; // block separators — still distinct but lighter
   var head='<tr>'
-    +'<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:185px;min-width:185px;">Zones/Sales Rep</th>'
-    +'<th style="position:sticky;left:185px;z-index:3;background:#F0F4FA;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">Metrics</th>'
+    +'<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:210px;min-width:210px;">Zones/Sales Rep</th>'
+    +'<th style="position:sticky;left:210px;z-index:3;background:#F0F4FA;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">Metrics</th>'
     +'<th style="position:sticky;left:'+FY_COL_LEFT+'px;z-index:3;text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#FCF3DA;white-space:nowrap;box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">Grand Total</th>'
     + (isYearly2 ? yGroups2.map(function(g, gi){
         return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#FCF3DA;white-space:nowrap;">'
@@ -2122,9 +2122,18 @@ function salesTable(M){
       if (isGrandRow) {
         nameLabel = '<div style="font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.01em;" title="'+esc(ri.name)+'">'+ri.name+'</div>';
       } else if (isZoneRow) {
-        nameLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
-          +'<div style="font-size:7.5px;font-weight:800;letter-spacing:0.1em;color:#5678C2;text-transform:uppercase;">ZONE</div>'
-          +'<div style="font-size:11px;font-weight:700;color:#0D2B5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.01em;line-height:1.2;" title="'+esc(ri.name)+'">'+ri.name+'</div>'
+        // Split "INAZ01 (Enterprises) - Niranjan" into a prominent code
+        // ("INAZ01") and the rest of the description, which wraps in full
+        // below it — nothing is ever truncated or hidden.
+        var zoneParts = /^(\S+)\s*(.*)$/.exec(ri.name) || [null, ri.name, ''];
+        var zoneCode = zoneParts[1];
+        var zoneDesc = zoneParts[2];
+        nameLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">'
+          +'<div style="display:flex;align-items:baseline;gap:6px;">'
+            +'<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5678C2;text-transform:uppercase;">ZONE</span>'
+            +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">'+esc(zoneCode)+'</span>'
+          +'</div>'
+          +(zoneDesc ? '<div style="font-size:10.5px;font-weight:500;color:#5B6678;line-height:1.3;white-space:normal;word-break:break-word;">'+esc(zoneDesc)+'</div>' : '')
         +'</div>';
       } else if (ri.isBranch) {
         nameLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
@@ -2148,14 +2157,14 @@ function salesTable(M){
       }
       // Zone rows get a bold left-edge navy accent bar to visually anchor them
       var leftAccent = isZoneRow ? 'box-shadow:inset 3px 0 0 '+BRAND_A1+', inset -1.5px 0 0 '+BORDER_STRONG+';' : isGrandRow ? 'box-shadow:inset 3px 0 0 '+BRAND_A2+', inset -1.5px 0 0 '+BORDER_STRONG+';' : 'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';';
-      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 8px 6px 10px;z-index:2;width:185px;min-width:185px;max-width:185px;text-align:left;'+leftAccent+'"><div style="display:flex;align-items:center;justify-content:flex-start;gap:6px;min-width:0;">'+avatarEl+nameLabel+zoneToggle+'</div></td>';
+      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 8px 6px 10px;z-index:2;width:210px;min-width:210px;max-width:210px;text-align:left;'+leftAccent+'"><div style="display:flex;align-items:center;justify-content:flex-start;gap:6px;min-width:0;">'+avatarEl+nameLabel+zoneToggle+'</div></td>';
     } else {
-      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;width:185px;min-width:185px;box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';"></td>';
+      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;width:210px;min-width:210px;box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';"></td>';
     }
 
     return '<tr style="background:'+rowBg+';border-bottom:1px solid #E7ECF3;'+topBorder+'">'
       + nameCell
-      + '<td style="position:sticky;left:185px;background:'+rowBg+';padding:6px 10px;white-space:nowrap;z-index:2;width:140px;min-width:140px;">'+labelCell+'</td>'
+      + '<td style="position:sticky;left:210px;background:'+rowBg+';padding:6px 10px;white-space:nowrap;z-index:2;width:140px;min-width:140px;">'+labelCell+'</td>'
       + mcells
     +'</tr>';
   }).join('');
