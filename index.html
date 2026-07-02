@@ -856,14 +856,13 @@ function filteredWeekKeys(){
   var daysInMonth = new Date(Date.UTC(year, monthIdx + 1, 0)).getUTCDate();
   var keysSeen = {};
   var keys = [];
+  // Include a week if ANY of its days (Mon-Sun) fall within the selected
+  // calendar month — so a week straddling a month boundary (e.g. Week 14:
+  // Mar 30 - Apr 5, 2026) appears under BOTH March and April.
   for (var day = 1; day <= daysInMonth; day++) {
     var d = new Date(Date.UTC(year, monthIdx, day));
     var iso = getISOWeek(d);
-    // Only take this week if ITS Monday is also in this calendar month —
-    // avoids double-counting a week under two different months
-    if (iso.monday.getUTCFullYear() === year && iso.monday.getUTCMonth() === monthIdx) {
-      if (!keysSeen[iso.key]) { keysSeen[iso.key] = true; keys.push(iso.key); }
-    }
+    if (!keysSeen[iso.key]) { keysSeen[iso.key] = true; keys.push(iso.key); }
   }
   return keys;
 }
@@ -1054,7 +1053,8 @@ function repEntity(r){
 
 function entities(){
   // Grand Total + Zone groups + Reps within each zone
-  var list = [grandEntity()];
+  // Weekly view omits the Grand Total row per request — only zones/reps shown
+  var list = state.reportView === 'Weekly' ? [] : [grandEntity()];
   getZones().forEach(function(z){
     list.push(zoneEntity(z));
     var isCollapsed = state.zoneOpen[z] === false; // default open unless explicitly collapsed
@@ -2837,7 +2837,7 @@ function render(){
   mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='usage' ? usagePage()
     : state.page==='teams' ? teamsPage()
-    : kpiRow(M)+(state.page==='leaderboard'?leaderboard():salesTable(M));
+    : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
   requestAnimationFrame(positionAllDrops);
@@ -2851,7 +2851,7 @@ function renderKeepTopbar(){
   if(mainEl) mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='usage' ? usagePage()
     : state.page==='teams' ? teamsPage()
-    : kpiRow(M)+(state.page==='leaderboard'?leaderboard():salesTable(M));
+    : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
   var drawerEl=document.getElementById('drawer-slot');
   if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
