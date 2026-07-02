@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v5'; // bumped: repsRaw now includes lobData for LOB filtering
+var CACHE_VERSION = 'v6'; // bumped: weekData now keyed by true ISO 8601 week (e.g. "2026-W14") instead of "MonthLabel:W1-4"
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -800,18 +800,79 @@ function hasDataForIndices(idxs){
   });
 }
 
-// Returns week keys for the selected month in Weekly view
+var MONTH_NAME_TO_IDX = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
+var MONTH_IDX_TO_NAME = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// True ISO 8601 week number (Mon-Sun) — mirrors the backend's isoWeekInfo()
+// exactly, so frontend-computed week keys always match backend-computed ones.
+function getISOWeek(date){
+  var d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  var dayNum = (d.getUTCDay() + 6) % 7; // Mon=0 .. Sun=6
+  var thursday = new Date(d);
+  thursday.setUTCDate(d.getUTCDate() - dayNum + 3);
+  var isoYear = thursday.getUTCFullYear();
+  var firstThursday = new Date(Date.UTC(isoYear, 0, 4));
+  var fThDayNum = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - fThDayNum + 3);
+  var weekNum = 1 + Math.round((thursday - firstThursday) / (7 * 86400000));
+  var monday = new Date(d);
+  monday.setUTCDate(d.getUTCDate() - dayNum);
+  var sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  var key = isoYear + '-W' + String(weekNum).padStart(2, '0');
+  return { key: key, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
+}
+
+// Rebuild a week's Monday/Sunday dates purely from its ISO key (e.g. "2026-W14")
+// — used when we only have the key string (from weekData), not an original date.
+function isoWeekFromKey(isoKey){
+  var parts = isoKey.split('-W');
+  var isoYear = parseInt(parts[0], 10);
+  var weekNum = parseInt(parts[1], 10);
+  var jan4 = new Date(Date.UTC(isoYear, 0, 4));
+  var jan4DayNum = (jan4.getUTCDay() + 6) % 7;
+  var week1Monday = new Date(jan4);
+  week1Monday.setUTCDate(jan4.getUTCDate() - jan4DayNum);
+  var monday = new Date(week1Monday);
+  monday.setUTCDate(week1Monday.getUTCDate() + (weekNum - 1) * 7);
+  var sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  return { key: isoKey, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
+}
+
+function fmtWeekDate(d){
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[d.getUTCMonth()] + ' ' + d.getUTCDate() + ', ' + d.getUTCFullYear();
+}
+
+// Returns the ISO week keys whose Monday falls within the selected calendar
+// month (state.weeklyMonth, e.g. "Apr-26") — a week can extend into the next
+// or previous month, but it's grouped under whichever month its Monday is in.
 function filteredWeekKeys(){
   var m = state.weeklyMonth || months26[months26.length-1];
-  return [m+':W1', m+':W2', m+':W3', m+':W4'];
+  var bits = m.split('-');
+  var monthIdx = MONTH_NAME_TO_IDX[bits[0]];
+  var year = 2000 + parseInt(bits[1], 10);
+  var daysInMonth = new Date(Date.UTC(year, monthIdx + 1, 0)).getUTCDate();
+  var keysSeen = {};
+  var keys = [];
+  for (var day = 1; day <= daysInMonth; day++) {
+    var d = new Date(Date.UTC(year, monthIdx, day));
+    var iso = getISOWeek(d);
+    // Only take this week if ITS Monday is also in this calendar month —
+    // avoids double-counting a week under two different months
+    if (iso.monday.getUTCFullYear() === year && iso.monday.getUTCMonth() === monthIdx) {
+      if (!keysSeen[iso.key]) { keysSeen[iso.key] = true; keys.push(iso.key); }
+    }
+  }
+  return keys;
 }
 
 // Helper: the actual column labels for the current view
-// Monthly/Quarterly/Yearly/Custom → month labels; Weekly → W1/W2/W3/W4
+// Monthly/Quarterly/Yearly/Custom → month labels; Weekly → ISO week keys
 function filteredMonths(){
   if (state.reportView === 'Weekly') {
-    var m = state.weeklyMonth || months26[months26.length-1];
-    return [m+':W1', m+':W2', m+':W3', m+':W4'];
+    return filteredWeekKeys();
   }
   return filteredMonthIndices().map(function(i){ return months26[i]; });
 }
@@ -844,11 +905,12 @@ function yearGroups(){
   return order.map(function(y2){ return groups[y2]; });
 }
 
-// Display label for a column: week keys show as "Week 1" etc, months show as-is
+// Display label for a column: ISO week keys show as "Week N" + date range
+// below it (e.g. "Apr 1, 2026 - Apr 7, 2026"); months show as-is
 function colDisplayLabel(key){
-  if (key && key.indexOf(':W') > -1) {
-    var parts = key.split(':');
-    return parts[1].replace('W', 'Week ');
+  if (key && /^\d{4}-W\d{2}$/.test(key)) {
+    var iso = isoWeekFromKey(key);
+    return 'Week ' + iso.weekNum + '||' + fmtWeekDate(iso.monday) + ' - ' + fmtWeekDate(iso.sunday);
   }
   return key;
 }
@@ -1794,12 +1856,29 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
     // so drill shows only the months visible in the table, not all months ever
     var rawKey;
     if (isFY) {
-      var fm = filteredMonths();
-      if (fm.length === 0 || fm.length === months26.length) {
-        rawKey = 'FY Total'; // all months = true FY Total
+      if (state.reportView === 'Weekly') {
+        // For Weekly view, "FY Total" for this row = sum across all displayed
+        // weeks. Use an exact date range (first week's Monday → last week's
+        // Sunday) rather than the month-label RANGE format, since week keys
+        // aren't month labels.
+        var wks = filteredWeekKeys();
+        if (wks.length > 0) {
+          var firstWk = isoWeekFromKey(wks[0]);
+          var lastWk  = isoWeekFromKey(wks[wks.length-1]);
+          var isoStart = firstWk.monday.toISOString().slice(0,10);
+          var isoEnd   = lastWk.sunday.toISOString().slice(0,10);
+          rawKey = 'DATERANGE:' + isoStart + ':' + isoEnd;
+        } else {
+          rawKey = 'FY Total';
+        }
       } else {
-        // Pass as a range: "RANGE:Jan-26:Jun-26" backend will filter inclusively
-        rawKey = 'RANGE:' + fm[0] + ':' + fm[fm.length-1];
+        var fm = filteredMonths();
+        if (fm.length === 0 || fm.length === months26.length) {
+          rawKey = 'FY Total'; // all months = true FY Total
+        } else {
+          // Pass as a range: "RANGE:Jan-26:Jun-26" backend will filter inclusively
+          rawKey = 'RANGE:' + fm[0] + ':' + fm[fm.length-1];
+        }
       }
     } else {
       rawKey = keys[i] || colLabels[i];
@@ -1888,10 +1967,9 @@ function tableRows(){
         // Better: pass a special key "YEAR:25" that openDrill resolves to a month range
         rawColKeys = ['FY Total'].concat(yGroups.map(function(g){ return 'YEAR:'+g.year; }));
       } else if (state.reportView === 'Weekly') {
-        var wm = state.weeklyMonth || months26[months26.length-1];
-        // Week cols: pass actual month label — backend will match all jobs in that month
-        // Since we can't filter by week on the backend easily, drill shows the full month
-        rawColKeys = ['FY Total', wm, wm, wm, wm]; // W1-W4 all map to same month
+        // Each week column now maps to its own exact ISO week (Mon-Sun) —
+        // drill-down filters precisely to that week's date range.
+        rawColKeys = ['FY Total'].concat(filteredWeekKeys().map(function(wk){ return 'WEEK:'+wk; }));
       } else {
         rawColKeys = null; // colLabels are already real month labels
       }
@@ -2010,6 +2088,13 @@ function salesTable(M){
         +'</th>';
       }).join('')
     : colLabels.slice(1).map(function(l){
+        if (l && l.indexOf('||') > -1) {
+          var parts = l.split('||');
+          return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#F0F4FA;white-space:nowrap;">'
+            +'<div style="font-size:11px;font-weight:800;color:#0D2B5E;">'+parts[0]+'</div>'
+            +'<div style="font-size:9px;font-weight:500;color:#8B97A8;margin-top:1px;text-transform:none;letter-spacing:0;">'+parts[1]+'</div>'
+          +'</th>';
+        }
         return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#F0F4FA;white-space:nowrap;">'+l+'</th>';
       }).join(''))
   +'</tr>';
@@ -2523,6 +2608,14 @@ function drawer(){
               if(!col) return 'All';
               if(col.startsWith('YEAR:')) return 'Year 20'+col.split(':')[1];
               if(col.startsWith('RANGE:')) { var p=col.split(':'); return p[1]+' – '+p[2]; }
+              if(col.startsWith('WEEK:')) {
+                var iso = isoWeekFromKey(col.slice(5));
+                return 'Week '+iso.weekNum+' ('+fmtWeekDate(iso.monday)+' – '+fmtWeekDate(iso.sunday)+')';
+              }
+              if(col.startsWith('DATERANGE:')) {
+                var p2 = col.split(':');
+                return p2[1]+' – '+p2[2];
+              }
               return col;
             })(d.col)+'</div>'
             +'<div style="font-size:12px;color:#64748B;font-weight:500;margin-top:4px;">'+subtitle+'</div>'
