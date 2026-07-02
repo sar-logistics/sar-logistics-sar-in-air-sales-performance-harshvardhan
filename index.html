@@ -2120,20 +2120,20 @@ function salesTable(M){
 
       var nameLabel;
       if (isGrandRow) {
-        nameLabel = '<div style="font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;letter-spacing:-0.01em;">'+ri.name+'</div>';
+        nameLabel = '<div style="font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.01em;" title="'+esc(ri.name)+'">'+ri.name+'</div>';
       } else if (isZoneRow) {
-        nameLabel = '<div style="display:flex;flex-direction:column;gap:1px;">'
+        nameLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
           +'<div style="font-size:7.5px;font-weight:800;letter-spacing:0.1em;color:#5678C2;text-transform:uppercase;">ZONE</div>'
-          +'<div style="font-size:11.5px;font-weight:700;color:#0D2B5E;white-space:nowrap;letter-spacing:-0.01em;line-height:1.2;">'+ri.name+'</div>'
+          +'<div style="font-size:11px;font-weight:700;color:#0D2B5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-0.01em;line-height:1.2;" title="'+esc(ri.name)+'">'+ri.name+'</div>'
         +'</div>';
       } else if (ri.isBranch) {
-        nameLabel = '<div style="display:flex;flex-direction:column;gap:1px;">'
+        nameLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
           +'<div style="font-size:7.5px;font-weight:800;letter-spacing:0.1em;color:#C26A12;text-transform:uppercase;">BRANCH</div>'
-          +'<div style="font-size:11px;font-weight:600;color:#374151;white-space:nowrap;">'+ri.name+'</div>'
+          +'<div style="font-size:11px;font-weight:600;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ri.name)+'">'+ri.name+'</div>'
         +'</div>';
       } else {
-        nameLabel = '<div style="display:flex;flex-direction:column;gap:0px;">'
-          +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;">'+ri.name+'</div>'
+        nameLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:0px;">'
+          +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ri.name)+'">'+ri.name+'</div>'
         +'</div>';
       }
 
@@ -2141,14 +2141,14 @@ function salesTable(M){
       if (isZoneRow) {
         var zCollapsed = state.zoneOpen[blockEntity] === false;
         var chevSvg = zCollapsed
-          ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>'
-          : '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
-        // Toggle button: match brand navy gradient
-        zoneToggle = '<div data-act="zoneToggle" data-zone="'+esc(blockEntity)+'" style="width:20px;height:20px;border-radius:6px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;margin-left:auto;box-shadow:0 2px 5px rgba(30,58,102,0.3);">'+chevSvg+'</div>';
+          ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>'
+          : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+        // Toggle sits immediately after the name — no auto-margin push, stays close and compact
+        zoneToggle = '<div data-act="zoneToggle" data-zone="'+esc(blockEntity)+'" style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;box-shadow:0 1px 3px rgba(30,58,102,0.3);">'+chevSvg+'</div>';
       }
       // Zone rows get a bold left-edge navy accent bar to visually anchor them
       var leftAccent = isZoneRow ? 'box-shadow:inset 3px 0 0 '+BRAND_A1+', inset -1.5px 0 0 '+BORDER_STRONG+';' : isGrandRow ? 'box-shadow:inset 3px 0 0 '+BRAND_A2+', inset -1.5px 0 0 '+BORDER_STRONG+';' : 'box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';';
-      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 10px 6px 10px;z-index:2;width:185px;min-width:185px;text-align:left;'+leftAccent+'"><div style="display:flex;align-items:center;justify-content:flex-start;gap:7px;">'+avatarEl+nameLabel+zoneToggle+'</div></td>';
+      nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 8px 6px 10px;z-index:2;width:185px;min-width:185px;max-width:185px;text-align:left;'+leftAccent+'"><div style="display:flex;align-items:center;justify-content:flex-start;gap:6px;min-width:0;">'+avatarEl+nameLabel+zoneToggle+'</div></td>';
     } else {
       nameCell = '<td style="position:sticky;left:0;background:'+rowBg+';padding:6px 12px;z-index:2;width:185px;min-width:185px;box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';"></td>';
     }
