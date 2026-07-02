@@ -340,20 +340,6 @@ async function getDrillRows(db, entity, metric, month) {
   const isCrossSalesBranch = !isCrossSalesZone && !isGrandTotal && !isKnownZone && !isKnownRep;
   const useCrossSalesPath  = isCrossSalesZone || isCrossSalesBranch;
 
-  // ── 3. Build MongoDB $in filter ──────────────────────────────────────
-  const allRelevantRawNames = new Set();
-  if (!useCrossSalesPath) {
-    ["FY26","FY27"].forEach(fy => {
-      let norms = [];
-      if (isGrandTotal)                         norms = Object.keys(repLookupByFY[fy]);
-      else if (repsByZoneByFY[fy][entity])      norms = repsByZoneByFY[fy][entity];
-      else if (normByDisplayByFY[fy][entity])   norms = [normByDisplayByFY[fy][entity]];
-      norms.forEach(norm =>
-        (rawNamesByNormByFY[fy][norm] || []).forEach(raw => allRelevantRawNames.add(raw))
-      );
-    });
-  }
-
   const isFYTotal      = month === "FY Total";
   const isYearGroup    = month && month.startsWith("YEAR:");
   const yearGroupSuffix = isYearGroup ? month.split(":")[1] : null;
@@ -376,22 +362,20 @@ async function getDrillRows(db, entity, metric, month) {
   // No field-level projection used — see note above the find() call for why.
 
   const queryPromises = relevantCollections.map(collName => {
-    let filter;
-    if (isGrandTotal) {
-      filter = {}; // Grand Total: fetch every row, no Sales Person filter
-    } else if (useCrossSalesPath) {
-      filter = {}; // Cross Sales: also fetch all, filter in-memory by mapped/unmapped
-    } else if (allRelevantRawNames.size > 0) {
-      filter = { "Sales Person": { $in: Array.from(allRelevantRawNames) } };
-    } else {
-      filter = { "Sales Person": { $in: [] } }; // empty result
-    }
-    // NOTE: no projection restriction here — field names like "Master No.",
-    // "House No.", "Consol No." contain a literal trailing dot, which MongoDB's
-    // projection/query engine interprets as a nested-path separator (not a
-    // literal character), causing an invalid-projection batch error. Fetching
-    // full documents and reading fields via plain JS property access afterward
-    // sidesteps this entirely — dots in a JS object key are just characters.
+    // Always fetch every row and filter entity membership IN-MEMORY afterward
+    // (via normalizeName-based matching, same logic used for the aggregate
+    // totals). Previously, named-zone/rep queries used a MongoDB-side
+    // `{ "Sales Person": { $in: [...raw names from the mapping sheet] } }`
+    // filter — but that only knows the EXACT string spelling recorded in the
+    // mapping sheet. If a job document's actual "Sales Person" value differs
+    // even slightly (extra suffix like "| INZ05", different spacing/casing),
+    // MongoDB's exact-match $in silently excludes it before any JS-side
+    // normalization runs — causing some reps to show "0 jobs matching" in the
+    // drill-down despite having real, non-zero totals in the table. Fetching
+    // everything and matching via normalizeName() in-memory (identical to
+    // how the Grand Total / Cross Sales paths already work) guarantees the
+    // drill-down always agrees with the table it was clicked from.
+    const filter = {};
     return db.collection(collName).find(filter).toArray()
       .then(rows => ({ collName, rows }));
   });
