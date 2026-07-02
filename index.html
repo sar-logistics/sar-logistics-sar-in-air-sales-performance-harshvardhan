@@ -2140,38 +2140,34 @@ function drawer(){
 
     // Sticky total row — columns match the metric being viewed
     var isShipMetric = d.metric === 'Shipments';
-    var numCols = (showMetricCol ? 1 : 0) + 9; // base cols
-    var totalRow = '<tr style="background:#EEF3FC;border-top:2.5px solid #0D2B5E;position:sticky;bottom:0;z-index:2;">'
-      // TOTAL label
+    var totalRow = '<tr style="background:#EEF3FC;border-top:2.5px solid #0D2B5E;">'
       +'<td style="padding:10px 14px;font-size:12.5px;font-weight:800;color:#0D2B5E;white-space:nowrap;border-right:1px solid #CBD5E1;">'
         +'TOTAL'
         +'<div style="font-size:10px;font-weight:500;color:#64748B;margin-top:1px;">'+totalCount.toLocaleString()+' jobs</div>'
       +'</td>'
-      // Metric col (Tons / TEU etc) if shown
       +(showMetricCol ? '<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#5B8DEF;text-align:right;">'+(isShipMetric ? totalCount.toLocaleString() : fullMetricSum.toFixed(2))+'</td>' : '')
-      // TEU
       +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+dTeuSum.toFixed(1)+'</td>'
-      // Date, Sales Person, Customer, Route — blank
       +'<td colspan="4" style="padding:10px 14px;font-size:11px;color:#9AAFC8;font-style:italic;">'
         +(isShipMetric ? totalCount.toLocaleString()+' shipments total' : '')
       +'</td>'
-      // LOB — blank
       +'<td style="padding:10px 14px;"></td>'
-      // Revenue
-      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+(isShipMetric ? '—' : fmtCur(fullRevSum))+'</td>'
-      // Cost
-      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+(isShipMetric ? '—' : fmtCur(fullCostSum))+'</td>'
-      // GP
-      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+(isShipMetric ? '—' : fmtCur(fullGpSum))+'</td>'
+      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+(isShipMetric?'—':fmtCur(fullRevSum))+'</td>'
+      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+(isShipMetric?'—':fmtCur(fullCostSum))+'</td>'
+      +'<td style="padding:10px 14px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+(isShipMetric?'—':fmtCur(fullGpSum))+'</td>'
     +'</tr>';
-
-    bodyContent = '<div style="flex:1;overflow:auto;">'
-      +'<table style="width:100%;border-collapse:collapse;">'
+    // Wrap in sticky tfoot
+    totalRow = '<tfoot style="position:sticky;bottom:0;z-index:3;">'+totalRow+'</tfoot>';
+    // Override bodyContent closing to not include tfoot inside table
+    bodyContent = '<div style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;">'
+      +'<table style="width:100%;border-collapse:collapse;min-width:900px;">'
         +'<thead><tr>'+headCells+'</tr></thead>'
         +'<tbody>'+bodyRows+'</tbody>'
-        +'<tfoot>'+totalRow+'</tfoot>'
+        +totalRow
       +'</table>'
     +'</div>';
+    totalRow = ''; // already included above
+
+    // bodyContent already set above with sticky tfoot included
   }
 
   var subtitle = d.loading ? 'Loading…'
@@ -2200,23 +2196,26 @@ function drawer(){
       +'</div>'
     : '';
 
-  return '<div data-act="close" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:32px;animation:ovFade 0.16s ease;">'
-    +'<div data-stop="1" style="width:min(900px,94vw);max-height:85vh;background:#FFFFFF;border-radius:14px;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(15,23,40,0.22);animation:fadeUp 0.2s cubic-bezier(0.22,1,0.36,1);overflow:hidden;">'
-      +'<div style="padding:18px 22px 14px;border-bottom:1px solid #F0F3F8;flex-shrink:0;">'
+  return '<div data-act="close" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;animation:ovFade 0.16s ease;">'
+    +'<div data-stop="1" style="width:min(1200px,96vw);height:min(88vh,900px);background:#FFFFFF;border-radius:16px;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(15,23,40,0.22);animation:fadeUp 0.2s cubic-bezier(0.22,1,0.36,1);overflow:hidden;">'
+      // ── Header ──
+      +'<div style="padding:18px 24px 14px;border-bottom:1.5px solid #E8EDF6;flex-shrink:0;background:#FFFFFF;">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
           +'<div>'
-            +'<div style="font-size:18px;font-weight:800;color:#0D2B5E;letter-spacing:-0.02em;">'+esc(d.entity)+' — '+esc(d.metric)+' — '+(function(col){
+            +'<div style="font-size:19px;font-weight:800;color:#0D2B5E;letter-spacing:-0.02em;">'+esc(d.entity)+' — '+esc(d.metric)+' — '+(function(col){
               if(!col) return 'All';
               if(col.startsWith('YEAR:')) return 'Year 20'+col.split(':')[1];
               if(col.startsWith('RANGE:')) { var p=col.split(':'); return p[1]+' – '+p[2]; }
               return col;
             })(d.col)+'</div>'
-            +'<div style="font-size:12px;color:#64748B;font-weight:500;margin-top:3px;">'+subtitle+'</div>'
+            +'<div style="font-size:12px;color:#64748B;font-weight:500;margin-top:4px;">'+subtitle+'</div>'
           +'</div>'
-          +'<button data-act="close" style="border:none;background:#F4F7FB;width:32px;height:32px;border-radius:8px;cursor:pointer;color:#5B6678;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✕</button>'
+          +'<button data-act="close" style="border:none;background:#F4F7FB;width:34px;height:34px;border-radius:8px;cursor:pointer;color:#5B6678;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;">✕</button>'
         +'</div>'
       +'</div>'
+      // ── Body: scrollable table ──
       + bodyContent
+      // ── Footer ──
       + footer
     +'</div>'
   +'</div>';
