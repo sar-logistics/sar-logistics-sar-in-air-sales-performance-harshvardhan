@@ -2433,7 +2433,8 @@ function drawer(){
           draft = active && active.length > 0 ? active.slice() : uniqueVals.slice();
           state.drill.filterDraft[fCol.k] = draft;
         }
-        filterPopup = '<div id="drill-filter-popup" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 16px 40px rgba(13,43,94,0.25),0 0 0 1px rgba(13,43,94,0.08);z-index:9999;width:280px;padding:16px;">'
+        var anchor = state.drill.filterAnchor || { top: 100, left: 100 };
+        filterPopup = '<div id="drill-filter-popup" data-stop="1" style="position:fixed;top:'+anchor.top+'px;left:'+anchor.left+'px;background:#FFFFFF;border-radius:12px;box-shadow:0 16px 40px rgba(13,43,94,0.25),0 0 0 1px rgba(13,43,94,0.08);z-index:9999;width:280px;padding:16px;">'
           +'<div style="font-size:13px;font-weight:800;color:#0D2B5E;margin-bottom:10px;">Filter: '+esc(fCol.l)+'</div>'
           +'<div style="display:flex;align-items:center;gap:7px;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:7px 10px;margin-bottom:10px;">'
             +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
@@ -3027,15 +3028,28 @@ document.addEventListener('click', function(ev){
   else if(act==='setDrillLobTab'){
     ev.stopPropagation();
     state.drill.lobTab = el.getAttribute('data-val');
-    render(); requestAnimationFrame(positionDrillFilterDrop);
+    render();
   }
   else if(act==='toggleDrillColFilter'){
     ev.stopPropagation();
     var colKey = el.getAttribute('data-col');
-    state.drill.openFilterCol = (state.drill.openFilterCol === colKey) ? null : colKey;
+    var wasOpen = state.drill.openFilterCol === colKey;
+    state.drill.openFilterCol = wasOpen ? null : colKey;
     delete state.drill.filterDraft[colKey]; // re-init draft fresh each time it's opened
+    if (!wasOpen) {
+      // Compute the popup's screen position SYNCHRONOUSLY, from the trigger
+      // element that still exists right now (before render() destroys it).
+      // Baking this into the very first paint eliminates the top-left flash
+      // that happened when position was only set a frame later via rAF.
+      var rect = el.getBoundingClientRect();
+      var top = rect.bottom + 6;
+      var left = rect.left;
+      var maxLeft = window.innerWidth - 296;
+      if (left > maxLeft) left = maxLeft;
+      if (left < 8) left = 8;
+      state.drill.filterAnchor = { top: top, left: left };
+    }
     render();
-    if (state.drill.openFilterCol) requestAnimationFrame(function(){ positionDrillFilterDrop(el); });
   }
   else if(act==='drillFilterToggleVal'){
     ev.stopPropagation();
@@ -3045,7 +3059,7 @@ document.addEventListener('click', function(ev){
     var idx = draft.indexOf(v);
     if (idx > -1) draft.splice(idx,1); else draft.push(v);
     state.drill.filterDraft[fk] = draft;
-    render(); requestAnimationFrame(function(){ positionDrillFilterDrop(); });
+    render();
   }
   else if(act==='drillFilterSelectAll'){
     ev.stopPropagation();
@@ -3054,12 +3068,12 @@ document.addEventListener('click', function(ev){
     var allVals = [];
     opts.forEach(function(o){ allVals.push(o.getAttribute('data-val')); });
     state.drill.filterDraft[fk2] = allVals;
-    render(); requestAnimationFrame(function(){ positionDrillFilterDrop(); });
+    render();
   }
   else if(act==='drillFilterClearAll'){
     ev.stopPropagation();
     state.drill.filterDraft[state.drill.openFilterCol] = [];
-    render(); requestAnimationFrame(function(){ positionDrillFilterDrop(); });
+    render();
   }
   else if(act==='drillFilterApply'){
     ev.stopPropagation();
@@ -3096,22 +3110,6 @@ document.addEventListener('keydown', function(e){
     } else if(state.drill){ state.drill=null; render(); } 
   } 
 });
-// Positions the drill-down column-filter popup below its triggering column header
-function positionDrillFilterDrop(triggerEl){
-  var popup = document.getElementById('drill-filter-popup');
-  if (!popup) return;
-  var btn = triggerEl || document.querySelector('[data-act="toggleDrillColFilter"][data-col="'+(state.drill && state.drill.openFilterCol)+'"]');
-  if (!btn) return;
-  var rect = btn.getBoundingClientRect();
-  var top = rect.bottom + 6;
-  var left = rect.left;
-  // Keep the popup within the viewport horizontally
-  var maxLeft = window.innerWidth - 296;
-  if (left > maxLeft) left = maxLeft;
-  if (left < 8) left = 8;
-  popup.style.top = top + 'px';
-  popup.style.left = left + 'px';
-}
 
 function positionAllDrops(){
   var pairs = [
