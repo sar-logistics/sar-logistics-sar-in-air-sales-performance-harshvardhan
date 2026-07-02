@@ -918,67 +918,47 @@ function sidebar(){
   var now = new Date();
   var ts = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0')+':'+now.getSeconds().toString().padStart(2,'0');
   var col = state.sidebarCollapsed;
-  var W = col ? '56px' : '232px';
 
-  function navItemC(label, active, icon, act, val, disabled){
-    var bg = active ? 'background:rgba(255,255,255,0.12);' : '';
-    var opacity = disabled ? 'opacity:0.4;' : '';
-    var dataActs = (!disabled && act) ? ' data-act="'+act+'" data-val="'+val+'"' : '';
-    return '<div'+dataActs+' class="sb-nav-item" data-label="'+label+'"'
-      +' style="display:flex;align-items:center;gap:10px;padding:'+(col?'10px':'8px 10px')+';border-radius:9px;cursor:'+(disabled?'default':'pointer')+';'+bg+opacity+'transition:background 0.12s ease;min-height:36px;justify-content:'+(col?'center':'flex-start')+';"'
-      +' onmouseenter="sbTooltip(this,true)" onmouseleave="sbTooltip(this,false)">'
-      +'<span style="flex-shrink:0;display:flex;align-items:center;justify-content:center;width:18px;height:18px;color:'+(active?'#FFFFFF':'rgba(255,255,255,0.6)')+';opacity:'+(disabled?0.5:1)+';">'+icon+'</span>'
-      +(col ? '' : '<span class="sb-label" style="font-size:12px;font-weight:'+(active?'700':'500')+';color:'+(active?'#FFFFFF':'rgba(255,255,255,0.7)')+';letter-spacing:-0.01em;">'+label+'</span>')
-    +'</div>';
-  }
-
-  return '<aside id="sidebar-el" style="width:'+W+';flex-shrink:0;background:#0D2B5E;display:flex;flex-direction:column;height:100%;position:relative;">'
+  return '<aside id="sidebar-el" style="width:'+(col?'0':'232px')+';flex-shrink:0;background:#0D2B5E;display:flex;flex-direction:column;height:100%;overflow:hidden;transition:width 0.25s cubic-bezier(0.4,0,0.2,1);">'
     // ── Logo header
-    +'<div style="padding:'+(col?'14px 0':'18px 18px 16px')+';border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:'+(col?'center':'flex-start')+';overflow:hidden;">'
-      +(col
-        ? '<img src="'+SAR_LOGO_URI+'" alt="SAR" style="height:28px;width:28px;object-fit:contain;filter:brightness(0) invert(1);" />'
-        : '<div><img src="'+SAR_LOGO_URI+'" alt="SAR" style="height:38px;width:auto;filter:brightness(0) invert(1);display:block;margin-bottom:8px;" />'
-          +'<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.45);letter-spacing:0.06em;text-transform:uppercase;" id="sidebar-subrole">Harshvardhan Rawat · Admin</div></div>')
+    +'<div style="padding:18px 18px 16px;border-bottom:1px solid rgba(255,255,255,0.08);min-width:232px;">'
+      +'<img src="'+SAR_LOGO_URI+'" alt="SAR" style="height:38px;width:auto;filter:brightness(0) invert(1);display:block;margin-bottom:8px;" />'
+      +'<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.45);letter-spacing:0.06em;text-transform:uppercase;" id="sidebar-subrole">Harshvardhan Rawat · Admin</div>'
     +'</div>'
     // ── Nav
-    +'<nav style="flex:1;overflow-y:auto;padding:10px '+(col?'6px':'10px')+';overscroll-behavior:contain;">'
-      +(col ? '' : '<div class="sb-section" style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:6px 8px 5px;text-transform:uppercase;">Reports</div>')
+    +'<nav style="flex:1;overflow-y:auto;padding:10px 10px;overscroll-behavior:contain;min-width:232px;">'
+      +'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:6px 8px 5px;text-transform:uppercase;">Reports</div>'
       +'<div style="display:flex;flex-direction:column;gap:1px;">'
-        +navItemC('Sales Performance',state.page==='sales',IC.bar,'page','sales')
-        +navItemC('Tradelane Insights',false,IC.route,'','',true)
-        +navItemC('Customer Insights',state.page==='customers',IC.person,'page','customers')
-        +navItemC('Agent Insights',false,IC.headset,'','',true)
+        +navItem('Sales Performance',state.page==='sales',IC.bar,'page','sales')
+        +navItem('Tradelane Insights',false,IC.route,'','',true)
+        +navItem('Customer Insights',state.page==='customers',IC.person,'page','customers')
+        +navItem('Agent Insights',false,IC.headset,'','',true)
         +'<div style="height:1px;background:rgba(255,255,255,0.07);margin:7px 6px;"></div>'
-        +navItemC('Operation Pendency',false,IC.clip)
-        +navItemC('Finance Pendency',false,IC.dollar)
+        +navItem('Operation Pendency',false,IC.clip)
+        +navItem('Finance Pendency',false,IC.dollar)
       +'</div>'
-      +(col ? '' : '<div class="sb-section" style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>')
-      +(col ? '<div style="height:1px;background:rgba(255,255,255,0.07);margin:10px 6px;"></div>' : '')
+      +'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>'
       +'<div style="display:flex;flex-direction:column;gap:1px;">'
-        +navItemC('Usage Analytics',state.page==='usage',IC.line,'page','usage')
-        +navItemC('Teams',state.page==='teams',IC.people,'page','teams')
-        +navItemC('Admin Panel',false,IC.sliders)
+        +navItem('Usage Analytics',state.page==='usage',IC.line,'page','usage')
+        +navItem('Teams',state.page==='teams',IC.people,'page','teams')
+        +navItem('Admin Panel',false,IC.sliders)
       +'</div>'
     +'</nav>'
-    // ── Collapse toggle button
-    +'<div style="padding:8px '+(col?'6px':'10px')+';border-top:1px solid rgba(255,255,255,0.08);">'
-      +'<button data-act="toggleSidebar" style="width:100%;display:flex;align-items:center;justify-content:'+(col?'center':'flex-start')+';gap:8px;background:rgba(255,255,255,0.07);border:none;border-radius:8px;padding:8px 10px;cursor:pointer;color:rgba(255,255,255,0.6);font-size:11px;font-weight:600;transition:background 0.12s ease;" onmouseenter="this.style.background=\'rgba(255,255,255,0.13)\'" onmouseleave="this.style.background=\'rgba(255,255,255,0.07)\'">'
-        +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;transition:transform 0.25s ease;transform:rotate('+(col?'180':'0')+'deg);"><polyline points="15 18 9 12 15 6"/></svg>'
-        +(col ? '' : '<span>Collapse</span>')
-      +'</button>'
-    +'</div>'
     // ── Footer user row
-    +(col ? '' :
-      '<div style="padding:10px 14px 12px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:9px;">'
-        +'<div id="sidebar-avatar" style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.18);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1.5px solid rgba(255,255,255,0.25);">HR</div>'
-        +'<div style="min-width:0;">'
-          +'<div id="sidebar-name" style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">SAR_IN – Air</div>'
-          +'<div style="font-size:9.5px;color:rgba(255,255,255,0.4);font-weight:500;">Updated '+ts+' <span style="color:#3DD68C;">●</span> Synced</div>'
-        +'</div>'
-      +'</div>')
-    // Tooltip container
-    +'<div id="sb-tooltip-el" class="sb-tooltip"></div>'
-  +'</aside>';
+    +'<div style="padding:10px 14px 12px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:9px;min-width:232px;">'
+      +'<div id="sidebar-avatar" style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.18);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1.5px solid rgba(255,255,255,0.25);">HR</div>'
+      +'<div style="min-width:0;">'
+        +'<div id="sidebar-name" style="font-size:11px;font-weight:600;color:rgba(255,255,255,0.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">SAR_IN – Air</div>'
+        +'<div style="font-size:9.5px;color:rgba(255,255,255,0.4);font-weight:500;">Updated '+ts+' <span style="color:#3DD68C;">●</span> Synced</div>'
+      +'</div>'
+    +'</div>'
+  +'</aside>'
+  // ── Toggle button — floats at the left edge of main content
+  +'<button data-act="toggleSidebar" style="position:fixed;left:'+(col?'8px':'220px')+';top:50%;transform:translateY(-50%);z-index:100;width:20px;height:48px;background:#1E3A66;border:none;border-radius:'+(col?'0 6px 6px 0':'6px 0 0 6px')+';cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;transition:left 0.25s cubic-bezier(0.4,0,0.2,1),border-radius 0.25s ease,background 0.15s ease;box-shadow:2px 0 8px rgba(13,43,94,0.18);" onmouseenter="this.style.background=\'#2D5296\'" onmouseleave="this.style.background=\'#1E3A66\'">'
+    +'<svg width="10" height="16" viewBox="0 0 10 16" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+      +(col ? '<polyline points="3,2 8,8 3,14"/>' : '<polyline points="7,2 2,8 7,14"/>')
+    +'</svg>'
+  +'</button>';
 }
 
 /* ====================== TOPBAR ====================== */
