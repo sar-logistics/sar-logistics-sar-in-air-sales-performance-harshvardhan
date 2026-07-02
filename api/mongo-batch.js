@@ -982,7 +982,7 @@ module.exports = async function handler(req, res) {
     const db = await getDB(); // ensures connection is alive
     // Fire-and-forget cache warm-up — don't block the ping response on it.
     // Only refreshes if the cache is close to expiring, to avoid redundant work.
-    if (!salesCache || (Date.now() - salesCacheTime) > (SALES_CACHE_TTL_MS - 5 * 60 * 1000)) {
+    if (!salesCache || (Date.now() - salesCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
       getSalesAggregate(db, false).catch(() => {}); // best-effort, errors ignored
     }
     return res.status(200).json({ ok: true, ts: Date.now() });
@@ -1036,6 +1036,23 @@ module.exports = async function handler(req, res) {
 
     if (action === "sales") {
       const result = await getSalesAggregate(db, forceRefresh);
+      const includeWeek = req.query?.includeWeek === "1";
+      const includeLob  = req.query?.includeLob  === "1";
+      // By default, strip the heavy per-rep weekData/lobData breakdowns from
+      // the response — they're only needed for Weekly view and the Filters
+      // panel respectively. This keeps the default page-load payload small
+      // and fast; the frontend lazy-fetches these with includeWeek=1 /
+      // includeLob=1 only when the user actually switches to Weekly view or
+      // opens the LOB filter. The full data stays cached server-side either way.
+      if (!includeWeek || !includeLob) {
+        const trimmed = { ...result, repsRaw: result.repsRaw.map(r => {
+          const copy = { ...r };
+          if (!includeWeek) delete copy.weekData;
+          if (!includeLob)  delete copy.lobData;
+          return copy;
+        })};
+        return res.status(200).json(trimmed);
+      }
       return res.status(200).json(result);
     }
 
