@@ -1291,7 +1291,7 @@ function topbar(){
                 + allRepNames.map(function(n){ return checkRow(n, state.filterReps.indexOf(n)>-1, 'toggleFilterRep', n); }).join('')
               + '</div>' : '');
 
-          _dropdownPanels += '<div id="filters-drop" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:14px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;width:280px;padding:16px;pointer-events:auto;">'
+          var panelHtml = '<div id="filters-drop" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:14px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;width:280px;padding:16px;pointer-events:auto;">'
             +'<div style="font-size:10px;font-weight:800;letter-spacing:0.08em;color:#97A1B2;text-transform:uppercase;margin-bottom:12px;">Filters</div>'
             +'<div style="display:flex;flex-direction:column;gap:8px;">'+lobSection+repSection+'</div>'
             +'<div style="height:1px;background:#EEF2F8;margin:14px 0 12px;"></div>'
@@ -1300,6 +1300,7 @@ function topbar(){
               +'<button data-act="toggleFiltersDrop" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;color:#fff;font-size:12px;font-weight:700;padding:8px 20px;cursor:pointer;">Done</button>'
             +'</div>'
           +'</div>';
+          return btnHtml + panelHtml;
         }
         return btnHtml;
       })()
