@@ -485,10 +485,10 @@ async function getDrillRows(db, entity, metric, month) {
   }
 
   matchedRows.sort((a, b) => new Date(b.date) - new Date(a.date));
-  const totalMetric  = matchedRows.reduce((s, r) => s + r.metricVal, 0);
-  const totalGP      = matchedRows.reduce((s, r) => s + r.gp,        0);
-  const totalRevenue = matchedRows.reduce((s, r) => s + r.revenue,   0);
-  const totalCost    = matchedRows.reduce((s, r) => s + r.cost,      0);
+  const totalMetric  = matchedRows.reduce((s, r) => s + (r.metricVal || 0), 0);
+  const totalGP      = matchedRows.reduce((s, r) => s + (r.gp      || 0), 0);
+  const totalRevenue = matchedRows.reduce((s, r) => s + (r.revenue  || 0), 0);
+  const totalCost    = totalRevenue - totalGP; // G = C - J
 
   return {
     success: true, entity, metric, month,
