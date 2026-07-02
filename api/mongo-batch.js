@@ -345,6 +345,13 @@ async function getDrillRows(db, entity, metric, month) {
   const isFYTotal      = month === "FY Total";
   const isYearGroup    = month && month.startsWith("YEAR:");
   const yearGroupSuffix = isYearGroup ? month.split(":")[1] : null;
+  // RANGE:Jan-26:Jun-26 → include all months between start and end inclusive
+  const isRange        = month && month.startsWith("RANGE:");
+  let rangeParts = null;
+  if (isRange) {
+    const bits = month.split(":");
+    rangeParts = { start: bits[1], end: bits[2] };
+  }
   const isAirMetric    = metric === "Tons (Air)";
   const isTeuLclMetric = metric === "TEUs (Ocean)" || metric === "LCL (Ocean in CBM)";
 
@@ -395,8 +402,15 @@ async function getDrillRows(db, entity, metric, month) {
       if (isNaN(d.getTime())) continue;
       const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
       if (!FY_MONTHS.includes(monthLabel)) continue;
-      if (!isFYTotal && !isYearGroup && monthLabel !== month) continue;
+      if (!isFYTotal && !isYearGroup && !isRange && monthLabel !== month) continue;
       if (isYearGroup && yearGroupSuffix && !monthLabel.endsWith('-' + yearGroupSuffix)) continue;
+      if (isRange && rangeParts) {
+        const allM = FY_MONTHS;
+        const fi = allM.indexOf(rangeParts.start);
+        const ti = allM.indexOf(rangeParts.end);
+        const mi = allM.indexOf(monthLabel);
+        if (fi < 0 || ti < 0 || mi < fi || mi > ti) continue;
+      }
 
       // ── FY-aware mapping — EXACT same as computeSalesAggregate ─────────
       const rowFY  = fyForMonthLabel(monthLabel);
