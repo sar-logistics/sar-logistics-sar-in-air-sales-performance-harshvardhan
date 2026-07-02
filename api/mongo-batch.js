@@ -471,7 +471,7 @@ async function getDrillRows(db, entity, metric, month) {
     success: true, entity, metric, month,
     count: matchedRows.length,
     totalMetric, totalGP,
-    rows: matchedRows.slice(0, 500),
+    rows: matchedRows.slice(0, 5000),
   };
 }
 
