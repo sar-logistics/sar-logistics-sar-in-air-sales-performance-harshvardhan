@@ -1630,7 +1630,10 @@ function buildSummaryCells(e, colLabels){
     };
   });
 }
-function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, colLabels, noTarget){
+function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, colLabels, noTarget, rawColKeys){
+  // rawColKeys: the actual month labels used as keys (may differ from colLabels display in Yearly view)
+  // If not provided, colLabels are the raw keys too
+  var keys = rawColKeys || colLabels;
   var series=[fy].concat(monthVals);
   var isClickable = metricLabel !== 'Target' && metricLabel !== 'Achievement %';
   return series.map(function(v,i){
@@ -1647,7 +1650,10 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
     else { val='\u2014'; isDash=true; }
     if(isDash) color='#C7CEDA';
     var isFY=i===0;
-    return {val:val, color:color, bg:isFY?'#FFFBF0':'transparent', borderLeft:isFY?'2px solid #F0D9A8':'0', weight:isFY?600:500, entity:entityName, metric:metricLabel, col:colLabels[i], drillVal:val, clickable: isClickable && !isDash};
+    // rawKey: the actual month label sent to the drill API
+    // For FY Total col (i===0) always "FY Total"; for Yearly view use the year's months
+    var rawKey = keys[i] || colLabels[i];
+    return {val:val, color:color, bg:isFY?'#FFFBF0':'transparent', borderLeft:isFY?'2px solid #F0D9A8':'0', weight:isFY?600:500, entity:entityName, metric:metricLabel, col:rawKey, drillVal:val, clickable: isClickable && !isDash};
   });
 }
 
@@ -1712,12 +1718,33 @@ function tableRows(){
       var arrowChar = isShip ? (isOpen ? '◄ ' : '► ') : '';
       // Individual reps have no real target data — show dash for Target/Achievement rows
       var noTarget = isRep && (label === 'Target' || label === 'Achievement %');
+
+      // rawColKeys: what gets sent to the drill API as month parameter
+      // Yearly view: year label "2025" → must resolve to "FY Total" for year col,
+      //   or the actual first/last month for individual year groups
+      // Weekly view: "Week 1" → actual month label e.g. "May-26"
+      // Monthly/Custom/Quarterly: colLabels already are real month labels
+      var rawColKeys;
+      if (isYearly && yGroups) {
+        // [0] = FY Total, then one key per year group
+        // For drill: FY Total → "FY Total", year group → pass the year label so backend can match all its months
+        // Better: pass a special key "YEAR:25" that openDrill resolves to a month range
+        rawColKeys = ['FY Total'].concat(yGroups.map(function(g){ return 'YEAR:'+g.year; }));
+      } else if (state.reportView === 'Weekly') {
+        var wm = state.weeklyMonth || months26[months26.length-1];
+        // Week cols: pass actual month label — backend will match all jobs in that month
+        // Since we can't filter by week on the backend easily, drill shows the full month
+        rawColKeys = ['FY Total', wm, wm, wm, wm]; // W1-W4 all map to same month
+      } else {
+        rawColKeys = null; // colLabels are already real month labels
+      }
+
       return {
         type:'metric', label:label, padLeft:(52+indent*18)+'px', labelColor:color,
         labelWeight:indent?500:600, labelStyle:indent?'italic':'normal',
         caret:arrowChar, toggleType:toggleType||false, entityName:e.name,
         repInfo:repInfo||null, rowBg: groupBg, isZoneBlock: isZone, isGrandBlock: isGrand,
-        cells:buildCells(fy, vals, type, color, e.name, label, colLabels, noTarget)
+        cells:buildCells(fy, vals, type, color, e.name, label, colLabels, noTarget, rawColKeys)
       };
     }
 
@@ -2081,7 +2108,7 @@ function drawer(){
       +'<div style="padding:18px 22px 14px;border-bottom:1px solid #F0F3F8;flex-shrink:0;">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
           +'<div>'
-            +'<div style="display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#97A1B2;text-transform:uppercase;"><span style="color:#2F6FED;">'+esc(d.entity)+'</span><span>·</span><span>'+esc(d.metric)+'</span><span>·</span><span>'+esc(d.col)+'</span></div>'
+            +'<div style="display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:0.05em;color:#97A1B2;text-transform:uppercase;"><span style="color:#2F6FED;">'+esc(d.entity)+'</span><span>·</span><span>'+esc(d.metric)+'</span><span>·</span><span>'+(d.col&&d.col.startsWith('YEAR:')?'Year 20'+d.col.split(':')[1]:esc(d.col))+'</span></div>'
             +'<div style="font-family:\'DM Mono\',monospace;font-size:22px;font-weight:500;color:#15233B;margin-top:6px;letter-spacing:-0.02em;">'+totalDisplay+'</div>'
             +'<div style="font-size:11.5px;color:#97A1B2;font-weight:500;margin-top:2px;">'+subtitle+'</div>'
           +'</div>'
@@ -2304,12 +2331,23 @@ function renderKeepTopbar(){
 }
 
 function openDrill(entity, metric, col, valueFmt){
-  // col is a month label like "Apr-25", or "FY Total" for the whole year
+  // col can be:
+  //   "FY Total"    → all months
+  //   "Apr-25"      → specific month label
+  //   "YEAR:25"     → all months of calendar year 2025 → send as "YEAR:25" and handle in backend
+  //   "Week 1" etc  → already resolved to actual month label by rawColKeys
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null };
   render();
 
-  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col);
-  fetch('/api/mongo-batch'+qs)
+  // Resolve YEAR: keys — tell backend which months to include
+  var monthParam = col;
+  if (col && col.startsWith('YEAR:')) {
+    // Pass as-is — backend will handle it
+    monthParam = col;
+  }
+
+  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(monthParam);
+  fetch('/api/mongo-batch'+qs, { priority: 'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (!data.success) {
