@@ -2248,9 +2248,9 @@ function drawer(){
     // ── Column definitions — order matches exactly what was requested, plus
     // three derived OL-status columns matching the reference layout ──
     var COLS = [
-      { k:'shipmentNo', l:'Shipment No', t:'mono', color:'#2563EB' },
-      { k:'jobDate', l:'Job Date', t:'date' },
-      { k:'lob', l:'LOB', t:'badge' },
+      { k:'shipmentNo', l:'Shipment No', t:'mono', color:'#2563EB', sticky:0,   width:130 },
+      { k:'jobDate', l:'Job Date', t:'date', sticky:130, width:105 },
+      { k:'lob', l:'LOB', t:'badge', sticky:235, width:105 },
       { k:'masterNo', l:'Master No.', t:'text' },
       { k:'houseNo', l:'House No.', t:'text' },
       { k:'consolNo', l:'Consol No.', t:'text' },
@@ -2316,7 +2316,13 @@ function drawer(){
     function th(c){
       var hasFilter = columnFilters[c.k] && columnFilters[c.k].length > 0;
       var isOpen = state.drill.openFilterCol === c.k;
-      return '<th style="position:sticky;top:0;background:'+(hasFilter?'#EEF3FC':'#F8FAFC')+';text-align:'+((c.t==='cur'||c.t==='num')?'right':'left')+';padding:9px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:'+(hasFilter?'#1E3A66':'#64748B')+';text-transform:uppercase;border-bottom:2px solid #E2E8F0;white-space:nowrap;user-select:none;z-index:1;">'
+      var bg = hasFilter ? '#EEF3FC' : '#F8FAFC';
+      var isSticky = c.sticky !== undefined;
+      var isLastSticky = c.k === 'lob'; // last frozen column gets a divider shadow
+      var stickyStyle = isSticky
+        ? 'position:sticky;left:'+c.sticky+'px;width:'+c.width+'px;min-width:'+c.width+'px;max-width:'+c.width+'px;z-index:3;'+(isLastSticky?'box-shadow:2px 0 4px rgba(13,43,94,0.08);':'')
+        : '';
+      return '<th style="position:sticky;top:0;'+stickyStyle+'background:'+bg+';text-align:'+((c.t==='cur'||c.t==='num')?'right':'left')+';padding:9px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:'+(hasFilter?'#1E3A66':'#64748B')+';text-transform:uppercase;border-bottom:2px solid #E2E8F0;white-space:nowrap;user-select:none;'+(isSticky?'':'z-index:1;')+'">'
         +'<span style="display:inline-flex;align-items:center;gap:4px;">'
           +esc(c.l)
           +'<span data-act="toggleDrillColFilter" data-col="'+c.k+'" style="cursor:pointer;display:inline-flex;padding:2px;border-radius:3px;'+(hasFilter||isOpen?'background:'+BRAND_A1+';':'')+'">'
@@ -2327,6 +2333,7 @@ function drawer(){
     }
 
     var headCells = COLS.map(th).join('');
+
 
     // Compute counts and totals FIRST before building any HTML
     var displayedCount = d.rows ? d.rows.length : 0;
@@ -2375,23 +2382,44 @@ function drawer(){
       var searchBlob = SEARCHABLE_KEYS.map(function(k){ return (s[k]||'').toString().toLowerCase(); }).join(' ');
       var cells = COLS.map(function(c){
         var v = cellVal(c, s);
-        return '<td style="padding:7px 10px;font-size:11.5px;white-space:nowrap;text-align:'+((c.t==='cur'||c.t==='num')?'right':'left')+';">'+fmtCell(c, v)+'</td>';
+        var isSticky = c.sticky !== undefined;
+        var isLastSticky = c.k === 'lob';
+        var stickyStyle = isSticky
+          ? 'position:sticky;left:'+c.sticky+'px;width:'+c.width+'px;min-width:'+c.width+'px;max-width:'+c.width+'px;z-index:2;background:'+rowBg+';'+(isLastSticky?'box-shadow:2px 0 4px rgba(13,43,94,0.08);':'')
+          : '';
+        return '<td style="padding:7px 10px;font-size:11.5px;white-space:nowrap;text-align:'+((c.t==='cur'||c.t==='num')?'right':'left')+';'+stickyStyle+'">'+fmtCell(c, v)+'</td>';
       }).join('');
       return '<tr class="drill-row" data-search="'+esc(searchBlob)+'" style="background:'+rowBg+';border-bottom:1px solid #F1F5F9;">'+cells+'</tr>';
     }).join('');
 
+    // Client-side subtotals for the two derived OL-status GP columns
+    var dActualGpSum = 0, dProvGpSum = 0;
+    visibleRows.forEach(function(r){
+      if (r.operationLock) dActualGpSum += (r.actualProfit || 0);
+      else dProvGpSum += (r.provisionalProfit || 0);
+    });
+
     // Sticky total row — Revenue/Cost/GP always shown regardless of which metric was clicked
-    var totalRow = '<tr style="background:#EEF3FC;border-top:2.5px solid #0D2B5E;">'
+    var totalRowBg = '#EEF3FC';
+    var totalRow = '<tr style="background:'+totalRowBg+';border-top:2.5px solid #0D2B5E;">'
       + COLS.map(function(c, i){
-          if (i === 0) return '<td style="padding:10px 10px;font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;">TOTAL ('+visibleRows.length.toLocaleString()+')</td>';
+          var isSticky = c.sticky !== undefined;
+          var isLastSticky = c.k === 'lob';
+          var stickyStyle = isSticky
+            ? 'position:sticky;left:'+c.sticky+'px;width:'+c.width+'px;min-width:'+c.width+'px;max-width:'+c.width+'px;z-index:4;background:'+totalRowBg+';'+(isLastSticky?'box-shadow:2px 0 4px rgba(13,43,94,0.08);':'')
+            : '';
+          if (i === 0) return '<td style="padding:10px 10px;font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;'+stickyStyle+'">TOTAL ('+visibleRows.length.toLocaleString()+')</td>';
+          if (isSticky) return '<td style="padding:10px 10px;'+stickyStyle+'"></td>';
           if (c.k === 'teu') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+dTeuSum.toFixed(1)+'</td>';
           if (c.k === 'billedRevenue') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+fmtCur(fullRevSum)+'</td>';
           if (c.k === 'postedCost') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+fmtCur(fullCostSum)+'</td>';
           if (c.k === 'actualProfit') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(fullGpSum)+'</td>';
+          if (c.k === 'gpOlDone') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+(dActualGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dActualGpSum)+'</td>';
+          if (c.k === 'gpOlNotDone') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+(dProvGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dProvGpSum)+'</td>';
           return '<td style="padding:10px 10px;"></td>';
         }).join('')
     +'</tr>';
-    totalRow = '<tfoot style="position:sticky;bottom:0;z-index:3;">'+totalRow+'</tfoot>';
+    totalRow = '<tfoot style="position:sticky;bottom:0;z-index:5;">'+totalRow+'</tfoot>';
 
     // ── LOB tab bar ──
     var tabBar = '<div style="padding:10px 24px 0;background:#FFFFFF;flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
@@ -2697,6 +2725,16 @@ function positionDrop(dropId, triggerAct){
 }
 
 function positionViewDrop(){ positionAllDrops(); }
+
+// Lightweight re-render used for drill-overlay interactions (filter checkbox
+// toggles, LOB tab clicks, etc). Only touches the drawer — never rebuilds the
+// topbar/KPI cards/sales table underneath, which was the actual cause of the
+// visible "blink": every filter click was needlessly repainting the entire
+// dashboard behind the overlay.
+function renderDrillOnly(){
+  var drawerEl = document.getElementById('drawer-slot');
+  if (drawerEl) drawerEl.innerHTML = drawer() + feedbackModal() + orgEditModal();
+}
 
 function render(){
   computeFilteredRepsRaw(); // apply active Rep/LOB filters before any downstream computation
@@ -3028,7 +3066,7 @@ document.addEventListener('click', function(ev){
   else if(act==='setDrillLobTab'){
     ev.stopPropagation();
     state.drill.lobTab = el.getAttribute('data-val');
-    render();
+    renderDrillOnly();
   }
   else if(act==='toggleDrillColFilter'){
     ev.stopPropagation();
@@ -3039,8 +3077,6 @@ document.addEventListener('click', function(ev){
     if (!wasOpen) {
       // Compute the popup's screen position SYNCHRONOUSLY, from the trigger
       // element that still exists right now (before render() destroys it).
-      // Baking this into the very first paint eliminates the top-left flash
-      // that happened when position was only set a frame later via rAF.
       var rect = el.getBoundingClientRect();
       var top = rect.bottom + 6;
       var left = rect.left;
@@ -3049,44 +3085,62 @@ document.addEventListener('click', function(ev){
       if (left < 8) left = 8;
       state.drill.filterAnchor = { top: top, left: left };
     }
-    render();
+    renderDrillOnly();
   }
   else if(act==='drillFilterToggleVal'){
+    // Checkbox toggles only affect the STAGED draft (not yet applied to the
+    // table) — update the checkbox's own visual state directly, no render
+    // at all needed. This is what eliminates the blink entirely: clicking a
+    // checkbox used to rebuild the whole drill table underneath the popup.
     ev.stopPropagation();
     var fk = state.drill.openFilterCol;
     var v = el.getAttribute('data-val');
     var draft = state.drill.filterDraft[fk] || [];
     var idx = draft.indexOf(v);
-    if (idx > -1) draft.splice(idx,1); else draft.push(v);
+    var nowChecked;
+    if (idx > -1) { draft.splice(idx,1); nowChecked = false; }
+    else          { draft.push(v);       nowChecked = true;  }
     state.drill.filterDraft[fk] = draft;
-    render();
+    var box = el.querySelector('div');
+    if (box) {
+      box.style.borderColor = nowChecked ? BRAND_A1 : '#C5D0E0';
+      box.style.background  = nowChecked ? BRAND_A1 : '#FFFFFF';
+      box.innerHTML = nowChecked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '';
+    }
   }
   else if(act==='drillFilterSelectAll'){
     ev.stopPropagation();
     var fk2 = state.drill.openFilterCol;
     var opts = document.querySelectorAll('#drill-colfilter-list .drill-filter-opt');
     var allVals = [];
-    opts.forEach(function(o){ allVals.push(o.getAttribute('data-val')); });
+    opts.forEach(function(o){
+      allVals.push(o.getAttribute('data-val'));
+      var box = o.querySelector('div');
+      if (box) { box.style.borderColor = BRAND_A1; box.style.background = BRAND_A1;
+        box.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'; }
+    });
     state.drill.filterDraft[fk2] = allVals;
-    render();
   }
   else if(act==='drillFilterClearAll'){
     ev.stopPropagation();
     state.drill.filterDraft[state.drill.openFilterCol] = [];
-    render();
+    document.querySelectorAll('#drill-colfilter-list .drill-filter-opt').forEach(function(o){
+      var box = o.querySelector('div');
+      if (box) { box.style.borderColor = '#C5D0E0'; box.style.background = '#FFFFFF'; box.innerHTML = ''; }
+    });
   }
   else if(act==='drillFilterApply'){
     ev.stopPropagation();
     var fk3 = state.drill.openFilterCol;
     state.drill.columnFilters[fk3] = (state.drill.filterDraft[fk3] || []).slice();
     state.drill.openFilterCol = null;
-    render();
+    renderDrillOnly();
   }
   else if(act==='clearDrillColFilters'){
     ev.stopPropagation();
     state.drill.columnFilters = {};
     state.drill.filterDraft = {};
-    render();
+    renderDrillOnly();
   }
   else if(act==='close'){
     // Only close the overlay if the click landed OUTSIDE any data-stop panel
@@ -3160,7 +3214,7 @@ document.addEventListener('click', function(e){
     var isToggleBtn  = e.target.closest('[data-act="toggleDrillColFilter"]');
     if (!insidePopup && !isToggleBtn) {
       state.drill.openFilterCol = null;
-      render();
+      renderDrillOnly();
       return;
     }
   }
