@@ -495,6 +495,8 @@ var orgData = null; // { hierarchy, directReports, support, totalUsers }
 var orgDataReady = false;
 var orgEditTarget = null; // email of user currently being edited, or null
 
+var _liveDataRetryCount = 0;
+
 function fetchLiveData(callback, force){
   fetch('/api/mongo-batch?action=sales' + (force ? '&force=1' : ''), {
     priority: 'high',  // hint browser to prioritise this fetch above others
@@ -503,19 +505,34 @@ function fetchLiveData(callback, force){
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (data.repsRaw && data.repsRaw.length > 0) {
+        _liveDataRetryCount = 0; // success — reset retry counter
         repsRawOriginal = data.repsRaw;
         zonesRaw  = data.zones  || [];
         months26  = data.months || months26;
         syncDateRangeToData();
         dataReady = true;
-        setCachedSalesData({ repsRaw: repsRaw, zones: zonesRaw, months: months26 });
-        console.log('✅ Live data:', repsRaw.length, 'reps,', zonesRaw.length, 'zones');
+        setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
+        console.log('✅ Live data:', repsRawOriginal.length, 'reps,', zonesRaw.length, 'zones');
+        if (callback) callback();
+      } else if (_liveDataRetryCount < 2 && !force) {
+        // Empty/incomplete response on initial load (likely a cold serverless
+        // function still building its cache) — retry automatically instead of
+        // leaving the user staring at an empty dashboard.
+        _liveDataRetryCount++;
+        console.warn('⚠️ Empty sales response, retrying ('+_liveDataRetryCount+'/2)…');
+        setTimeout(function(){ fetchLiveData(callback, force); }, 1800);
+      } else {
+        if (callback) callback();
       }
-      if (callback) callback();
     })
     .catch(function(e){
-      console.warn('⚠️ Live data failed, using static fallback:', e.message);
-      // Static fallback so dashboard isn't empty
+      console.warn('⚠️ Live data fetch failed:', e.message);
+      if (_liveDataRetryCount < 2 && !force) {
+        _liveDataRetryCount++;
+        setTimeout(function(){ fetchLiveData(callback, force); }, 1800);
+        return;
+      }
+      // Static fallback so dashboard isn't empty after repeated failures
       repsRawOriginal = [
         { name:'Harshvardhan Rawat',  zone:'Thailand', hue:255, gp:[2800,4200,5100,2900,1900,870],   ship:[12,20,22,18,10,14], tank:[0,0,0,0,0,0], tgt:8483 },
         { name:'Anchalee Dubey',      zone:'Thailand', hue:215, gp:[541,736,2187,1762,1617,1483],    ship:[4,5,14,8,8,3],      tank:[0,0,3,0,0,0], tgt:0 },
@@ -1987,13 +2004,23 @@ function salesTable(M){
 
   // Empty state — no data for the selected filter
   if (!hasDataForIndices(idxs)) {
+    var isStillLoading = !dataReady || repsRawOriginal.length === 0;
     return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'
       +'<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 32px;gap:14px;text-align:center;">'
-        +'<div style="width:48px;height:48px;border-radius:14px;background:#F0F4FA;display:flex;align-items:center;justify-content:center;">'
-          +'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
+        +(isStillLoading
+          ? '<div class="login-spinner" style="width:32px;height:32px;border-width:3px;"></div>'
+          : '<div style="width:48px;height:48px;border-radius:14px;background:#F0F4FA;display:flex;align-items:center;justify-content:center;">'
+              +'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
+            +'</div>')
+        +'<div style="font-size:14px;font-weight:700;color:#3C5275;">'+(isStillLoading ? 'Loading your data…' : 'No data for this period')+'</div>'
+        +'<div style="font-size:12px;color:#9AAFC8;max-width:280px;line-height:1.6;">'
+          +(isStillLoading
+            ? 'This can take a few seconds on the first load. Hang tight.'
+            : 'The selected month has no shipment records. Try selecting a different period, or refresh to pull the latest data.')
         +'</div>'
-        +'<div style="font-size:14px;font-weight:700;color:#3C5275;">No data for this period</div>'
-        +'<div style="font-size:12px;color:#9AAFC8;max-width:280px;line-height:1.6;">The selected month has no shipment records. Try selecting a different period from the filter above.</div>'
+        +(!isStillLoading
+          ? '<button data-act="refreshData" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:9px 18px;font-size:11.5px;font-weight:700;color:#FFFFFF;cursor:pointer;margin-top:4px;">↻ Refresh Now</button>'
+          : '')
       +'</div>'
     +'</div>';
   }
