@@ -291,15 +291,18 @@ function showDashboard() {
 
     // Cheap check: has MongoDB data changed since our cache was built?
     checkForFreshData(cached, function(needsRefresh) {
-      if (!needsRefresh) return; // cache is still current — skip the heavy fetch entirely
-
-      fetchLiveData(function() {
-        render();
-        if (window._pendingUserPatch) {
-          var p = window._pendingUserPatch;
-          patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
-        }
-      });
+      if (!needsRefresh) return;
+      // Small delay: the meta check already woke the container — give it
+      // 500ms to finish initializing before hitting it with the heavy fetch.
+      setTimeout(function() {
+        fetchLiveData(function() {
+          render();
+          if (window._pendingUserPatch) {
+            var p = window._pendingUserPatch;
+            patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
+          }
+        });
+      }, 500);
     });
   }, 260);
 }
