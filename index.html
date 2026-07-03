@@ -2869,23 +2869,13 @@ function render(){
   }
   var mainEl=document.getElementById('main-slot');
   var scrollTop=mainEl?mainEl.scrollTop:0;
-
-  var tbHash = topbarHash();
-  if (tbHash !== _lastTopbarHash) {
-    _lastTopbarHash = tbHash;
-    document.getElementById('topbar-slot').innerHTML=topbar();
-  }
-
-  var hash = stateHash();
-  if (hash !== _lastRenderHash) {
-    _lastRenderHash = hash;
-    mainEl.innerHTML = state.page==='customers' ? customerPage()
-      : state.page==='usage' ? usagePage()
-      : state.page==='teams' ? teamsPage()
-      : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
-    if(scrollTop) mainEl.scrollTop=scrollTop;
-  }
+  document.getElementById('topbar-slot').innerHTML=topbar();
+  mainEl.innerHTML = state.page==='customers' ? customerPage()
+    : state.page==='usage' ? usagePage()
+    : state.page==='teams' ? teamsPage()
+    : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal();
+  if(scrollTop) mainEl.scrollTop=scrollTop;
   requestAnimationFrame(positionAllDrops);
 }
 function renderKeepTopbar(){
