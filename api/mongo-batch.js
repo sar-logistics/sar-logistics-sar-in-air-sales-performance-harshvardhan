@@ -594,6 +594,13 @@ async function computeSalesAggregate(db) {
     return { key: key, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
   }
 
+  // ── Kick off full-field drill fetch in parallel ──────────────────────
+  // Runs concurrently alongside the aggregate loop below. By the time we
+  // finish the aggregate computation, the drill rows are already fetched.
+  const drillFetchPromise = Promise.all(
+    JOB_COLLECTIONS.map(cn => db.collection(cn).find({}).toArray().then(r => ({ cn, r })))
+  );
+
   for (const collName of JOB_COLLECTIONS) {
     // Fetch every field any classification might need — we don't know which
     // branch a row falls into until we read its LOB, so project broadly.
@@ -850,6 +857,79 @@ async function computeSalesAggregate(db) {
     rep.lcl.forEach((v, i)  => { zonesMap[rep.zone].lcl[i]  += v; });
   }
 
+  // ── Build allDrillRows from the parallel fetch ───────────────────────
+  const drillCollections = await drillFetchPromise;
+  const allDrillRows = [];
+  for (const { cn, r } of drillCollections) {
+    for (const job of r) {
+      const cls = classifyRow(job, cn);
+      const dateCol = getDateColumnFor(cls);
+      const rawDate = job[dateCol] || job["Job Date"];
+      if (!rawDate) continue;
+      const d = new Date(rawDate);
+      if (isNaN(d.getTime())) continue;
+      const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
+      if (!FY_MONTHS.includes(monthLabel)) continue;
+      const salesPerson = normalizeName(job["Sales Person"]);
+      if (!salesPerson) continue;
+      const { gp: rowGP, isProvisional } = pickGP(job, cls);
+      const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const provRevenue   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
+      const provCost      = parseFloat(job["Provisional Cost (E)"] || 0) || 0;
+      const postedCostRaw = job["Posted Cost (G)"];
+      const postedCost    = (postedCostRaw != null && String(postedCostRaw).trim() !== "")
+        ? (parseFloat(postedCostRaw) || 0)
+        : (billedRevenue - (parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0));
+      allDrillRows.push({
+        _sp: salesPerson, _ml: monthLabel,
+        _dt: d.getTime(), // store as number for fast sort
+        _cl: cn,
+        _cls_kind: cls.kind, _cls_dir: cls.direction || "",
+        _loc: String(job["Location"] || "").trim(),
+        shipmentNo: job["Shipment No"]    || "—",
+        jobDate:    job["Job Date"]       || "",
+        lob: cls.kind + (cls.direction ? " " + cls.direction : ""),
+        masterNo:  job["Master No."]      || "",
+        houseNo:   job["House No."]       || "",
+        consolNo:  job["Consol No."]      || "",
+        cargoType: job["Cargo Type"]      || "",
+        carrier:   job["Carrier"] || job["Carrier Name"] || "",
+        provRevenue, billedRevenue,
+        unbilledRevenue: parseFloat(job["Unbilled Revenue (D=A-C)"] ?? provRevenue - billedRevenue) || 0,
+        provCost, postedCost,
+        unpostedCost: parseFloat(job["Unposted Cost (H = E-G)"] ?? provCost - postedCost) || 0,
+        provisionalProfit: parseFloat(job["Provisional Profit (I=A-E)"] || 0) || 0,
+        actualProfit:      parseFloat(job["Actual Profit (J=C-G)"]      || 0) || 0,
+        customer:     job["Customer"]            || "",
+        ataDischarge: job["ATA Discharge"]       || "",
+        atdLoading:   job["ATD Loading Port"]    || "",
+        location:     job["Location"]            || "",
+        consignee:    job["Consignee"]           || "",
+        consolType:   job["Consol Type"]         || "",
+        teu:  parseFloat(job["Container TEU"]    || 0) || 0,
+        destAgent:    job["Destination Agent"]   || "",
+        etaDischarge: job["ETA Discharge"]       || "",
+        etdLoading:   job["ETD Loading Port"]    || "",
+        jobOwner:     job["Job Owner"]           || "",
+        jobRevRecogDate: job["Job Rev Recognition Date"] || "",
+        originAgent:  job["Origin Agent"]        || "",
+        salesPerson:  job["Sales Person"]        || "",
+        shipper:      job["Shipper"]             || "",
+        volume:  parseFloat(job["Volume"]        || 0) || 0,
+        volumeUnit:   job["Volume Unit"]         || "",
+        operationLock: job["Operation Lock"]     || "",
+        financialLock: job["Financial Lock"]     || "",
+        g: rowGP, r: billedRevenue, x: postedCost,
+        t: parseFloat(job["Container TEU"] || 0) || 0,
+        vol: parseFloat(job["Chargeable Weight"] || job["Volume"] || 0) || 0,
+        prov: isProvisional ? 1 : 0,
+      });
+    }
+  }
+  // Also populate drillRowsCache and the mapping lookup for the drill endpoint
+  drillRowsCache = { allRows: allDrillRows, repLookupByFY, repsByZoneByFY, normByDisplayByFY };
+  drillRowsCacheTime = Date.now();
+
   return {
     success:  true,
     months:   activeMonths,
@@ -858,6 +938,7 @@ async function computeSalesAggregate(db) {
     unmapped: Object.entries(unmapped)
       .sort((a, b) => b[1] - a[1])
       .map(([name, count]) => ({ name, count })),
+    allDrillRows, // included in response, stripped by sales endpoint unless requested
     pushedAt: new Date().toISOString(),
   };
 }
@@ -1056,24 +1137,20 @@ module.exports = async function handler(req, res) {
 
     if (action === "sales") {
       const result = await getSalesAggregate(db, forceRefresh);
-      const includeWeek = req.query?.includeWeek === "1";
-      const includeLob  = req.query?.includeLob  === "1";
-      // By default, strip the heavy per-rep weekData/lobData breakdowns from
-      // the response — they're only needed for Weekly view and the Filters
-      // panel respectively. This keeps the default page-load payload small
-      // and fast; the frontend lazy-fetches these with includeWeek=1 /
-      // includeLob=1 only when the user actually switches to Weekly view or
-      // opens the LOB filter. The full data stays cached server-side either way.
-      if (!includeWeek || !includeLob) {
-        const trimmed = { ...result, repsRaw: result.repsRaw.map(r => {
-          const copy = { ...r };
-          if (!includeWeek) delete copy.weekData;
-          if (!includeLob)  delete copy.lobData;
-          return copy;
-        })};
-        return res.status(200).json(trimmed);
-      }
-      return res.status(200).json(result);
+      const includeWeek  = req.query?.includeWeek  === "1";
+      const includeLob   = req.query?.includeLob   === "1";
+      const includeDrill = req.query?.includeDrill === "1";
+      const trimmed = { ...result, repsRaw: result.repsRaw.map(r => {
+        const copy = { ...r };
+        if (!includeWeek) delete copy.weekData;
+        if (!includeLob)  delete copy.lobData;
+        return copy;
+      })};
+      // allDrillRows is heavy (~50k rows × 40 fields) — only included when
+      // the frontend explicitly requests it via includeDrill=1. Default sales
+      // load strips it so initial page load stays fast.
+      if (!includeDrill) delete trimmed.allDrillRows;
+      return res.status(200).json(trimmed);
     }
 
     if (action === "customers") {
