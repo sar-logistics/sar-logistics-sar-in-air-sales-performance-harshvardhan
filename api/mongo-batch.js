@@ -800,6 +800,16 @@ async function computeSalesAggregate(db) {
     const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
     const lcl  = activeMonths.map(m => Math.round((monthData[m]?.lcl  || 0) * 100) / 100);
 
+    // Target: use rep's own monthly target if set, else the zone's monthly target.
+    // From the debug data: mapping_sales_targets has null USD targets for all reps,
+    // while mapping_zone_targets has the actual values. So always fall back to zone target.
+    const fy27ZoneTgt = zoneTargetsByFY.FY27[meta.zone];
+    const fy26ZoneTgt = zoneTargetsByFY.FY26[meta.zone];
+    const zoneTgt = fy27ZoneTgt || fy26ZoneTgt || {};
+    const repTgt = meta.monthlyTarget > 0
+      ? meta.monthlyTarget
+      : (zoneTgt.monthlyTarget || 0);
+
     repsRaw.push({
       name:  meta.displayName,
       zone:  meta.zone,
@@ -808,9 +818,9 @@ async function computeSalesAggregate(db) {
       hue:   zoneHue(meta.zone),
       gp, gpProv, gpActual, ship, tons, teu, lcl,
       tank:  activeMonths.map(() => 0),
-      tgt:   0,
+      tgt:   repTgt,
       weekData: repWeekData[repKey] || {},
-      lobData: repLobData[repKey] || {}, // { "SEA EXPORT" → { "Apr-25" → {gp,ship,tons,teu,lcl} } }
+      lobData: repLobData[repKey] || {},
     });
   }
 
