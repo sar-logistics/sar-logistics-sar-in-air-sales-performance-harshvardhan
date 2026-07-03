@@ -1137,19 +1137,17 @@ module.exports = async function handler(req, res) {
 
     if (action === "sales") {
       const result = await getSalesAggregate(db, forceRefresh);
-      const includeWeek  = req.query?.includeWeek  === "1";
-      const includeLob   = req.query?.includeLob   === "1";
-      const includeDrill = req.query?.includeDrill === "1";
+      const includeWeek = req.query?.includeWeek === "1";
+      const includeLob  = req.query?.includeLob  === "1";
+      // Strip only weekData/lobData (lazy-loaded when needed).
+      // allDrillRows is ALWAYS included — it's needed for instant drill-through
+      // and is already computed in the same pass as the aggregate, zero extra cost.
       const trimmed = { ...result, repsRaw: result.repsRaw.map(r => {
         const copy = { ...r };
         if (!includeWeek) delete copy.weekData;
         if (!includeLob)  delete copy.lobData;
         return copy;
       })};
-      // allDrillRows is heavy (~50k rows × 40 fields) — only included when
-      // the frontend explicitly requests it via includeDrill=1. Default sales
-      // load strips it so initial page load stays fast.
-      if (!includeDrill) delete trimmed.allDrillRows;
       return res.status(200).json(trimmed);
     }
 
