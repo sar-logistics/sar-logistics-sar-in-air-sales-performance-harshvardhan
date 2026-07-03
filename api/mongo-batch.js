@@ -1087,14 +1087,26 @@ module.exports = async function handler(req, res) {
     const forceRefresh = req.query?.force === "1" || req.query?.force === "true";
 
     if (action === "sales") {
+      const includeWeek = req.query?.includeWeek === "1";
+      const includeLob  = req.query?.includeLob  === "1";
+
+      // Fast-path: if only weekData/lobData is requested and cache is warm,
+      // serve directly from salesCache — no DB query, responds in <50ms.
+      if ((includeWeek || includeLob) && !forceRefresh && salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
+        const trimmed = { ...salesCache, repsRaw: salesCache.repsRaw.map(r => {
+          const copy = { ...r };
+          if (!includeWeek) delete copy.weekData;
+          if (!includeLob)  delete copy.lobData;
+          return copy;
+        })};
+        return res.status(200).json(trimmed);
+      }
+
       const result = await getSalesAggregate(db, forceRefresh);
-      const includeLob = req.query?.includeLob === "1";
-      // weekData is always included — it's needed for Weekly view and is
-      // already computed during aggregation, zero extra cost to send it.
-      // Only lobData is still lazy-loaded (it's heavier and less commonly used).
       const trimmed = { ...result, repsRaw: result.repsRaw.map(r => {
         const copy = { ...r };
-        if (!includeLob) delete copy.lobData;
+        if (!includeWeek) delete copy.weekData;
+        if (!includeLob)  delete copy.lobData;
         return copy;
       })};
       return res.status(200).json(trimmed);
