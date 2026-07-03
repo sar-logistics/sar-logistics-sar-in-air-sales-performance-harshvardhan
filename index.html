@@ -887,26 +887,44 @@ function yearGroups(){
   var idxs = filteredMonthIndices();
   var groups = {};
   var order = [];
+  var isFinancial = state.yearType !== 'Calendar';
+
   idxs.forEach(function(i){
     var m = months26[i];
-    var y2 = m.split('-')[1]; // "25" or "26"
-    var fullYear = '20'+y2;
-    if (!groups[y2]) {
-      groups[y2] = { year: y2, label: fullYear, idxs: [] };
-      order.push(y2);
+    var parts = m.split('-');
+    var mon = parts[0], y2 = parseInt(parts[1], 10);
+    var FY_START_MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var key, label, range;
+
+    if (isFinancial) {
+      // Financial Year: Apr-25 through Mar-26 = FY 2025-26
+      // If month is Apr-Dec, FY starts in that year; if Jan-Mar, FY started previous year
+      var fyStart = FY_START_MONTHS.indexOf(mon) >= 0 ? y2 : y2 - 1;
+      key = 'FY' + fyStart;
+      label = 'FY 20'+String(fyStart)+'-'+String(fyStart+1).slice(-2);
+    } else {
+      // Calendar Year
+      key = 'CY' + y2;
+      label = '20' + String(y2).padStart(2,'0');
     }
-    groups[y2].idxs.push(i);
+
+    if (!groups[key]) {
+      groups[key] = { year: isFinancial ? String(fyStart) : String(y2), label: label, idxs: [], key: key };
+      order.push(key);
+    }
+    groups[key].idxs.push(i);
   });
-  // Add range label e.g. "Jan 2025 – Dec 2025"
-  order.forEach(function(y2){
-    var g = groups[y2];
+
+  // Add range label e.g. "Apr 2025 – Mar 2026"
+  order.forEach(function(k){
+    var g = groups[k];
     var ms = g.idxs.map(function(i){ return months26[i]; });
     var first = ms[0], last = ms[ms.length-1];
-    var MNAMES = {Jan:'Jan',Feb:'Feb',Mar:'Mar',Apr:'Apr',May:'May',Jun:'Jun',Jul:'Jul',Aug:'Aug',Sep:'Sep',Oct:'Oct',Nov:'Nov',Dec:'Dec'};
-    var fy = first.split('-'); var ly = last.split('-');
+    var fy = first.split('-'), ly = last.split('-');
     g.range = fy[0]+' 20'+fy[1]+' – '+ly[0]+' 20'+ly[1];
   });
-  return order.map(function(y2){ return groups[y2]; });
+
+  return order.map(function(k){ return groups[k]; });
 }
 
 // Display label for a column: ISO week keys show as "Week N" + date range
@@ -1971,7 +1989,10 @@ function tableRows(){
         // [0] = FY Total, then one key per year group
         // For drill: FY Total → "FY Total", year group → pass the year label so backend can match all its months
         // Better: pass a special key "YEAR:25" that openDrill resolves to a month range
-        rawColKeys = ['FY Total'].concat(yGroups.map(function(g){ return 'YEAR:'+g.year; }));
+        rawColKeys = ['FY Total'].concat(yGroups.map(function(g){
+          var ms = g.idxs.map(function(i){ return months26[i]; });
+          return 'RANGE:'+ms[0]+':'+ms[ms.length-1];
+        }));
       } else if (state.reportView === 'Weekly') {
         // Each week column now maps to its own exact ISO week (Mon-Sun) —
         // drill-down filters precisely to that week's date range.
