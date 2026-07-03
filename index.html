@@ -1841,7 +1841,8 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
   // If not provided, colLabels are the raw keys too
   var keys = rawColKeys || colLabels;
   var series=[fy].concat(monthVals);
-  var isClickable = metricLabel !== 'Target' && metricLabel !== 'Achievement %';
+  var isClickable = metricLabel !== 'Target' && metricLabel !== 'Achievement %'
+    && state.reportView !== 'Yearly' && state.reportView !== 'Quarterly';
   return series.map(function(v,i){
     var val, color=baseColor, isDash=false;
     if(noTarget && (type==='pct' || (type==='cur' && metricLabel==='Target'))){
