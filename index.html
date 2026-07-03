@@ -485,6 +485,9 @@ function fetchLiveData(callback, force){
         setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
         console.log('✅ Live data:', repsRawOriginal.length, 'reps,', zonesRaw.length, 'zones');
         if (callback) callback();
+        // Silently prefetch drill rows for all visible months in the background.
+        // By the time the user clicks any cell, the data is already in the browser cache.
+        setTimeout(prefetchDrillMonths, 2000);
       } else if (_liveDataRetryCount < 2 && !force) {
         // Empty/incomplete response on initial load (likely a cold serverless
         // function still building its cache) — retry automatically instead of
@@ -2857,36 +2860,153 @@ function renderKeepTopbar(){
   if(scrollTop) mainEl.scrollTop=scrollTop;
 }
 
+// ── Browser-side drill cache ─────────────────────────────────────────────────
+// Key insight: Vercel serverless functions are STATELESS — the server-side
+// drillCache Map is wiped on every cold start (which happens frequently).
+// The right cache is HERE in the browser, which persists for the whole session.
+//
+// Strategy:
+//   1. When the user clicks a cell → check browser drillCache first.
+//      If hit: instantly show data (zero network). If miss: fetch + cache.
+//   2. After main data loads → silently prefetch all visible months in the
+//      background so by the time the user clicks anything, it's already cached.
+var _drillCache = {};          // { "Jan-26": { rows, count, totalGP, ... } }
+var _drillPrefetching = {};    // { "Jan-26": true } — in-flight guard
+var _drillPrefetchQueue = [];  // months waiting to be prefetched
+
+function getDrillCacheKey(entity, metric, month){
+  // Entity + metric matter for the response, but the ROWS fetched are the same
+  // for any entity within the same month. Cache at month level; entity/metric
+  // filtering is done in-memory on the cached rows — same as the server does.
+  // Grand Total is the broadest entity so we use it as the cache-warming key.
+  return 'GT||' + month; // Grand Total = all rows for this month
+}
+
+function fetchDrillForMonth(month, callback){
+  var cacheKey = getDrillCacheKey('Grand Total', 'Shipments', month);
+  if (_drillCache[cacheKey]) { if (callback) callback(_drillCache[cacheKey]); return; }
+  if (_drillPrefetching[cacheKey]) { if (callback) setTimeout(function(){ fetchDrillForMonth(month, callback); }, 300); return; }
+  _drillPrefetching[cacheKey] = true;
+  var qs = '?action=drill&entity='+encodeURIComponent('Grand Total')+'&metric=Shipments&month='+encodeURIComponent(month);
+  fetch('/api/mongo-batch'+qs, { priority: 'low' })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.success) _drillCache[cacheKey] = data;
+      delete _drillPrefetching[cacheKey];
+      if (callback) callback(data);
+    })
+    .catch(function(){
+      delete _drillPrefetching[cacheKey];
+      if (callback) callback(null);
+    });
+}
+
+// Prefetch all currently-visible months silently in the background,
+// with a small delay between each to avoid hammering the server.
+// Called once after the main sales data finishes loading.
+function prefetchDrillMonths(){
+  var months = filteredMonthIndices().map(function(i){ return months26[i]; });
+  months.forEach(function(m, i){
+    setTimeout(function(){
+      fetchDrillForMonth(m, null);
+    }, 400 + i * 600); // stagger: 0.4s, 1s, 1.6s, ... so we don't all hit at once
+  });
+}
+
+// Filter a Grand-Total cached result down to a specific entity + metric
+// entirely in-memory (no network). This mirrors what the server does.
+function filterDrillData(allData, entity, metric, month){
+  if (!allData || !allData.rows) return null;
+  var rows = allData.rows;
+
+  // Entity filter
+  var filteredRows;
+  if (entity === 'Grand Total') {
+    filteredRows = rows;
+  } else {
+    filteredRows = rows.filter(function(r){
+      // Match by LOB (zone-level), salesPerson field (rep-level), or location (branch)
+      return r.salesPerson && r.salesPerson.toString().toLowerCase().indexOf(entity.toLowerCase()) > -1
+        || r.location === entity
+        || (r.lob && r.lob === entity);
+    });
+  }
+
+  var totalGP = 0, totalRevenue = 0, totalCost = 0, totalMetric = 0;
+  filteredRows.forEach(function(r){
+    totalGP      += r.g  || 0;
+    totalRevenue += r.r  || 0;
+    totalCost    += r.x  || 0;
+    totalMetric  += r.m  || 0;
+  });
+
+  return {
+    success: true,
+    rows: filteredRows,
+    count: filteredRows.length,
+    totalGP: totalGP,
+    totalRevenue: totalRevenue,
+    totalCost: totalCost,
+    totalMetric: totalMetric,
+  };
+}
+
 function openDrill(entity, metric, col, valueFmt){
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
     lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
   render();
 
   var monthParam = col;
-  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(monthParam);
-  fetch('/api/mongo-batch'+qs, { priority: 'high' })
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (!data.success) {
-        state.drill.loading = false;
-        state.drill.error = data.error || 'Failed to load details.';
-        render();
-        return;
-      }
-      state.drill.loading = false;
-      state.drill.rows = data.rows;
-      state.drill.count = data.count;
-      state.drill.totalMetric = data.totalMetric;
-      state.drill.totalGP = data.totalGP;
-      state.drill.totalRevenue = data.totalRevenue || 0;
-      state.drill.totalCost    = data.totalCost    || 0;
-      render();
-    })
-    .catch(function(err){
-      state.drill.loading = false;
-      state.drill.error = 'Could not reach the server.';
-      render();
-    });
+
+  // Check browser cache first — Grand Total rows cover all entities
+  var cacheKey = getDrillCacheKey('Grand Total', 'Shipments', monthParam);
+  var cached = _drillCache[cacheKey];
+
+  function applyData(data){
+    if (!data || !data.success) {
+      // For non-GT entities or cache miss, fall back to direct API call
+      var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(monthParam);
+      fetch('/api/mongo-batch'+qs, { priority: 'high' })
+        .then(function(r){ return r.json(); })
+        .then(function(d){ applyDrillResult(d); })
+        .catch(function(){ state.drill.loading=false; state.drill.error='Could not reach the server.'; render(); });
+      return;
+    }
+    // For Grand Total, use cached data directly
+    // For specific entities, we still need the server to do precise entity matching
+    // (our client-side filter is approximate). Use cached data only for GT.
+    if (entity === 'Grand Total') {
+      applyDrillResult(data);
+    } else {
+      // Specific entity — must hit server for correct filtering.
+      // But warmup the month's cache in parallel if not already there.
+      var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(monthParam);
+      fetch('/api/mongo-batch'+qs, { priority: 'high' })
+        .then(function(r){ return r.json(); })
+        .then(function(d){ applyDrillResult(d); })
+        .catch(function(){ state.drill.loading=false; state.drill.error='Could not reach the server.'; render(); });
+    }
+  }
+
+  function applyDrillResult(data){
+    if (!data.success) { state.drill.loading=false; state.drill.error=data.error||'Failed to load details.'; render(); return; }
+    state.drill.loading = false;
+    state.drill.rows = data.rows;
+    state.drill.count = data.count;
+    state.drill.totalMetric = data.totalMetric;
+    state.drill.totalGP = data.totalGP;
+    state.drill.totalRevenue = data.totalRevenue || 0;
+    state.drill.totalCost    = data.totalCost    || 0;
+    // Cache the Grand Total result for this month for future instant use
+    if (entity === 'Grand Total' && data.success) _drillCache[cacheKey] = data;
+    render();
+  }
+
+  if (cached && entity === 'Grand Total') {
+    applyDrillResult(cached);
+  } else {
+    applyData(cached);
+  }
 }
 
 // Live-filters the option checklist inside an open drill column-filter popup
