@@ -300,327 +300,320 @@ const SALES_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes — reduces cold fetche
 // entity: "Grand Total" | zone name | rep display name
 // metric: "Shipments" | "GP" | "Tons (Air)" | "TEUs (Ocean)" | "LCL (Ocean in CBM)"
 // month: e.g. "Apr-25", or "FY Total" for the whole year
+// ── Drill-down row cache ─────────────────────────────────────────────────────
+// Strategy: preload the full classified job dataset for a date-window once,
+// then serve every subsequent drill click (different entity / metric / same
+// month window) from memory in milliseconds.
+//
+// Key = the "month" parameter string (e.g. "Jan-26", "RANGE:Jan-26:Jun-26").
+// Value = { rows: [...], mappingData: {...}, fetchedAt: timestamp }
+// TTL = 20 minutes (same order as salesCache).
+//
+// The first click in a session warms the cache; all subsequent clicks for the
+// same date window are served sub-millisecond from the cached rows without any
+// MongoDB round-trip.
+const DRILL_CACHE_TTL_MS = 20 * 60 * 1000;
+const drillCache = new Map(); // key → { allRows, mappingData, fetchedAt }
+
+// Evict expired entries (called before every cache write to keep memory clean)
+function evictDrillCache() {
+  const now = Date.now();
+  for (const [k, v] of drillCache) {
+    if (now - v.fetchedAt > DRILL_CACHE_TTL_MS) drillCache.delete(k);
+  }
+}
+
+// Normalise a month param to a canonical cache key — e.g. "Jan-26", "RANGE:…",
+// "WEEK:2026-W14", "FY Total". Different entity/metric combinations sharing the
+// same date window reuse the same cached row set.
+function drillCacheKey(month) {
+  return month || "FY Total";
+}
+
 async function getDrillRows(db, entity, metric, month) {
   const CROSS_SALES_ZONE = "Cross Sales";
+  const cacheKey = drillCacheKey(month);
 
-  // ── 1. Load mapping — EXACT same logic as computeSalesAggregate ─────
-  const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
-  const repLookupByFY      = { FY26: {}, FY27: {} };
-  const repsByZoneByFY     = { FY26: {}, FY27: {} };
-  const normByDisplayByFY  = { FY26: {}, FY27: {} };
-  const rawNamesByNormByFY = { FY26: {}, FY27: {} };
-  const allMappedNames     = new Set();
+  // ── Level 1: Check the drill row cache ──────────────────────────────────
+  // If we've already fetched and classified all job rows for this date window,
+  // every drill click (different entity/metric, same month) costs zero MongoDB
+  // round-trips — just in-memory filtering on the cached classified rows.
+  evictDrillCache();
+  let cached = drillCache.get(cacheKey);
 
-  for (const row of mappingRows) {
-    const rawName = row["Sales Rep Name"];
-    const norm = normalizeName(rawName);
-    if (!norm) continue;
-    const fy = (row._fy === "FY27") ? "FY27" : "FY26";
-    const zone = String(row["Zone"] || "Unassigned").trim();
-    const displayName = String(row["Display Name"] || rawName || "").trim();
+  if (!cached) {
+    // ── Cache MISS: fetch mapping + all job rows for this date window ──────
+    // This is the expensive path. It runs once per date window per serverless
+    // instance lifetime, then every subsequent click is served from cache.
 
-    repLookupByFY[fy][norm] = { displayName, zone,
-      lob: String(row["LOB"] || "").trim(),
-      monthlyTarget: (parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR,
-      email: String(row["Email ID"] || "").toLowerCase().trim(),
+    // 1a. Load mapping (small collection, fast)
+    const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
+    const repLookupByFY      = { FY26: {}, FY27: {} };
+    const repsByZoneByFY     = { FY26: {}, FY27: {} };
+    const normByDisplayByFY  = { FY26: {}, FY27: {} };
+
+    for (const row of mappingRows) {
+      const rawName = row["Sales Rep Name"];
+      const norm = normalizeName(rawName);
+      if (!norm) continue;
+      const fy = (row._fy === "FY27") ? "FY27" : "FY26";
+      const zone = String(row["Zone"] || "Unassigned").trim();
+      const displayName = String(row["Display Name"] || rawName || "").trim();
+      repLookupByFY[fy][norm] = { displayName, zone,
+        lob: String(row["LOB"] || "").trim(),
+        monthlyTarget: (parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR,
+        email: String(row["Email ID"] || "").toLowerCase().trim(),
+      };
+      if (!repsByZoneByFY[fy][zone]) repsByZoneByFY[fy][zone] = [];
+      if (!repsByZoneByFY[fy][zone].includes(norm)) repsByZoneByFY[fy][zone].push(norm);
+      normByDisplayByFY[fy][displayName] = norm;
+    }
+
+    // 1b. Build date filter string bounds (dates stored as strings in MongoDB)
+    const isFYTotal_    = month === "FY Total";
+    const isYearGroup_  = month && month.startsWith("YEAR:");
+    const isRange_      = month && month.startsWith("RANGE:");
+    const isWeek_       = month && month.startsWith("WEEK:");
+    const isDateRange_  = month && month.startsWith("DATERANGE:");
+
+    let dateStrStart = null, dateStrEnd = null;
+
+    if (isFYTotal_) {
+      dateStrStart = "2025-04-01"; dateStrEnd = "2027-03-31";
+    } else if (isYearGroup_) {
+      const y = 2000 + parseInt(month.split(":")[1], 10);
+      dateStrStart = `${y}-04-01`; dateStrEnd = `${y+1}-03-31`;
+    } else if (isWeek_) {
+      // Compute Mon-Sun bounds for this ISO week
+      const isoKey = month.slice(5);
+      const [iyStr, wnStr] = isoKey.split("-W");
+      const iy = parseInt(iyStr, 10), wn = parseInt(wnStr, 10);
+      const jan4 = new Date(Date.UTC(iy, 0, 4));
+      const jan4DN = (jan4.getUTCDay() + 6) % 7;
+      const w1Mon = new Date(jan4); w1Mon.setUTCDate(jan4.getUTCDate() - jan4DN);
+      const mon = new Date(w1Mon); mon.setUTCDate(w1Mon.getUTCDate() + (wn-1)*7);
+      const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
+      dateStrStart = mon.toISOString().slice(0,10);
+      dateStrEnd   = sun.toISOString().slice(0,10);
+    } else if (isDateRange_) {
+      const bits = month.split(":");
+      dateStrStart = bits[1]; dateStrEnd = bits[2];
+    } else if (isRange_) {
+      const bits = month.split(":");
+      const toLabelDate = (lbl, isEnd) => {
+        const [mn, yr] = lbl.split("-");
+        const mi = MONTH_NAMES.indexOf(mn), y = 2000+parseInt(yr,10);
+        if (isEnd) { const ld = new Date(Date.UTC(y,mi+1,0)).getUTCDate(); return `${y}-${String(mi+1).padStart(2,'0')}-${ld}`; }
+        return `${y}-${String(mi+1).padStart(2,'0')}-01`;
+      };
+      dateStrStart = toLabelDate(bits[1], false); dateStrEnd = toLabelDate(bits[2], true);
+    } else if (month) {
+      const [mn, yr] = month.split("-");
+      const mi = MONTH_NAMES.indexOf(mn), y = 2000+parseInt(yr,10);
+      const ld = new Date(Date.UTC(y,mi+1,0)).getUTCDate();
+      dateStrStart = `${y}-${String(mi+1).padStart(2,'0')}-01`;
+      dateStrEnd   = `${y}-${String(mi+1).padStart(2,'0')}-${ld}`;
+    }
+
+    const buildDateCond = (col) => ({ [col]: { $type:2, $gte: dateStrStart, $lte: dateStrEnd+"\uffff" } });
+    const mongoFilter = (dateStrStart && dateStrEnd) ? {
+      $or: [ buildDateCond("ETD Loading Port"), buildDateCond("ETA Discharge"), buildDateCond("Job Date") ]
+    } : {};
+
+    // 1c. Fetch all collections in parallel, classify each row, store in cache
+    const allCollectionResults = await Promise.all(
+      JOB_COLLECTIONS.map(collName =>
+        db.collection(collName).find(mongoFilter).toArray().then(rows => ({ collName, rows }))
+      )
+    );
+
+    // 1d. Pre-classify every row and compute all derived fields so subsequent
+    //     entity/metric filtering in Step 2 is pure in-memory logic.
+    const allClassifiedRows = [];
+    for (const { collName, rows } of allCollectionResults) {
+      for (const job of rows) {
+        const cls     = classifyRow(job, collName);
+        const dateCol = getDateColumnFor(cls);
+        const rawDate = job[dateCol] || job["Job Date"];
+        if (!rawDate) continue;
+        const d = new Date(rawDate);
+        if (isNaN(d.getTime())) continue;
+        const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
+        if (!FY_MONTHS.includes(monthLabel)) continue;
+        const salesPerson = normalizeName(job["Sales Person"]);
+        if (!salesPerson) continue;
+        const { gp: rowGP, isProvisional } = pickGP(job, cls);
+        const provRevenue   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
+        const billedRevenue = parseFloat(job["Billed Revenue (C)"]       || 0) || 0;
+        const provCost      = parseFloat(job["Provisional Cost (E)"]     || 0) || 0;
+        const postedCostRaw = job["Posted Cost (G)"];
+        const postedCost    = (postedCostRaw !== undefined && postedCostRaw !== null && String(postedCostRaw).trim() !== "")
+          ? (parseFloat(postedCostRaw) || 0)
+          : (billedRevenue - (parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0));
+        const unbilledRevenue = parseFloat(job["Unbilled Revenue (D=A-C)"] ?? provRevenue - billedRevenue) || 0;
+        const unpostedCost    = parseFloat(job["Unposted Cost (H = E-G)"]  ?? provCost - postedCost)    || 0;
+        const chargeable = parseFloat(job["Chargeable Weight"] || job["Volume"] || 0) || 0;
+
+        allClassifiedRows.push({
+          _salesPerson: salesPerson,  // normalized, for entity matching
+          _monthLabel:  monthLabel,
+          _date:        d,
+          _collName:    collName,
+          _cls:         cls,
+          // All display fields
+          shipmentNo: job["Shipment No"]    || "—",
+          jobDate:    job["Job Date"]       || "",
+          lob: cls.kind + (cls.direction ? " " + cls.direction : ""),
+          masterNo: job["Master No."]       || "",
+          houseNo:  job["House No."]        || "",
+          consolNo: job["Consol No."]       || "",
+          cargoType: job["Cargo Type"]      || "",
+          carrier:   job["Carrier"] || job["Carrier Name"] || "",
+          provRevenue, billedRevenue, unbilledRevenue,
+          provCost, postedCost, unpostedCost,
+          provisionalProfit: parseFloat(job["Provisional Profit (I=A-E)"] || 0) || 0,
+          actualProfit:      parseFloat(job["Actual Profit (J=C-G)"]      || 0) || 0,
+          customer:    job["Customer"]              || "",
+          ataDischarge: job["ATA Discharge"]        || "",
+          atdLoading:  job["ATD Loading Port"]      || "",
+          location:    job["Location"]              || "",
+          consignee:   job["Consignee"]             || "",
+          consolType:  job["Consol Type"]           || "",
+          teu: parseFloat(job["Container TEU"] || 0) || 0,
+          destAgent:   job["Destination Agent"]     || "",
+          etaDischarge: job["ETA Discharge"]        || "",
+          etdLoading:  job["ETD Loading Port"]      || "",
+          jobOwner:    job["Job Owner"]             || "",
+          jobRevRecogDate: job["Job Rev Recognition Date"] || "",
+          originAgent: job["Origin Agent"]          || "",
+          salesPerson: job["Sales Person"]          || "",
+          shipper:     job["Shipper"]               || "",
+          volume:      parseFloat(job["Volume"] || 0) || 0,
+          volumeUnit:  job["Volume Unit"]           || "",
+          operationLock: job["Operation Lock"]      || "",
+          financialLock: job["Financial Lock"]      || "",
+          // Summary fields for totals
+          g:  rowGP, r: billedRevenue, x: postedCost, t: chargeable,
+          prov: isProvisional ? 1 : 0,
+          m: (cls.kind === "AIR") ? chargeable : (parseFloat(job["Container TEU"] || 0) || 0),
+        });
+      }
+    }
+
+    cached = {
+      allRows:     allClassifiedRows,
+      mappingData: { repLookupByFY, repsByZoneByFY, normByDisplayByFY },
+      fetchedAt:   Date.now(),
     };
-    if (!repsByZoneByFY[fy][zone]) repsByZoneByFY[fy][zone] = [];
-    repsByZoneByFY[fy][zone].push(norm);
-    normByDisplayByFY[fy][displayName] = norm;
-    if (!rawNamesByNormByFY[fy][norm]) rawNamesByNormByFY[fy][norm] = [];
-    rawNamesByNormByFY[fy][norm].push(String(rawName || "").trim());
-    allMappedNames.add(norm);
+    drillCache.set(cacheKey, cached);
+    console.log(`[drill cache] MISS — loaded ${allClassifiedRows.length} rows for key="${cacheKey}"`);
+  } else {
+    console.log(`[drill cache] HIT — ${cached.allRows.length} rows for key="${cacheKey}"`);
   }
 
-  // ── 2. Resolve entity ────────────────────────────────────────────────
-  const isCrossSalesZone = entity === CROSS_SALES_ZONE;
-  const isGrandTotal     = entity === "Grand Total";
-  const isKnownZone = Object.values(repsByZoneByFY).some(z => z[entity]);
-  const isKnownRep  = Object.values(normByDisplayByFY).some(d => d[entity]);
+  // ── Level 2: Filter cached rows by entity + metric + exact date ─────────
+  // This is now pure in-memory work — no MongoDB round-trips at all.
+  const { allRows, mappingData: { repLookupByFY, repsByZoneByFY, normByDisplayByFY } } = cached;
+
+  const isCrossSalesZone   = entity === CROSS_SALES_ZONE;
+  const isGrandTotal       = entity === "Grand Total";
+  const isKnownZone        = Object.values(repsByZoneByFY).some(d => d[entity]);
+  const isKnownRep         = Object.values(normByDisplayByFY).some(d => d[entity]);
   const isCrossSalesBranch = !isCrossSalesZone && !isGrandTotal && !isKnownZone && !isKnownRep;
   const useCrossSalesPath  = isCrossSalesZone || isCrossSalesBranch;
 
   const isFYTotal      = month === "FY Total";
   const isYearGroup    = month && month.startsWith("YEAR:");
   const yearGroupSuffix = isYearGroup ? month.split(":")[1] : null;
-  // RANGE:Jan-26:Jun-26 → include all months between start and end inclusive
   const isRange        = month && month.startsWith("RANGE:");
-  let rangeParts = null;
-  if (isRange) {
-    const bits = month.split(":");
-    rangeParts = { start: bits[1], end: bits[2] };
-  }
-  // WEEK:2026-W14 → include only jobs whose date falls in that exact ISO
-  // week's Monday-Sunday range (a true calendar week, can span two months)
-  const isWeek = month && month.startsWith("WEEK:");
-  let weekRange = null;
-  if (isWeek) {
-    const isoKey = month.slice(5); // "2026-W14"
-    const parts = isoKey.split("-W");
-    const isoYear = parseInt(parts[0], 10);
-    const weekNum = parseInt(parts[1], 10);
-    // ISO week Monday: Jan 4th is always in week 1; walk from there
-    const jan4 = new Date(Date.UTC(isoYear, 0, 4));
-    const jan4DayNum = (jan4.getUTCDay() + 6) % 7;
-    const week1Monday = new Date(jan4);
-    week1Monday.setUTCDate(jan4.getUTCDate() - jan4DayNum);
-    const monday = new Date(week1Monday);
-    monday.setUTCDate(week1Monday.getUTCDate() + (weekNum - 1) * 7);
-    const sunday = new Date(monday);
-    sunday.setUTCDate(monday.getUTCDate() + 6);
-    sunday.setUTCHours(23, 59, 59, 999);
-    weekRange = { start: monday, end: sunday };
-  }
-  // DATERANGE:2026-04-01:2026-05-03 → explicit start/end dates (inclusive),
-  // used by Weekly view's FY-Total column which spans a set of ISO weeks
-  // that don't align neatly to month-label boundaries.
-  const isDateRange = month && month.startsWith("DATERANGE:");
-  let dateRangeParts = null;
-  if (isDateRange) {
-    const bits = month.split(":");
-    const start = new Date(bits[1] + "T00:00:00.000Z");
-    const end = new Date(bits[2] + "T23:59:59.999Z");
-    dateRangeParts = { start: start, end: end };
-  }
+  const rangeParts     = isRange ? (() => { const b = month.split(":"); return {start:b[1], end:b[2]}; })() : null;
+  const isWeek         = month && month.startsWith("WEEK:");
+  const isDateRange    = month && month.startsWith("DATERANGE:");
   const isAirMetric    = metric === "Tons (Air)";
   const isTeuLclMetric = metric === "TEUs (Ocean)" || metric === "LCL (Ocean in CBM)";
 
-  const relevantCollections = JOB_COLLECTIONS.filter(collName => {
-    if (isAirMetric)    return collName.includes("air");
-    if (isTeuLclMetric) return collName.includes("sea") || collName.includes("isotank");
-    return true;
-  });
-
-  // ── Build a MongoDB-side date pre-filter ──────────────────────────────
-  // IMPORTANT: The job documents store dates as plain STRING values, not native
-  // BSON Date objects. MongoDB's $gte/$lte on BSON Date objects won't match
-  // string-stored dates at all — it returns 0 results. We use string prefix
-  // comparisons instead, which work correctly for ISO-format strings (YYYY-MM-DD
-  // or YYYY-MM-DDTHH:mm:ss) because they sort lexicographically in date order.
-  // We query across all three possible date columns with $or — intentionally
-  // over-inclusive so we never miss rows whose primary date column varies by LOB.
-  // The in-memory loop below still does precise per-row classification.
-
-  const toISOStr = (d) => d.toISOString().slice(0, 10); // "YYYY-MM-DD"
-
-  let dateStrStart = null; // "2026-04-01"
-  let dateStrEnd   = null; // "2026-04-30"
-
-  if (isFYTotal) {
-    dateStrStart = "2025-04-01"; dateStrEnd = "2027-03-31";
-  } else if (isYearGroup && yearGroupSuffix) {
-    const y = 2000 + parseInt(yearGroupSuffix, 10);
-    dateStrStart = `${y}-04-01`; dateStrEnd = `${y+1}-03-31`;
-  } else if (isWeek && weekRange) {
-    dateStrStart = toISOStr(weekRange.start); dateStrEnd = toISOStr(weekRange.end);
-  } else if (isDateRange && dateRangeParts) {
-    dateStrStart = toISOStr(dateRangeParts.start); dateStrEnd = toISOStr(dateRangeParts.end);
-  } else if (isRange && rangeParts) {
-    const labelToStart = (lbl) => {
-      const [mn, yr] = lbl.split("-");
-      const mi = MONTH_NAMES.indexOf(mn);
-      const y = 2000 + parseInt(yr, 10);
-      return `${y}-${String(mi+1).padStart(2,'0')}-01`;
-    };
-    const labelToEnd = (lbl) => {
-      const [mn, yr] = lbl.split("-");
-      const mi = MONTH_NAMES.indexOf(mn);
-      const y = 2000 + parseInt(yr, 10);
-      const lastDay = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate();
-      return `${y}-${String(mi+1).padStart(2,'0')}-${lastDay}`;
-    };
-    dateStrStart = labelToStart(rangeParts.start); dateStrEnd = labelToEnd(rangeParts.end);
-  } else if (month) {
-    const [mn, yr] = month.split("-");
-    const mi = MONTH_NAMES.indexOf(mn);
-    const y = 2000 + parseInt(yr, 10);
-    const lastDay = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate();
-    dateStrStart = `${y}-${String(mi+1).padStart(2,'0')}-01`;
-    dateStrEnd   = `${y}-${String(mi+1).padStart(2,'0')}-${lastDay}`;
+  // Precompute week/daterange bounds for in-memory date filter
+  let weekRange = null, dateRangeParts = null;
+  if (isWeek) {
+    const isoKey = month.slice(5);
+    const [iyStr, wnStr] = isoKey.split("-W");
+    const iy = parseInt(iyStr,10), wn = parseInt(wnStr,10);
+    const jan4 = new Date(Date.UTC(iy,0,4));
+    const jan4DN = (jan4.getUTCDay()+6)%7;
+    const w1Mon = new Date(jan4); w1Mon.setUTCDate(jan4.getUTCDate()-jan4DN);
+    const mon = new Date(w1Mon); mon.setUTCDate(w1Mon.getUTCDate()+(wn-1)*7);
+    const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate()+6); sun.setUTCHours(23,59,59,999);
+    weekRange = { start: mon, end: sun };
+  }
+  if (isDateRange) {
+    const bits = month.split(":");
+    dateRangeParts = { start: new Date(bits[1]+"T00:00:00.000Z"), end: new Date(bits[2]+"T23:59:59.999Z") };
   }
 
-  // String-based $or filter across all date columns. For string-stored dates,
-  // lexicographic $gte/"2026-04-01" and $lte/"2026-04-30" is correct because
-  // ISO date strings sort the same as chronological order. We add a $type
-  // guard (type 2 = string) to skip any null/missing/non-string date fields
-  // cleanly without errors.
-  const buildDateCond = (col) => ({
-    [col]: { $type: 2, $gte: dateStrStart, $lte: dateStrEnd + "\uffff" }
-  });
-
-  const mongoFilter = (dateStrStart && dateStrEnd) ? {
-    $or: [
-      buildDateCond("ETD Loading Port"),
-      buildDateCond("ETA Discharge"),
-      buildDateCond("Job Date"),
-    ]
-  } : {};
-
-  const queryPromises = relevantCollections.map(collName => {
-    return db.collection(collName).find(mongoFilter).toArray()
-      .then(rows => ({ collName, rows }));
-  });
-
-  const resultsByCollection = await Promise.all(queryPromises);
   const matchedRows = [];
 
-  for (const { collName, rows } of resultsByCollection) {
-    for (const job of rows) {
-      const salesPerson = normalizeName(job["Sales Person"]);
-      if (!salesPerson) continue;
+  for (const row of allRows) {
+    // ── Metric filter (collection-level) ──
+    if (isAirMetric    && !row._collName.includes("air")) continue;
+    if (isTeuLclMetric && !row._collName.includes("sea") && !row._collName.includes("isotank")) continue;
 
-      // ── Date — EXACT same logic as computeSalesAggregate ───────────────
-      const cls     = classifyRow(job, collName);
-      const dateCol = getDateColumnFor(cls);
-      const rawDate = job[dateCol] || job["Job Date"];
-      if (!rawDate) continue;
-      const d = new Date(rawDate);
-      if (isNaN(d.getTime())) continue;
-      const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
-      if (!FY_MONTHS.includes(monthLabel)) continue;
-      if (!isFYTotal && !isYearGroup && !isRange && !isWeek && !isDateRange && monthLabel !== month) continue;
-      if (isYearGroup && yearGroupSuffix && !monthLabel.endsWith('-' + yearGroupSuffix)) continue;
-      if (isRange && rangeParts) {
-        const allM = FY_MONTHS;
-        const fi = allM.indexOf(rangeParts.start);
-        const ti = allM.indexOf(rangeParts.end);
-        const mi = allM.indexOf(monthLabel);
-        if (fi < 0 || ti < 0 || mi < fi || mi > ti) continue;
-      }
-      if (isWeek && weekRange) {
-        if (d < weekRange.start || d > weekRange.end) continue;
-      }
-      if (isDateRange && dateRangeParts) {
-        if (d < dateRangeParts.start || d > dateRangeParts.end) continue;
-      }
+    // ── Date filter (precise) ──
+    const d         = row._date;
+    const monthLabel = row._monthLabel;
 
-      // ── FY-aware mapping — EXACT same as computeSalesAggregate ─────────
-      const rowFY  = fyForMonthLabel(monthLabel);
-      const repLookup = repLookupByFY[rowFY] || {};
-      const mapped    = repLookup[salesPerson];
-
-      // ── Entity membership ────────────────────────────────────────────────
-      if (isGrandTotal) {
-        // Grand Total = every valid job row, mapped or unmapped — no filter
-      } else if (useCrossSalesPath) {
-        // Cross Sales zone or branch: only unmapped reps
-        if (allMappedNames.has(salesPerson)) continue;
-        if (isCrossSalesBranch) {
-          const branch = String(job["Location"] || "Unspecified").trim() || "Unspecified";
-          if (branch !== entity) continue;
-        }
-      } else {
-        // Named zone or rep: must be mapped AND belong to that entity
-        if (!mapped) continue;
-        if (isKnownZone && mapped.zone !== entity)        continue;
-        if (isKnownRep  && mapped.displayName !== entity) continue;
-      }
-
-      // ── Metric filtering ────────────────────────────────────────────────
-      const cargoMetric = hasTeuLclRow(cls) ? cargoMetricFor(job) : null;
-      if (metric === "Tons (Air)"         && !isAirRow(cls))        continue;
-      if (metric === "TEUs (Ocean)"       && cargoMetric !== "TEU") continue;
-      if (metric === "LCL (Ocean in CBM)" && cargoMetric !== "LCL") continue;
-
-      // ── Metric value — EXACT same formulas as computeSalesAggregate ────
-      let metricVal = 0; let metricUnit = "";
-      if (metric === "Shipments") {
-        metricVal = 1; metricUnit = "job";
-      } else if (metric === "GP") {
-        metricVal = parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0; metricUnit = "currency";
-      } else if (metric === "Tons (Air)") {
-        const rawWeight = parseFloat(job["Chargeable Weight"] || 0) || 0;
-        const unit = String(job["Chargeable Weight Unit"] || "").toLowerCase().trim();
-        metricVal = (unit==="ton"||unit==="tons"||unit==="mt") ? rawWeight
-                  : (unit==="lb"||unit==="lbs") ? rawWeight*0.000453592 : rawWeight/1000;
-        metricUnit = "t";
-      } else if (metric === "TEUs (Ocean)") {
-        metricVal = parseFloat(job["Container TEU"] || 0) || 0; metricUnit = "TEU";
-      } else if (metric === "LCL (Ocean in CBM)") {
-        const vol = parseFloat(job["Volume"] || 0) || 0;
-        const volUnit = String(job["Volume Unit"] || "").toUpperCase().trim();
-        metricVal = (!volUnit || volUnit === "CBM") ? vol : 0; metricUnit = "m³";
-      }
-      if (metric !== "Shipments" && metric !== "GP" && metricVal === 0) continue;
-
-      const { gp: rowGP, isProvisional } = pickGP(job, cls);
-      const provRevenue = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      const provCost = parseFloat(job["Provisional Cost (E)"] || 0) || 0;
-      // "Posted Cost (G)" is the real field name; fall back to computed value if absent/blank
-      const postedCostRaw = job["Posted Cost (G)"];
-      const postedCost = (postedCostRaw !== undefined && postedCostRaw !== null && String(postedCostRaw).trim() !== "")
-        ? (parseFloat(postedCostRaw) || 0)
-        : (billedRevenue - (parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0));
-      const unbilledRevenue = job["Unbilled Revenue (D=A-C)"] !== undefined
-        ? (parseFloat(job["Unbilled Revenue (D=A-C)"]) || 0)
-        : (provRevenue - billedRevenue);
-      const unpostedCost = job["Unposted Cost (H = E-G)"] !== undefined
-        ? (parseFloat(job["Unposted Cost (H = E-G)"]) || 0)
-        : (provCost - postedCost);
-      const provisionalProfit = parseFloat(job["Provisional Profit (I=A-E)"] || 0) || 0;
-      const actualProfit      = parseFloat(job["Actual Profit (J=C-G)"]      || 0) || 0;
-
-      matchedRows.push({
-        shipmentNo: job["Shipment No"] || "—",
-        jobDate: job["Job Date"] || "",
-        lob: cls.kind + (cls.direction ? " " + cls.direction : ""),
-        masterNo: job["Master No."] || "",
-        houseNo: job["House No."] || "",
-        consolNo: job["Consol No."] || "",
-        cargoType: job["Cargo Type"] || "",
-        carrier: job["Carrier"] || job["Carrier Name"] || "",
-        provRevenue: provRevenue,
-        billedRevenue: billedRevenue,
-        unbilledRevenue: unbilledRevenue,
-        provCost: provCost,
-        postedCost: postedCost,
-        unpostedCost: unpostedCost,
-        provisionalProfit: provisionalProfit,
-        actualProfit: actualProfit,
-        customer: job["Customer"] || "",
-        ataDischarge: job["ATA Discharge"] || "",
-        atdLoading: job["ATD Loading Port"] || "",
-        location: job["Location"] || "",
-        consignee: job["Consignee"] || "",
-        consolType: job["Consol Type"] || "",
-        teu: parseFloat(job["Container TEU"] || 0) || 0,
-        destAgent: job["Destination Agent"] || "",
-        etaDischarge: job["ETA Discharge"] || "",
-        etdLoading: job["ETD Loading Port"] || "",
-        jobOwner: job["Job Owner"] || "",
-        jobRevRecogDate: job["Job Rev Recognition Date"] || "",
-        originAgent: job["Origin Agent"] || "",
-        salesPerson: job["Sales Person"] || "",
-        shipper: job["Shipper"] || "",
-        volume: parseFloat(job["Volume"] || 0) || 0,
-        volumeUnit: job["Volume Unit"] || "",
-        operationLock: job["Operation Lock"] || "",
-        financialLock: job["Financial Lock"] || "",
-        // Kept for backward-compat with existing aggregate/total logic
-        dt: d.toISOString().slice(0,10),
-        g: rowGP,
-        r: billedRevenue,
-        x: postedCost,
-        prov: isProvisional ? 1 : 0,
-        t: parseFloat(job["Container TEU"] || 0) || 0,
-        m: metricVal,
-      });
+    if (!isFYTotal && !isYearGroup && !isRange && !isWeek && !isDateRange && monthLabel !== month) continue;
+    if (isYearGroup  && yearGroupSuffix && !monthLabel.endsWith('-'+yearGroupSuffix)) continue;
+    if (isRange && rangeParts) {
+      const fi = FY_MONTHS.indexOf(rangeParts.start), ti = FY_MONTHS.indexOf(rangeParts.end), mi = FY_MONTHS.indexOf(monthLabel);
+      if (fi<0||ti<0||mi<fi||mi>ti) continue;
     }
+    if (isWeek      && weekRange      && (d < weekRange.start      || d > weekRange.end))      continue;
+    if (isDateRange && dateRangeParts && (d < dateRangeParts.start || d > dateRangeParts.end)) continue;
+
+    // ── Entity filter (in-memory normalizeName matching) ──
+    const salesPerson = row._salesPerson;
+    const fy = (d.getFullYear() >= 2026 && d.getMonth() >= 3) || (d.getFullYear() > 2026) ? "FY27" : "FY26";
+    const mapped = repLookupByFY[fy][salesPerson] || repLookupByFY["FY26"][salesPerson] || repLookupByFY["FY27"][salesPerson];
+
+    if (isGrandTotal) {
+      // all rows pass
+    } else if (useCrossSalesPath) {
+      if (mapped) continue; // mapped rows are not Cross Sales
+      if (isCrossSalesBranch) {
+        const loc = String(row.location || "").trim();
+        if (loc.toLowerCase() !== entity.toLowerCase()) continue;
+      }
+    } else if (isKnownZone) {
+      if (!mapped) continue;
+      if (mapped.zone !== entity) continue;
+    } else {
+      // Individual rep — match by display name
+      const norm = normByDisplayByFY[fy]?.[entity] || normByDisplayByFY["FY26"]?.[entity] || normByDisplayByFY["FY27"]?.[entity];
+      if (!norm || salesPerson !== norm) continue;
+    }
+
+    // ── Metric value ──
+    let metricVal = 0;
+    if (metric === "Shipments") metricVal = 1;
+    else if (isAirMetric) metricVal = row.volume || 0;
+    else metricVal = row.teu || 0;
+
+    matchedRows.push({ ...row, m: metricVal });
   }
 
-  matchedRows.sort((a, b) => new Date(b.dt) - new Date(a.dt));
-  const totalMetric  = matchedRows.reduce((s, r) => s + (r.m || 0), 0);
-  const totalGP      = matchedRows.reduce((s, r) => s + (r.g || 0), 0);
-  const totalRevenue = matchedRows.reduce((s, r) => s + (r.r || 0), 0);
+  matchedRows.sort((a, b) => b._date - a._date);
+  const totalMetric  = matchedRows.reduce((s,r)=>s+(r.m||0), 0);
+  const totalGP      = matchedRows.reduce((s,r)=>s+(r.g||0), 0);
+  const totalRevenue = matchedRows.reduce((s,r)=>s+(r.r||0), 0);
   const totalCost    = totalRevenue - totalGP;
 
   return {
     success: true, entity, metric, month,
     count: matchedRows.length,
     totalMetric, totalGP, totalRevenue, totalCost,
-    rows: matchedRows.slice(0, 6000), // reduced from 25000 — each row now carries ~34 fields (was ~12), keeping response under Vercel's 4.5MB limit
+    rows: matchedRows.slice(0, 6000),
   };
+
 }
 
 async function getSalesAggregate(db, force) {
