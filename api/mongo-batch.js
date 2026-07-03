@@ -392,75 +392,71 @@ async function getDrillRows(db, entity, metric, month) {
   });
 
   // ── Build a MongoDB-side date pre-filter ──────────────────────────────
-  // Pushing the date range to MongoDB is the single biggest performance lever:
-  // without it, we fetch every document (50k+) from every collection and discard
-  // 90-95% of them in JS. With it, MongoDB uses its date index to return only
-  // rows that COULD match this time window, typically 1-5% of the collection.
-  //
-  // We query across all three possible date columns (ETD Loading Port, ETA
-  // Discharge, Job Date) using $or — a row matches if any of its date fields
-  // falls within the window. This is intentionally over-inclusive: the in-memory
-  // loop below still does the precise per-row check using classifyRow() to pick
-  // the single correct date column for each row's LOB type, so we never produce
-  // false positives. But we avoid fetching rows that couldn't possibly match.
-  let datePreFilter = null;
+  // IMPORTANT: The job documents store dates as plain STRING values, not native
+  // BSON Date objects. MongoDB's $gte/$lte on BSON Date objects won't match
+  // string-stored dates at all — it returns 0 results. We use string prefix
+  // comparisons instead, which work correctly for ISO-format strings (YYYY-MM-DD
+  // or YYYY-MM-DDTHH:mm:ss) because they sort lexicographically in date order.
+  // We query across all three possible date columns with $or — intentionally
+  // over-inclusive so we never miss rows whose primary date column varies by LOB.
+  // The in-memory loop below still does precise per-row classification.
+
+  const toISOStr = (d) => d.toISOString().slice(0, 10); // "YYYY-MM-DD"
+
+  let dateStrStart = null; // "2026-04-01"
+  let dateStrEnd   = null; // "2026-04-30"
 
   if (isFYTotal) {
-    // All FY months: Apr-25 through Mar-27 — wide but finite range
-    datePreFilter = { $gte: new Date("2025-04-01T00:00:00.000Z"), $lte: new Date("2027-03-31T23:59:59.999Z") };
+    dateStrStart = "2025-04-01"; dateStrEnd = "2027-03-31";
   } else if (isYearGroup && yearGroupSuffix) {
-    const y = parseInt(yearGroupSuffix, 10); // "25" → Apr 2025–Mar 2026
-    datePreFilter = {
-      $gte: new Date(`20${y}-04-01T00:00:00.000Z`),
-      $lte: new Date(`20${y+1}-03-31T23:59:59.999Z`)
-    };
+    const y = 2000 + parseInt(yearGroupSuffix, 10);
+    dateStrStart = `${y}-04-01`; dateStrEnd = `${y+1}-03-31`;
   } else if (isWeek && weekRange) {
-    datePreFilter = { $gte: weekRange.start, $lte: weekRange.end };
+    dateStrStart = toISOStr(weekRange.start); dateStrEnd = toISOStr(weekRange.end);
   } else if (isDateRange && dateRangeParts) {
-    datePreFilter = { $gte: dateRangeParts.start, $lte: dateRangeParts.end };
+    dateStrStart = toISOStr(dateRangeParts.start); dateStrEnd = toISOStr(dateRangeParts.end);
   } else if (isRange && rangeParts) {
-    // Convert month-label range to a date range
-    const toDate = (lbl, isEnd) => {
+    const labelToStart = (lbl) => {
       const [mn, yr] = lbl.split("-");
       const mi = MONTH_NAMES.indexOf(mn);
       const y = 2000 + parseInt(yr, 10);
-      if (isEnd) {
-        const lastDay = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate();
-        return new Date(`${y}-${String(mi+1).padStart(2,'0')}-${lastDay}T23:59:59.999Z`);
-      }
-      return new Date(`${y}-${String(mi+1).padStart(2,'0')}-01T00:00:00.000Z`);
+      return `${y}-${String(mi+1).padStart(2,'0')}-01`;
     };
-    datePreFilter = { $gte: toDate(rangeParts.start, false), $lte: toDate(rangeParts.end, true) };
+    const labelToEnd = (lbl) => {
+      const [mn, yr] = lbl.split("-");
+      const mi = MONTH_NAMES.indexOf(mn);
+      const y = 2000 + parseInt(yr, 10);
+      const lastDay = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate();
+      return `${y}-${String(mi+1).padStart(2,'0')}-${lastDay}`;
+    };
+    dateStrStart = labelToStart(rangeParts.start); dateStrEnd = labelToEnd(rangeParts.end);
   } else if (month) {
-    // Single month e.g. "Apr-26"
     const [mn, yr] = month.split("-");
     const mi = MONTH_NAMES.indexOf(mn);
     const y = 2000 + parseInt(yr, 10);
     const lastDay = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate();
-    datePreFilter = {
-      $gte: new Date(`${y}-${String(mi+1).padStart(2,'0')}-01T00:00:00.000Z`),
-      $lte: new Date(`${y}-${String(mi+1).padStart(2,'0')}-${lastDay}T23:59:59.999Z`)
-    };
+    dateStrStart = `${y}-${String(mi+1).padStart(2,'0')}-01`;
+    dateStrEnd   = `${y}-${String(mi+1).padStart(2,'0')}-${lastDay}`;
   }
 
-  // Build the MongoDB query filter — $or across all date columns that any
-  // row type could use, so we don't accidentally miss rows whose primary date
-  // column differs from what we'd naively assume.
-  const mongoFilter = datePreFilter ? {
+  // String-based $or filter across all date columns. For string-stored dates,
+  // lexicographic $gte/"2026-04-01" and $lte/"2026-04-30" is correct because
+  // ISO date strings sort the same as chronological order. We add a $type
+  // guard (type 2 = string) to skip any null/missing/non-string date fields
+  // cleanly without errors.
+  const buildDateCond = (col) => ({
+    [col]: { $type: 2, $gte: dateStrStart, $lte: dateStrEnd + "\uffff" }
+  });
+
+  const mongoFilter = (dateStrStart && dateStrEnd) ? {
     $or: [
-      { "ETD Loading Port": datePreFilter },
-      { "ETA Discharge":    datePreFilter },
-      { "Job Date":         datePreFilter },
+      buildDateCond("ETD Loading Port"),
+      buildDateCond("ETA Discharge"),
+      buildDateCond("Job Date"),
     ]
   } : {};
 
   const queryPromises = relevantCollections.map(collName => {
-    // Entity matching (Grand Total / Zone / Rep / Cross Sales) still happens
-    // in JS via normalizeName() for correctness — the MongoDB-side name filter
-    // was removed because its exact-string $in caused "0 jobs" for reps whose
-    // job documents used a slightly different spelling than the mapping sheet.
-    // The date pre-filter above is the real performance win; entity filtering
-    // on a date-narrowed result set is negligible.
     return db.collection(collName).find(mongoFilter).toArray()
       .then(rows => ({ collName, rows }));
   });
