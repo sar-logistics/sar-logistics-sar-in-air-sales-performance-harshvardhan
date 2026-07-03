@@ -1543,7 +1543,6 @@ function kpiRow(M){
 
   var kpis = [
     { label:'TOTAL SHIPMENTS', value: noData ? '—' : String(M.shipGrand),                              delta: noData ? null : momDelta(shipData), deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#5678C2' },
-    { label:'TOTAL TEUS',      value: noData ? '—' : M.teusGrand.toFixed(2),                           delta: noData ? null : momDelta(teuData),  deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#1D9E6F' },
     { label:'TONS (AIR)',      value: noData ? '—' : (M.tonsGrand ? M.tonsGrand.toFixed(2) : '\u2014'),delta: noData ? null : momDelta(tonsData), deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#7C6FE0' },
     { label:'GROSS PROFIT',    value: noData ? '—' : fmtCur(M.gpGrand),                                delta: noData ? null : momDelta(gpData),   deltaLabel:periodLabel, vcolor:'#0D2B5E', tint:'#D4941E' },
     { label:'GP TARGET',       value: noData ? '—' : fmtCur(M.tgtGrand),                               delta:null, deltaLabel: noData ? 'No data' : 'Monthly avg '+fmtCur(Math.round(M.tgtGrand/n)), vcolor:'#0D2B5E', tint:'#D4574A' },
