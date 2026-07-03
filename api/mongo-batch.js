@@ -571,7 +571,7 @@ async function computeSalesAggregate(db) {
       displayName:   String(row["Display Name"] || row["Sales Rep Name"] || "").trim(),
       zone:          String(row["Zone"] || "Unassigned").trim(),
       lob:           String(row["LOB"] || "").trim(),
-      monthlyTarget: parseFloat(row["Monthly Target (INR)"] || row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0,
+      monthlyTarget: (parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR,
       email:         String(row["Email ID"] || "").toLowerCase().trim(),
     };
   }
