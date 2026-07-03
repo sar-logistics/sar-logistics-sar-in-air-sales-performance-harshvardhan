@@ -28,15 +28,30 @@ const MAPPING_COLLECTIONS = new Set([
 ]);
 
 let cachedClient = null;
+let cachedClientPromise = null;
 
 async function getDB() {
-  if (cachedClient) return cachedClient.db(DB_NAME);
-  cachedClient = new MongoClient(MONGO_URI, {
-    connectTimeoutMS: 15000,
-    serverSelectionTimeoutMS: 15000,
-  });
-  await cachedClient.connect();
-  return cachedClient.db(DB_NAME);
+  if (cachedClient && cachedClient.topology?.isConnected()) {
+    return cachedClient.db(DB_NAME);
+  }
+  // Reuse in-flight connection promise to avoid parallel cold-start races
+  if (!cachedClientPromise) {
+    cachedClientPromise = (async () => {
+      const client = new MongoClient(MONGO_URI, {
+        connectTimeoutMS: 8000,
+        serverSelectionTimeoutMS: 8000,
+        socketTimeoutMS: 45000,
+        maxPoolSize: 10,
+        minPoolSize: 1,
+        maxIdleTimeMS: 270000, // 4.5 min — just under Vercel's 5-min idle limit
+      });
+      await client.connect();
+      cachedClient = client;
+      cachedClientPromise = null;
+      return client.db(DB_NAME);
+    })();
+  }
+  return cachedClientPromise;
 }
 
 async function batchInsertJobs(db, records, clearFirst = true, fy = null) {
