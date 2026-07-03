@@ -602,10 +602,11 @@ function fetchWeekDataIfNeeded(callback){
             .map(function(r){ return {name:r.name, zone:r.zone, weekData:r.weekData}; });
           localStorage.setItem('sar_week_cache_v1', JSON.stringify(toStore));
         } catch(e){}
-        render(); // refresh with accurate data
+        // Only re-render if still in Weekly view — don't interrupt other views
+        if (state.reportView === 'Weekly') render();
       }
     })
-    .catch(function(){ _weekDataLoading = false; }); // silent fail — computed data already shown
+    .catch(function(){ _weekDataLoading = false; });
 }
 // Lazily fetch the heavy per-rep lobData breakdown — only called the first
 // time the user opens the Filters panel (where LOB selection lives).
