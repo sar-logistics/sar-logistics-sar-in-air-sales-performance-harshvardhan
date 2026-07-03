@@ -512,6 +512,19 @@ function fetchLiveData(callback, force){
         setTimeout(function(){ fetchLiveData(callback, force); }, 1800);
         return;
       }
+      // All retries failed — use stale localStorage cache if available
+      // so the dashboard shows last-known data instead of nothing.
+      if (!dataReady) {
+        var stale = getCachedSalesData();
+        if (stale && stale.repsRaw && stale.repsRaw.length > 0) {
+          repsRawOriginal = stale.repsRaw;
+          zonesRaw  = stale.zones  || [];
+          months26  = stale.months || months26;
+          syncDateRangeToData();
+          dataReady = true;
+          console.warn('⚠️ Using stale cache due to fetch failure');
+        }
+      }
       if (callback) callback();
     });
 }
