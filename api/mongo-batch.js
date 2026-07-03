@@ -593,28 +593,17 @@ async function computeSalesAggregate(db) {
     var key = isoYear + '-W' + String(weekNum).padStart(2, '0');
     return { key: key, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
   }
-
-  // ── Kick off full-field drill fetch in parallel ──────────────────────
-  // Runs concurrently alongside the aggregate loop below. By the time we
-  // finish the aggregate computation, the drill rows are already fetched.
-  const drillFetchPromise = Promise.all(
-    JOB_COLLECTIONS.map(cn => db.collection(cn).find({}).toArray().then(r => ({ cn, r })))
+  // Fetch ALL collections in parallel with all fields — one pass serves both
+  // the aggregate computation and the drill-through row cache.
+  // Parallel fetch means total time = slowest single collection, not sum of all.
+  const collectionResults = await Promise.all(
+    JOB_COLLECTIONS.map(cn => db.collection(cn).find({}).toArray().then(rows => ({ cn, rows })))
   );
+  const allCollectionRows = {};
+  for (const { cn, rows } of collectionResults) allCollectionRows[cn] = rows;
 
   for (const collName of JOB_COLLECTIONS) {
-    // Fetch every field any classification might need — we don't know which
-    // branch a row falls into until we read its LOB, so project broadly.
-    const jobs = await db.collection(collName).find(
-      {},
-      { projection: {
-          "Sales Person": 1, "Shipment No": 1, "Job Date": 1, "LOB": 1, "Location": 1, "Cargo Type": 1,
-          "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1, "Financial Lock": 1, "Operation Lock": 1,
-          "ETD Loading Port": 1, "ETA Discharge": 1,
-          "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
-          "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
-        }
-      }
-    ).toArray();
+    const jobs = allCollectionRows[collName];
 
     for (const job of jobs) {
       const salesPerson = normalizeName(job["Sales Person"]);
@@ -858,9 +847,10 @@ async function computeSalesAggregate(db) {
   }
 
   // ── Build allDrillRows from the parallel fetch ───────────────────────
-  const drillCollections = await drillFetchPromise;
+  // Build allDrillRows from the same data already fetched above — no extra DB call
   const allDrillRows = [];
-  for (const { cn, r } of drillCollections) {
+  for (const [cn, rows] of Object.entries(allCollectionRows)) {
+    const r = rows;
     for (const job of r) {
       const cls = classifyRow(job, cn);
       const dateCol = getDateColumnFor(cls);
