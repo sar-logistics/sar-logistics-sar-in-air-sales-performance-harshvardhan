@@ -1335,24 +1335,9 @@ function topbar(){
         }
 
         if (v === 'Yearly') {
-          var ytOpen = state.yearTypeDropOpen;
-          var ytLabels = {'Financial':'Financial Year (Apr–Mar)','Calendar':'Calendar Year (Jan–Dec)'};
-          return '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleYearTypeDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(ytOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
-              +calIcon
-              +'<span style="pointer-events:none;">'+ytLabels[state.yearType]+'</span>'
-              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(ytOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
-            +'</div>'
-            +(ytOpen
-              ? '<div id="yeartype-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:210px;padding:4px;">'
-                +[{v:'Financial',l:'Financial Year (Apr–Mar)'},{v:'Calendar',l:'Calendar Year (Jan–Dec)'}].map(function(o){
-                  var active=o.v===state.yearType;
-                  return '<div data-act="setYearType" data-val="'+o.v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
-                    +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';pointer-events:none;">'+o.l+'</div>'
-                  +'</div>';
-                }).join('')
-              +'</div>'
-              :'')
+          return '<div style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';">'
+            +calIcon
+            +'<span>Financial Year (Apr–Mar)</span>'
           +'</div>';
         }
 
