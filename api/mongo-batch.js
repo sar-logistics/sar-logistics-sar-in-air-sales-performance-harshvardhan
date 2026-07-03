@@ -28,30 +28,15 @@ const MAPPING_COLLECTIONS = new Set([
 ]);
 
 let cachedClient = null;
-let cachedClientPromise = null;
 
 async function getDB() {
-  if (cachedClient && cachedClient.topology?.isConnected()) {
-    return cachedClient.db(DB_NAME);
-  }
-  // Reuse in-flight connection promise to avoid parallel cold-start races
-  if (!cachedClientPromise) {
-    cachedClientPromise = (async () => {
-      const client = new MongoClient(MONGO_URI, {
-        connectTimeoutMS: 8000,
-        serverSelectionTimeoutMS: 8000,
-        socketTimeoutMS: 45000,
-        maxPoolSize: 10,
-        minPoolSize: 1,
-        maxIdleTimeMS: 270000, // 4.5 min — just under Vercel's 5-min idle limit
-      });
-      await client.connect();
-      cachedClient = client;
-      cachedClientPromise = null;
-      return client.db(DB_NAME);
-    })();
-  }
-  return cachedClientPromise;
+  if (cachedClient) return cachedClient.db(DB_NAME);
+  cachedClient = new MongoClient(MONGO_URI, {
+    connectTimeoutMS: 15000,
+    serverSelectionTimeoutMS: 15000,
+  });
+  await cachedClient.connect();
+  return cachedClient.db(DB_NAME);
 }
 
 async function batchInsertJobs(db, records, clearFirst = true, fy = null) {
@@ -553,43 +538,14 @@ async function getDrillRows(db, entity, metric, month) {
 
 
 async function getSalesAggregate(db, force) {
-  // 1. Serve from in-memory cache if warm (fastest path - <1ms)
   if (!force && salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...salesCache, cached: true };
   }
 
-  // 2. On cold container, try MongoDB-persisted cache before doing full recompute.
-  // This survives Vercel cold starts — the cache is stored in MongoDB itself.
-  if (!force) {
-    try {
-      const cached = await db.collection('_sales_cache').findOne({ _id: 'aggregate' });
-      if (cached && cached.data && cached.cachedAt) {
-        const ageMs = Date.now() - new Date(cached.cachedAt).getTime();
-        if (ageMs < SALES_CACHE_TTL_MS) {
-          // Warm the in-memory cache from MongoDB so subsequent requests skip DB
-          salesCache = cached.data;
-          salesCacheTime = Date.now() - ageMs; // preserve original age
-          console.log(`[sales] Served from MongoDB cache (age: ${Math.round(ageMs/1000)}s)`);
-          return { ...salesCache, cached: true };
-        }
-      }
-    } catch(e) { /* ignore - fall through to full recompute */ }
-  }
 
-  // 3. Full recompute
   const result = await computeSalesAggregate(db);
   salesCache = result;
   salesCacheTime = Date.now();
-
-  // 4. Persist to MongoDB so next cold container skips recompute
-  try {
-    await db.collection('_sales_cache').replaceOne(
-      { _id: 'aggregate' },
-      { _id: 'aggregate', data: result, cachedAt: new Date().toISOString() },
-      { upsert: true }
-    );
-  } catch(e) { /* non-fatal - just means next cold start will recompute */ }
-
   return result;
 }
 
@@ -666,16 +622,10 @@ async function computeSalesAggregate(db) {
     var key = isoYear + '-W' + String(weekNum).padStart(2, '0');
     return { key: key, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
   }
-  // Fetch all collections IN PARALLEL with a tight projection AND a date pre-filter.
-  // Only fetch documents within our 2-year FY window (Apr-25 to Mar-27).
-  // This reduces the document count from 50k+ to only relevant FY rows.
-  const FY_DATE_FILTER = { $or: [
-    { "ETD Loading Port": { $type:2, $gte:"2025-04-01", $lte:"2027-03-31\uffff" } },
-    { "ETA Discharge":    { $type:2, $gte:"2025-04-01", $lte:"2027-03-31\uffff" } },
-    { "Job Date":         { $type:2, $gte:"2025-04-01", $lte:"2027-03-31\uffff" } },
-  ]};
+  // Fetch all collections IN PARALLEL with a small projection — this is the
+  // biggest single performance lever for initial load time.
   const allJobResults = await Promise.all(JOB_COLLECTIONS.map(cn =>
-    db.collection(cn).find(FY_DATE_FILTER, { projection: {
+    db.collection(cn).find({}, { projection: {
       "Sales Person":1, "Job Date":1, "LOB":1, "Location":1,
       "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
       "Financial Lock":1, "Operation Lock":1,
@@ -842,7 +792,8 @@ async function computeSalesAggregate(db) {
   const repsRaw = [];
   for (const [repKey, monthData] of Object.entries(repMonthData)) {
     const meta = repMeta[repKey];
-    if (!meta) continue; // skip unmapped reps with no metadata
+    if (!meta) continue; // skip reps in job data but missing from mapping sheet
+
     const gp      = activeMonths.map(m => monthData[m]?.gp      || 0);
     const gpProv  = activeMonths.map(m => monthData[m]?.gpProv  || 0);
     const gpActual= activeMonths.map(m => monthData[m]?.gpActual|| 0);
@@ -851,15 +802,9 @@ async function computeSalesAggregate(db) {
     const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
     const lcl  = activeMonths.map(m => Math.round((monthData[m]?.lcl  || 0) * 100) / 100);
 
-    // Target: use rep's own monthly target if set, else the zone's monthly target.
-    // From the debug data: mapping_sales_targets has null USD targets for all reps,
-    // while mapping_zone_targets has the actual values. So always fall back to zone target.
-    const fy27ZoneTgt = zoneTargetsByFY.FY27[meta.zone];
-    const fy26ZoneTgt = zoneTargetsByFY.FY26[meta.zone];
-    const zoneTgt = fy27ZoneTgt || fy26ZoneTgt || {};
-    const repTgt = meta.monthlyTarget > 0
-      ? meta.monthlyTarget
-      : (zoneTgt.monthlyTarget || 0);
+    // Use rep's own target if set; otherwise fall back to zone target
+    const zoneTgt = zoneTargetsByFY.FY27[meta.zone] || zoneTargetsByFY.FY26[meta.zone] || {};
+    const repTgt = meta.monthlyTarget > 0 ? meta.monthlyTarget : (zoneTgt.monthlyTarget || 0);
 
     repsRaw.push({
       name:  meta.displayName,
