@@ -571,7 +571,7 @@ async function computeSalesAggregate(db) {
       displayName:   String(row["Display Name"] || row["Sales Rep Name"] || "").trim(),
       zone:          String(row["Zone"] || "Unassigned").trim(),
       lob:           String(row["LOB"] || "").trim(),
-      monthlyTarget: (parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR,
+      monthlyTarget: parseFloat(row["Monthly Target (INR)"] || row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0,
       email:         String(row["Email ID"] || "").toLowerCase().trim(),
     };
   }
@@ -929,10 +929,7 @@ async function computeCustomerAggregate(db) {
       if (!customer) continue;
 
       const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      // cls must be derived per-row — Customer Insights only scans Air collections
-      // so we can safely hard-code kind:"AIR" here rather than calling classifyRow()
-      const _cls = { kind: "AIR", direction: collName.includes("import") ? "IMPORT" : "EXPORT" };
-      const { gp }  = pickGP(job, _cls);
+      const { gp }  = pickGP(job, cls);
 
       if (!custMap[customer]) custMap[customer] = { shipments: 0, revenue: 0, gp: 0 };
       custMap[customer].shipments += 1;
@@ -1087,27 +1084,12 @@ module.exports = async function handler(req, res) {
     const forceRefresh = req.query?.force === "1" || req.query?.force === "true";
 
     if (action === "sales") {
+      const result = await getSalesAggregate(db, forceRefresh);
       const includeWeek = req.query?.includeWeek === "1";
       const includeLob  = req.query?.includeLob  === "1";
-
-      // ── Fast path for lazy-load requests (includeWeek / includeLob) ──────────
-      // If the salesCache is already warm, serve weekData/lobData directly from
-      // it WITHOUT triggering a new aggregation. This makes Weekly view load in
-      // <50ms instead of 5-15s (a full cold DB scan). Only fall through to
-      // getSalesAggregate() when the cache is actually stale or missing.
-      if ((includeWeek || includeLob) && salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
-        const trimmed = { ...salesCache, cached: true, repsRaw: salesCache.repsRaw.map(r => {
-          const copy = { ...r };
-          if (!includeWeek) delete copy.weekData;
-          if (!includeLob)  delete copy.lobData;
-          return copy;
-        })};
-        return res.status(200).json(trimmed);
-      }
-
-      const result = await getSalesAggregate(db, forceRefresh);
-      // Strip only weekData/lobData from the HTTP response (lazy-loaded when needed).
-      // The salesCache itself always retains them so subsequent lazy requests are instant.
+      // Strip only weekData/lobData (lazy-loaded when needed).
+      // allDrillRows is ALWAYS included — it's needed for instant drill-through
+      // and is already computed in the same pass as the aggregate, zero extra cost.
       const trimmed = { ...result, repsRaw: result.repsRaw.map(r => {
         const copy = { ...r };
         if (!includeWeek) delete copy.weekData;
