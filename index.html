@@ -1010,7 +1010,10 @@ function model(){
 
 // True if the current repsRaw has weekData populated (post-Refresh)
 function weekDataLoaded(){
-  return _weekDataFetched && repsRawOriginal.some(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; });
+  // Return true if we've fetched (or attempted to fetch) weekData.
+  // Using _weekDataFetched flag instead of checking actual data presence
+  // prevents infinite retry loops when the server returns 504.
+  return _weekDataFetched;
 }
 
 function grandEntity(){
