@@ -2819,6 +2819,16 @@ function renderDrillOnly(){
   if (drawerEl) drawerEl.innerHTML = drawer() + feedbackModal() + orgEditModal();
 }
 
+var _lastRenderHash = '';
+function stateHash(){
+  // Fast hash of the parts of state that affect the sales table render
+  return state.page+'|'+state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+
+    state.weeklyMonth+'|'+state.currency+'|'+state.rate+'|'+
+    JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps)+'|'+
+    JSON.stringify(state.shipOpen)+'|'+JSON.stringify(state.gpOpen)+'|'+
+    JSON.stringify(state.zoneOpen)+'|'+state.filtersOpen+'|'+dataReady;
+}
+
 function render(){
   computeFilteredRepsRaw(); // apply active Rep/LOB filters before any downstream computation
   var M=model();
@@ -2835,14 +2845,21 @@ function render(){
   }
   var mainEl=document.getElementById('main-slot');
   var scrollTop=mainEl?mainEl.scrollTop:0;
-  // Update only topbar, main content, drawer — sidebar untouched
+
+  // Skip full main-content repaint if only the drawer changed (e.g. drill interactions)
+  var hash = stateHash();
+  var mainChanged = hash !== _lastRenderHash;
+  _lastRenderHash = hash;
+
   document.getElementById('topbar-slot').innerHTML=topbar();
-  mainEl.innerHTML = state.page==='customers' ? customerPage()
-    : state.page==='usage' ? usagePage()
-    : state.page==='teams' ? teamsPage()
-    : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
+  if (mainChanged) {
+    mainEl.innerHTML = state.page==='customers' ? customerPage()
+      : state.page==='usage' ? usagePage()
+      : state.page==='teams' ? teamsPage()
+      : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
+    if(scrollTop) mainEl.scrollTop=scrollTop;
+  }
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal();
-  if(scrollTop) mainEl.scrollTop=scrollTop;
   requestAnimationFrame(positionAllDrops);
 }
 function renderKeepTopbar(){
