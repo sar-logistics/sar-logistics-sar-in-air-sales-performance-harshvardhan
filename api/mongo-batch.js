@@ -1033,17 +1033,12 @@ module.exports = async function handler(req, res) {
   if (action === "ping") {
     const db = await getDB();
     const now2 = Date.now();
-    // Pre-warm salesCache — if it's close to expiring, refresh it in the background
+    // Build salesCache synchronously if cold or expiring — this keeps the cache
+    // warm so that the next ?action=sales request is served instantly from memory.
     if (!salesCache || (now2 - salesCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
-      getSalesAggregate(db, false).catch(() => {});
+      await getSalesAggregate(db, false).catch(() => {});
     }
-    // Pre-warm drillRowsCache — same TTL, same logic
-    // This means by the time any user clicks a drill cell, the full row dataset
-    // is already classified in memory and any drill query returns in <100ms.
-    if (!drillRowsCache || (now2 - drillRowsCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
-      getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => {});
-    }
-    return res.status(200).json({ ok: true, ts: now2 });
+    return res.status(200).json({ ok: true, ts: now2, cached: !!salesCache });
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
@@ -1096,9 +1091,9 @@ module.exports = async function handler(req, res) {
       const includeWeek = req.query?.includeWeek === "1";
       const includeLob  = req.query?.includeLob  === "1";
 
-      // Fast-path: if only weekData/lobData is requested and cache is warm,
-      // serve directly from salesCache — no DB query, responds in <50ms.
-      if ((includeWeek || includeLob) && !forceRefresh && salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
+      // Serve from salesCache immediately if warm — no DB query needed.
+      // This makes every non-cold request respond in <50ms regardless of DB speed.
+      if (!forceRefresh && salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
         const trimmed = { ...salesCache, repsRaw: salesCache.repsRaw.map(r => {
           const copy = { ...r };
           if (!includeWeek) delete copy.weekData;
