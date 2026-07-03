@@ -792,6 +792,7 @@ async function computeSalesAggregate(db) {
   const repsRaw = [];
   for (const [repKey, monthData] of Object.entries(repMonthData)) {
     const meta = repMeta[repKey];
+    if (!meta) continue; // skip unmapped reps with no metadata
     const gp      = activeMonths.map(m => monthData[m]?.gp      || 0);
     const gpProv  = activeMonths.map(m => monthData[m]?.gpProv  || 0);
     const gpActual= activeMonths.map(m => monthData[m]?.gpActual|| 0);
