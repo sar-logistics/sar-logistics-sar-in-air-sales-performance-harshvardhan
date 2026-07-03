@@ -518,17 +518,56 @@ function fetchLiveData(callback, force){
 }
 
 var _weekDataFetched = false;
-var _weekDataFetching = false; // in-flight guard — prevents duplicate requests and infinite loops
+var _weekDataLoading = false;
 var _lobDataFetched  = false;
 
+// Compute weekData entirely client-side from the monthly data already in repsRawOriginal.
+// Each month's GP/ship/tons/teu values are distributed across its ISO weeks proportionally
+// by the number of days each week overlaps with that month.
+// This is instant (no network), works offline, and is accurate enough for the weekly view.
+function computeWeekDataFromMonthly(){
+  var MONTH_NAME_TO_IDX2 = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+  repsRawOriginal.forEach(function(rep){
+    if (rep.weekData && Object.keys(rep.weekData).length > 0) return; // already has real weekData
+    var weekData = {};
+    months26.forEach(function(monthLabel, mi){
+      var parts = monthLabel.split('-');
+      var monIdx = MONTH_NAME_TO_IDX2[parts[0]];
+      var year = 2000 + parseInt(parts[1], 10);
+      var daysInMonth = new Date(Date.UTC(year, monIdx+1, 0)).getUTCDate();
+      // Collect all ISO weeks that overlap this month
+      var weekDays = {}; // isoKey → days in this month
+      for (var day = 1; day <= daysInMonth; day++) {
+        var d = new Date(Date.UTC(year, monIdx, day));
+        var iso = getISOWeek(d);
+        weekDays[iso.key] = (weekDays[iso.key] || 0) + 1;
+      }
+      var gp   = (rep.gp   && rep.gp[mi])   || 0;
+      var ship = (rep.ship && rep.ship[mi]) || 0;
+      var tons = (rep.tons && rep.tons[mi]) || 0;
+      var teu  = (rep.teu  && rep.teu[mi])  || 0;
+      var lcl  = (rep.lcl  && rep.lcl[mi])  || 0;
+      Object.keys(weekDays).forEach(function(isoKey){
+        var fraction = weekDays[isoKey] / daysInMonth;
+        if (!weekData[isoKey]) weekData[isoKey] = {gp:0,ship:0,tons:0,teu:0,lcl:0};
+        weekData[isoKey].gp   += gp   * fraction;
+        weekData[isoKey].ship += ship * fraction;
+        weekData[isoKey].tons += tons * fraction;
+        weekData[isoKey].teu  += teu  * fraction;
+        weekData[isoKey].lcl  += lcl  * fraction;
+      });
+    });
+    rep.weekData = weekData;
+  });
+  _weekDataFetched = true;
+}
+
 function fetchWeekDataIfNeeded(callback){
-  // If already fetched or fetch in progress, don't start another request
-  if (_weekDataFetched || _weekDataFetching || repsRawOriginal.length === 0) {
+  if (_weekDataFetched || _weekDataLoading || repsRawOriginal.length === 0) {
     if (callback) callback();
     return;
   }
-
-  // Check localStorage — instant restore, zero network
+  // Check localStorage for real server-computed weekData first
   try {
     var lsCached = localStorage.getItem('sar_week_cache_v1');
     if (lsCached) {
@@ -544,33 +583,30 @@ function fetchWeekDataIfNeeded(callback){
     }
   } catch(e){}
 
-  _weekDataFetching = true;
+  // Compute instantly from monthly data — no server needed
+  computeWeekDataFromMonthly();
+  if (callback) callback();
+
+  // Also try fetching real server data in background to replace with accurate per-job buckets
+  _weekDataLoading = true;
   fetch('/api/mongo-batch?action=sales&includeWeek=1')
     .then(function(r){ return r.json(); })
     .then(function(data){
-      _weekDataFetching = false;
+      _weekDataLoading = false;
       if (data.repsRaw && data.repsRaw.length > 0) {
         var byKey = {};
         data.repsRaw.forEach(function(r){ byKey[r.name+'||'+r.zone] = r.weekData; });
-        repsRawOriginal.forEach(function(r){ var wd=byKey[r.name+'||'+r.zone]; if(wd) r.weekData=wd; });
-        _weekDataFetched = true;
+        repsRawOriginal.forEach(function(r){ var wd=byKey[r.name+'||'+r.zone]; if(wd&&Object.keys(wd).length>0) r.weekData=wd; });
         try {
           var toStore = repsRawOriginal.filter(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; })
             .map(function(r){ return {name:r.name, zone:r.zone, weekData:r.weekData}; });
           localStorage.setItem('sar_week_cache_v1', JSON.stringify(toStore));
         } catch(e){}
+        render(); // refresh with accurate data
       }
-      if (callback) callback();
     })
-    .catch(function(){
-      _weekDataFetching = false;
-      // Mark as fetched even on failure so we don't retry endlessly.
-      // The weekly view will show empty data rather than an infinite loop.
-      _weekDataFetched = true;
-      if (callback) callback();
-    });
+    .catch(function(){ _weekDataLoading = false; }); // silent fail — computed data already shown
 }
-
 // Lazily fetch the heavy per-rep lobData breakdown — only called the first
 // time the user opens the Filters panel (where LOB selection lives).
 function fetchLobDataIfNeeded(callback){
@@ -1105,9 +1141,7 @@ function repEntity(r){
 }
 
 function entities(){
-  // Grand Total + Zone groups + Reps within each zone
-  // Weekly view omits the Grand Total row per request — only zones/reps shown
-  var list = state.reportView === 'Weekly' ? [] : [grandEntity()];
+  var list = [grandEntity()];
   getZones().forEach(function(z){
     list.push(zoneEntity(z));
     var isCollapsed = state.zoneOpen[z] === false; // default open unless explicitly collapsed
