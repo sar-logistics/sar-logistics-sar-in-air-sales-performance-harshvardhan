@@ -538,14 +538,43 @@ async function getDrillRows(db, entity, metric, month) {
 
 
 async function getSalesAggregate(db, force) {
+  // 1. Serve from in-memory cache if warm (fastest path - <1ms)
   if (!force && salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...salesCache, cached: true };
   }
 
+  // 2. On cold container, try MongoDB-persisted cache before doing full recompute.
+  // This survives Vercel cold starts — the cache is stored in MongoDB itself.
+  if (!force) {
+    try {
+      const cached = await db.collection('_sales_cache').findOne({ _id: 'aggregate' });
+      if (cached && cached.data && cached.cachedAt) {
+        const ageMs = Date.now() - new Date(cached.cachedAt).getTime();
+        if (ageMs < SALES_CACHE_TTL_MS) {
+          // Warm the in-memory cache from MongoDB so subsequent requests skip DB
+          salesCache = cached.data;
+          salesCacheTime = Date.now() - ageMs; // preserve original age
+          console.log(`[sales] Served from MongoDB cache (age: ${Math.round(ageMs/1000)}s)`);
+          return { ...salesCache, cached: true };
+        }
+      }
+    } catch(e) { /* ignore - fall through to full recompute */ }
+  }
 
+  // 3. Full recompute
   const result = await computeSalesAggregate(db);
   salesCache = result;
   salesCacheTime = Date.now();
+
+  // 4. Persist to MongoDB so next cold container skips recompute
+  try {
+    await db.collection('_sales_cache').replaceOne(
+      { _id: 'aggregate' },
+      { _id: 'aggregate', data: result, cachedAt: new Date().toISOString() },
+      { upsert: true }
+    );
+  } catch(e) { /* non-fatal - just means next cold start will recompute */ }
+
   return result;
 }
 
@@ -622,10 +651,16 @@ async function computeSalesAggregate(db) {
     var key = isoYear + '-W' + String(weekNum).padStart(2, '0');
     return { key: key, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
   }
-  // Fetch all collections IN PARALLEL with a small projection — this is the
-  // biggest single performance lever for initial load time.
+  // Fetch all collections IN PARALLEL with a tight projection AND a date pre-filter.
+  // Only fetch documents within our 2-year FY window (Apr-25 to Mar-27).
+  // This reduces the document count from 50k+ to only relevant FY rows.
+  const FY_DATE_FILTER = { $or: [
+    { "ETD Loading Port": { $type:2, $gte:"2025-04-01", $lte:"2027-03-31\uffff" } },
+    { "ETA Discharge":    { $type:2, $gte:"2025-04-01", $lte:"2027-03-31\uffff" } },
+    { "Job Date":         { $type:2, $gte:"2025-04-01", $lte:"2027-03-31\uffff" } },
+  ]};
   const allJobResults = await Promise.all(JOB_COLLECTIONS.map(cn =>
-    db.collection(cn).find({}, { projection: {
+    db.collection(cn).find(FY_DATE_FILTER, { projection: {
       "Sales Person":1, "Job Date":1, "LOB":1, "Location":1,
       "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
       "Financial Lock":1, "Operation Lock":1,
