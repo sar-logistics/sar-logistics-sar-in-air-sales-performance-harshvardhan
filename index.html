@@ -518,13 +518,17 @@ function fetchLiveData(callback, force){
 }
 
 var _weekDataFetched = false;
+var _weekDataFetching = false; // in-flight guard — prevents duplicate requests and infinite loops
 var _lobDataFetched  = false;
 
-// Lazily fetch weekData — checks localStorage first so re-navigation is instant
 function fetchWeekDataIfNeeded(callback){
-  if (_weekDataFetched || repsRawOriginal.length === 0) { if (callback) callback(); return; }
+  // If already fetched or fetch in progress, don't start another request
+  if (_weekDataFetched || _weekDataFetching || repsRawOriginal.length === 0) {
+    if (callback) callback();
+    return;
+  }
 
-  // Check localStorage — fast restore without any network call
+  // Check localStorage — instant restore, zero network
   try {
     var lsCached = localStorage.getItem('sar_week_cache_v1');
     if (lsCached) {
@@ -540,24 +544,31 @@ function fetchWeekDataIfNeeded(callback){
     }
   } catch(e){}
 
-  fetch('/api/mongo-batch?action=sales&includeWeek=1', { priority: 'high' })
+  _weekDataFetching = true;
+  fetch('/api/mongo-batch?action=sales&includeWeek=1')
     .then(function(r){ return r.json(); })
     .then(function(data){
+      _weekDataFetching = false;
       if (data.repsRaw && data.repsRaw.length > 0) {
         var byKey = {};
         data.repsRaw.forEach(function(r){ byKey[r.name+'||'+r.zone] = r.weekData; });
         repsRawOriginal.forEach(function(r){ var wd=byKey[r.name+'||'+r.zone]; if(wd) r.weekData=wd; });
         _weekDataFetched = true;
-        // Save to localStorage for instant restore next time
         try {
-          var toStore = repsRawOriginal.filter(function(r){ return r.weekData; })
+          var toStore = repsRawOriginal.filter(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; })
             .map(function(r){ return {name:r.name, zone:r.zone, weekData:r.weekData}; });
           localStorage.setItem('sar_week_cache_v1', JSON.stringify(toStore));
         } catch(e){}
       }
       if (callback) callback();
     })
-    .catch(function(){ if (callback) callback(); });
+    .catch(function(){
+      _weekDataFetching = false;
+      // Mark as fetched even on failure so we don't retry endlessly.
+      // The weekly view will show empty data rather than an infinite loop.
+      _weekDataFetched = true;
+      if (callback) callback();
+    });
 }
 
 // Lazily fetch the heavy per-rep lobData breakdown — only called the first
@@ -999,7 +1010,7 @@ function model(){
 
 // True if the current repsRaw has weekData populated (post-Refresh)
 function weekDataLoaded(){
-  return repsRaw.some(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; });
+  return _weekDataFetched && repsRawOriginal.some(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; });
 }
 
 function grandEntity(){
@@ -2062,7 +2073,10 @@ function salesTable(M){
 
   // Weekly view — auto-fetch weekData if not loaded yet (no empty screen, just load)
   if (state.reportView === 'Weekly' && !weekDataLoaded()) {
-    fetchWeekDataIfNeeded(function(){ render(); });
+    // Only start fetch if not already in progress (guard against render loop)
+    if (!_weekDataFetching) {
+      fetchWeekDataIfNeeded(function(){ render(); });
+    }
     return '<div style="display:flex;align-items:center;justify-content:center;padding:80px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div></div>';
   }
 
