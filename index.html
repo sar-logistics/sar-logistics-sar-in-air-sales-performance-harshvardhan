@@ -522,22 +522,40 @@ function fetchLiveData(callback, force){
 var _weekDataFetched = false;
 var _lobDataFetched  = false;
 
-// Lazily fetch the heavy per-rep weekData breakdown — only called the first
-// time the user switches to Weekly view. Merges into repsRawOriginal by
-// matching name+zone so nothing else needs to change.
+// Lazily fetch weekData — checks localStorage first so re-navigation is instant
 function fetchWeekDataIfNeeded(callback){
   if (_weekDataFetched || repsRawOriginal.length === 0) { if (callback) callback(); return; }
+
+  // Check localStorage — fast restore without any network call
+  try {
+    var lsCached = localStorage.getItem('sar_week_cache_v1');
+    if (lsCached) {
+      var parsed = JSON.parse(lsCached);
+      if (parsed && parsed.length > 0) {
+        var byKey = {};
+        parsed.forEach(function(r){ byKey[r.name+'||'+r.zone] = r.weekData; });
+        repsRawOriginal.forEach(function(r){ var wd=byKey[r.name+'||'+r.zone]; if(wd) r.weekData=wd; });
+        _weekDataFetched = true;
+        if (callback) callback();
+        return;
+      }
+    }
+  } catch(e){}
+
   fetch('/api/mongo-batch?action=sales&includeWeek=1', { priority: 'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (data.repsRaw && data.repsRaw.length > 0) {
         var byKey = {};
         data.repsRaw.forEach(function(r){ byKey[r.name+'||'+r.zone] = r.weekData; });
-        repsRawOriginal.forEach(function(r){
-          var wd = byKey[r.name+'||'+r.zone];
-          if (wd) r.weekData = wd;
-        });
+        repsRawOriginal.forEach(function(r){ var wd=byKey[r.name+'||'+r.zone]; if(wd) r.weekData=wd; });
         _weekDataFetched = true;
+        // Save to localStorage for instant restore next time
+        try {
+          var toStore = repsRawOriginal.filter(function(r){ return r.weekData; })
+            .map(function(r){ return {name:r.name, zone:r.zone, weekData:r.weekData}; });
+          localStorage.setItem('sar_week_cache_v1', JSON.stringify(toStore));
+        } catch(e){}
       }
       if (callback) callback();
     })
