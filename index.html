@@ -485,10 +485,10 @@ function fetchLiveData(callback, force){
         setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
         console.log('✅ Live data:', repsRawOriginal.length, 'reps,', zonesRaw.length, 'zones');
         if (callback) callback();
-        // Load all drill rows in the background immediately — one fetch covers
-        // every entity+metric+month combination for the entire session.
-        // Once loaded, every drill click is instant browser-side filtering.
+        // Load drill rows in background (for instant drill-through)
         setTimeout(loadDrillData, 800);
+        // Pre-fetch week data in background so Weekly view is instant
+        setTimeout(function(){ fetchWeekDataIfNeeded(function(){}); }, 1500);
       } else if (_liveDataRetryCount < 2 && !force) {
         // Empty/incomplete response on initial load (likely a cold serverless
         // function still building its cache) — retry automatically instead of
@@ -2036,18 +2036,10 @@ function allZonesToggleButton(){
 function salesTable(M){
   var idxs = filteredMonthIndices();
 
-  // Weekly view with no weekData yet — prompt to Refresh
+  // Weekly view — auto-fetch weekData if not loaded yet (no empty screen, just load)
   if (state.reportView === 'Weekly' && !weekDataLoaded()) {
-    return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'
-      +'<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 32px;gap:14px;text-align:center;">'
-        +'<div style="width:48px;height:48px;border-radius:14px;background:#EAF1FE;display:flex;align-items:center;justify-content:center;">'
-          +'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1D5FCC" stroke-width="1.8" stroke-linecap="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>'
-        +'</div>'
-        +'<div style="font-size:14px;font-weight:700;color:#0D2B5E;">Weekly data needs a refresh</div>'
-        +'<div style="font-size:12px;color:#9AAFC8;max-width:300px;line-height:1.6;">Hit the Refresh button to load weekly breakdowns. This only needs to be done once — it will be cached after that.</div>'
-        +'<button data-act="refreshData" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#5678C2,#1E3A66);border:none;border-radius:999px;padding:10px 20px;font-size:12px;font-weight:700;color:#FFFFFF;cursor:pointer;">↻ Refresh Now</button>'
-      +'</div>'
-    +'</div>';
+    fetchWeekDataIfNeeded(function(){ render(); });
+    return '<div style="display:flex;align-items:center;justify-content:center;padding:80px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div></div>';
   }
 
   // Empty state — no data for the selected filter
@@ -2821,20 +2813,25 @@ function renderDrillOnly(){
 }
 
 var _lastRenderHash = '';
+var _lastTopbarHash = '';
 function stateHash(){
-  // Fast hash of the parts of state that affect the sales table render
   return state.page+'|'+state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+
     state.weeklyMonth+'|'+state.currency+'|'+state.rate+'|'+
     JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps)+'|'+
     JSON.stringify(state.shipOpen)+'|'+JSON.stringify(state.gpOpen)+'|'+
     JSON.stringify(state.zoneOpen)+'|'+state.filtersOpen+'|'+dataReady;
 }
+function topbarHash(){
+  return state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+state.weeklyMonth+'|'+
+    state.currency+'|'+state.rate+'|'+state.viewDropOpen+'|'+state.fromDropOpen+'|'+
+    state.toDropOpen+'|'+state.filtersOpen+'|'+state.filterLobDropOpen+'|'+state.filterRepDropOpen+'|'+
+    state.rateEditing+'|'+JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps);
+}
 
 function render(){
-  computeFilteredRepsRaw(); // apply active Rep/LOB filters before any downstream computation
+  computeFilteredRepsRaw();
   var M=model();
   var app=document.getElementById('app');
-  // Only rebuild sidebar on first load — avoids sidebar scroll jump
   if(!app.querySelector('aside')){
     app.innerHTML = sidebar()
       + '<div id="main-col" style="flex:1;display:flex;flex-direction:column;height:100%;overflow:hidden;">'
@@ -2847,13 +2844,15 @@ function render(){
   var mainEl=document.getElementById('main-slot');
   var scrollTop=mainEl?mainEl.scrollTop:0;
 
-  // Skip full main-content repaint if only the drawer changed (e.g. drill interactions)
-  var hash = stateHash();
-  var mainChanged = hash !== _lastRenderHash;
-  _lastRenderHash = hash;
+  var tbHash = topbarHash();
+  if (tbHash !== _lastTopbarHash) {
+    _lastTopbarHash = tbHash;
+    document.getElementById('topbar-slot').innerHTML=topbar();
+  }
 
-  document.getElementById('topbar-slot').innerHTML=topbar();
-  if (mainChanged) {
+  var hash = stateHash();
+  if (hash !== _lastRenderHash) {
+    _lastRenderHash = hash;
     mainEl.innerHTML = state.page==='customers' ? customerPage()
       : state.page==='usage' ? usagePage()
       : state.page==='teams' ? teamsPage()
