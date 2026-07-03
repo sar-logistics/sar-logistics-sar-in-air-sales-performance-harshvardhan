@@ -622,19 +622,20 @@ async function computeSalesAggregate(db) {
     var key = isoYear + '-W' + String(weekNum).padStart(2, '0');
     return { key: key, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
   }
-  for (const collName of JOB_COLLECTIONS) {
-    const jobs = await db.collection(collName).find(
-      {},
-      { projection: {
-          "Sales Person": 1, "Job Date": 1, "LOB": 1, "Location": 1,
-          "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
-          "Financial Lock": 1, "Operation Lock": 1,
-          "ETD Loading Port": 1, "ETA Discharge": 1,
-          "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
-          "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
-        }
-      }
-    ).toArray();
+  // Fetch all collections IN PARALLEL with a small projection — this is the
+  // biggest single performance lever for initial load time.
+  const allJobResults = await Promise.all(JOB_COLLECTIONS.map(cn =>
+    db.collection(cn).find({}, { projection: {
+      "Sales Person":1, "Job Date":1, "LOB":1, "Location":1,
+      "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
+      "Financial Lock":1, "Operation Lock":1,
+      "ETD Loading Port":1, "ETA Discharge":1,
+      "Chargeable Weight":1, "Chargeable Weight Unit":1,
+      "Container TEU":1, "Volume":1, "Volume Unit":1, "Cargo Type":1,
+    }}).toArray().then(rows => ({ collName: cn, jobs: rows }))
+  ));
+
+  for (const { collName, jobs } of allJobResults) {
 
     for (const job of jobs) {
       const salesPerson = normalizeName(job["Sales Person"]);
