@@ -2111,11 +2111,9 @@ function salesTable(M){
 
   // Weekly view — auto-fetch weekData if not loaded yet (no empty screen, just load)
   if (state.reportView === 'Weekly' && !weekDataLoaded()) {
-    // Only start fetch if not already in progress (guard against render loop)
-    if (!_weekDataFetching) {
-      fetchWeekDataIfNeeded(function(){ render(); });
-    }
-    return '<div style="display:flex;align-items:center;justify-content:center;padding:80px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div></div>';
+    // Should not reach here since fetchWeekDataIfNeeded runs before render() in setView.
+    // Compute synchronously as a safety net.
+    fetchWeekDataIfNeeded(null);
   }
 
   // Empty state — no data for the selected filter
@@ -3344,10 +3342,10 @@ document.addEventListener('click', function(ev){
     } else if (v === 'Custom') {
       syncDateRangeToData();
     }
-    render();
     if (v === 'Weekly') {
-      fetchWeekDataIfNeeded(function(){ render(); }); // lazy-load weekly breakdown only when needed
+      fetchWeekDataIfNeeded(null); // synchronous — computes weekData before render below
     }
+    render();
   }
   else if(act==='cur'){ ev.stopPropagation(); ev.preventDefault(); state.currency=el.getAttribute('data-cur'); render(); }
   else if(act==='shipToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.shipOpen[n]=!state.shipOpen[n]; render(); }
