@@ -2839,16 +2839,19 @@ var _lastRenderHash = '';
 var _lastTopbarHash = '';
 function stateHash(){
   return state.page+'|'+state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+
-    state.weeklyMonth+'|'+state.currency+'|'+state.rate+'|'+
+    state.weeklyMonth+'|'+state.currency+'|'+state.rate+'|'+state.yearType+'|'+state.selectedQuarter+'|'+
     JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps)+'|'+
     JSON.stringify(state.shipOpen)+'|'+JSON.stringify(state.gpOpen)+'|'+
     JSON.stringify(state.zoneOpen)+'|'+state.filtersOpen+'|'+dataReady;
 }
 function topbarHash(){
   return state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+state.weeklyMonth+'|'+
-    state.currency+'|'+state.rate+'|'+state.viewDropOpen+'|'+state.fromDropOpen+'|'+
-    state.toDropOpen+'|'+state.filtersOpen+'|'+state.filterLobDropOpen+'|'+state.filterRepDropOpen+'|'+
-    state.rateEditing+'|'+JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps);
+    state.currency+'|'+state.rate+'|'+state.yearType+'|'+
+    state.viewDropOpen+'|'+state.fromDropOpen+'|'+state.toDropOpen+'|'+
+    state.weeklyDropOpen+'|'+state.quarterDropOpen+'|'+state.qyrDropOpen+'|'+state.yearTypeDropOpen+'|'+
+    state.filtersOpen+'|'+state.filterLobDropOpen+'|'+state.filterRepDropOpen+'|'+
+    state.rateEditing+'|'+JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps)+'|'+
+    state.selectedQuarter;
 }
 
 function render(){
