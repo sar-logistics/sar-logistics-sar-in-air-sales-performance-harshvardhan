@@ -653,6 +653,7 @@ function updateUserField(email, fields, callback){
 }
 
 var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{},
+  customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
   weeklyMonth: null,
   selectedQuarter: 'Q1',
   quarterYear: 'FY26',
@@ -788,7 +789,23 @@ function filteredMonthIndices(){
     }
   }
 
-  // Monthly / Custom: dateFrom → dateTo range
+  // Custom view with exact date range — include months that overlap
+  if (v === 'Custom' && state.customDateFrom && state.customDateTo) {
+    var cf = state.customDateFrom, ct = state.customDateTo;
+    var MNAME_IDX = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+    return months26.reduce(function(acc, m, i){
+      var parts = m.split('-');
+      var mIdx = MNAME_IDX[parts[0]], mYear = 2000+parseInt(parts[1],10);
+      var monthStart = mYear+'-'+String(mIdx+1).padStart(2,'0')+'-01';
+      var lastDay = new Date(Date.UTC(mYear,mIdx+1,0)).getUTCDate();
+      var monthEnd = mYear+'-'+String(mIdx+1).padStart(2,'0')+'-'+lastDay;
+      // Include month if it overlaps the selected range at all
+      if(monthStart <= ct && monthEnd >= cf) acc.push(i);
+      return acc;
+    }, []);
+  }
+
+  // Monthly / Custom (no dates yet): dateFrom → dateTo range
   var fi = months26.indexOf(state.dateFrom);
   var ti = months26.indexOf(state.dateTo);
   if (fi < 0 && ti < 0) return months26.map(function(_,i){ return i; });
@@ -1242,46 +1259,67 @@ function topbar(){
           +'</select>'+chevron;
         }
 
-        if (v === 'Monthly' || v === 'Custom') {
-          var fromOpen = state.fromDropOpen;
-          var toOpen   = state.toDropOpen;
-          var fromBtn  = '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleFromDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(fromOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
-              +calIcon
-              +'<span style="pointer-events:none;">'+state.dateFrom+'</span>'
-              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(fromOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
-            +'</div>'
-            +(fromOpen
-              ? '<div id="from-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;overscroll-behavior:contain;padding:4px;">'
-                +months26.map(function(m){
-                  var active=m===state.dateFrom;
-                  return '<div data-act="setFrom" data-val="'+m+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
-                    +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';pointer-events:none;">'+m+'</div>'
-                  +'</div>';
-                }).join('')
+        if (v === 'Custom') {
+          var cf = state.customDateFrom, ct = state.customDateTo;
+          var calOpen = state.customCalOpen;
+          var displayFrom = cf ? cf : 'Start date';
+          var displayTo   = ct ? ct : 'End date';
+          var rangeLabel = (cf && ct) ? cf + ' → ' + ct : (cf ? cf + ' → ?' : 'Select date range');
+
+          // Build calendar for current display month
+          var calHtml = '';
+          if (calOpen) {
+            var cmParts = state.customCalMonth.split('-');
+            var cmYear = parseInt(cmParts[0],10), cmMon = parseInt(cmParts[1],10)-1;
+            var DAYS = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+            var MNAMES2 = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            var firstDay = new Date(Date.UTC(cmYear, cmMon, 1)).getUTCDay();
+            var daysInMon = new Date(Date.UTC(cmYear, cmMon+1, 0)).getUTCDate();
+            var cells = '';
+            for (var di=0; di<firstDay; di++) cells += '<div></div>';
+            for (var d=1; d<=daysInMon; d++) {
+              var iso = cmYear+'-'+String(cmMon+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+              var isFrom = iso===cf, isTo = iso===ct;
+              var inRange = cf&&ct&&iso>cf&&iso<ct;
+              var bg = isFrom||isTo?'#1D5FCC':inRange?'#EEF4FF':'transparent';
+              var col = isFrom||isTo?'#fff':inRange?'#1D5FCC':'#0D2B5E';
+              var br = isFrom?'8px 0 0 8px':isTo?'0 8px 8px 0':inRange?'0':'8px';
+              cells += '<div data-act="customPickDay" data-val="'+iso+'" style="display:flex;align-items:center;justify-content:center;height:32px;width:32px;border-radius:'+br+';background:'+bg+';color:'+col+';font-size:12px;font-weight:'+(isFrom||isTo?'700':'500')+';cursor:pointer;user-select:none;">'+d+'</div>';
+            }
+            var prevMon = new Date(Date.UTC(cmYear, cmMon-1, 1));
+            var nextMon = new Date(Date.UTC(cmYear, cmMon+1, 1));
+            var prevKey = prevMon.getUTCFullYear()+'-'+String(prevMon.getUTCMonth()+1).padStart(2,'0');
+            var nextKey = nextMon.getUTCFullYear()+'-'+String(nextMon.getUTCMonth()+1).padStart(2,'0');
+
+            calHtml = '<div id="custom-cal-drop" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:14px;box-shadow:0 12px 40px rgba(13,43,94,0.22),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;padding:16px;width:300px;">'
+              // Header
+              +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
+                +'<button data-act="customCalNav" data-val="'+prevKey+'" style="background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px;font-size:16px;color:#5B7298;">‹</button>'
+                +'<span style="font-size:13px;font-weight:700;color:#0D2B5E;">'+MNAMES2[cmMon]+' '+cmYear+'</span>'
+                +'<button data-act="customCalNav" data-val="'+nextKey+'" style="background:none;border:none;cursor:pointer;padding:4px 8px;border-radius:6px;font-size:16px;color:#5B7298;">›</button>'
               +'</div>'
-              :'')
-          +'</div>';
-          var toBtn = '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleToDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(toOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
-              +calIcon
-              +'<span style="pointer-events:none;">'+state.dateTo+'</span>'
-              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(toOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
-            +'</div>'
-            +(toOpen
-              ? '<div id="to-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:140px;max-height:280px;overflow-y:auto;overscroll-behavior:contain;padding:4px;">'
-                +months26.map(function(m){
-                  var active=m===state.dateTo;
-                  return '<div data-act="setTo" data-val="'+m+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
-                    +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';pointer-events:none;">'+m+'</div>'
-                  +'</div>';
-                }).join('')
+              // Day headers
+              +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px;">'
+                +DAYS.map(function(d){ return '<div style="text-align:center;font-size:10px;font-weight:700;color:#9AAFC8;padding:4px 0;">'+d+'</div>'; }).join('')
               +'</div>'
-              :'')
+              // Day cells
+              +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">'+cells+'</div>'
+              // Footer
+              +'<div style="margin-top:12px;padding-top:10px;border-top:1px solid #EEF2F8;display:flex;align-items:center;justify-content:space-between;">'
+                +'<div style="font-size:11px;color:#9AAFC8;">'+(!cf?'Click to select start date':!ct?'Now click end date':'<span style=\'color:#15875A;font-weight:600;\'>✓ Range selected</span>')+'</div>'
+                +(cf&&ct?'<button data-act="customApply" style="background:linear-gradient(135deg,#6488D6,#2C4E82);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer;">Apply</button>':'')
+              +'</div>'
+            +'</div>';
+          }
+
+          return '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+            +'<div data-act="toggleCustomCal" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(calOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+              +calIcon
+              +'<span style="pointer-events:none;">'+rangeLabel+'</span>'
+              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;"><path d="M6 9l6 6 6-6"/></svg>'
+            +'</div>'
+            +calHtml
           +'</div>';
-          return fromBtn
-            +'<span style="color:#B7C4D9;font-weight:600;font-size:13px;margin:0 4px;flex-shrink:0;">–</span>'
-            +toBtn;
         }
 
         if (v === 'Weekly') {
@@ -1898,12 +1936,16 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
           rawKey = 'FY Total';
         }
       } else {
-        var fm = filteredMonths();
-        if (fm.length === 0 || fm.length === months26.length) {
-          rawKey = 'FY Total'; // all months = true FY Total
+        // Custom view with exact date range — use DATERANGE: for precise filtering
+        if (state.reportView === 'Custom' && state.customDateFrom && state.customDateTo) {
+          rawKey = 'DATERANGE:' + state.customDateFrom + ':' + state.customDateTo;
         } else {
-          // Pass as a range: "RANGE:Jan-26:Jun-26" backend will filter inclusively
-          rawKey = 'RANGE:' + fm[0] + ':' + fm[fm.length-1];
+          var fm = filteredMonths();
+          if (fm.length === 0 || fm.length === months26.length) {
+            rawKey = 'FY Total';
+          } else {
+            rawKey = 'RANGE:' + fm[0] + ':' + fm[fm.length-1];
+          }
         }
       }
     } else {
@@ -3213,6 +3255,38 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleQyrDrop'){ ev.stopPropagation(); state.qyrDropOpen=!state.qyrDropOpen; state.quarterDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setYearType'){ ev.stopPropagation(); state.yearType=el.getAttribute('data-val'); state.yearTypeDropOpen=false; render(); }
   else if(act==='toggleYearTypeDrop'){ ev.stopPropagation(); state.yearTypeDropOpen=!state.yearTypeDropOpen; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='toggleCustomCal'){
+    ev.stopPropagation();
+    state.customCalOpen = !state.customCalOpen;
+    if(state.customCalOpen && !state.customCalMonth){
+      state.customCalMonth = new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0');
+    }
+    render(); requestAnimationFrame(function(){ positionDrop('toggleCustomCal','custom-cal-drop'); });
+  }
+  else if(act==='customCalNav'){
+    ev.stopPropagation();
+    state.customCalMonth = el.getAttribute('data-val');
+    render(); requestAnimationFrame(function(){ positionDrop('toggleCustomCal','custom-cal-drop'); });
+  }
+  else if(act==='customPickDay'){
+    ev.stopPropagation();
+    var day = el.getAttribute('data-val');
+    if(!state.customDateFrom || (state.customDateFrom && state.customDateTo)){
+      state.customDateFrom = day; state.customDateTo = '';
+    } else if(day < state.customDateFrom){
+      state.customDateTo = state.customDateFrom; state.customDateFrom = day;
+    } else {
+      state.customDateTo = day;
+    }
+    render(); requestAnimationFrame(function(){ positionDrop('toggleCustomCal','custom-cal-drop'); });
+  }
+  else if(act==='customApply'){
+    ev.stopPropagation();
+    if(state.customDateFrom && state.customDateTo){
+      state.customCalOpen = false;
+      render();
+    }
+  }
   else if(act==='toggleFiltersDrop'){
     ev.stopPropagation();
     state.filtersOpen=!state.filtersOpen;
@@ -3414,8 +3488,20 @@ document.addEventListener('keydown', function(e){
   } 
 });
 
+function positionDrop(btnAct, dropId){
+  var drop = document.getElementById(dropId);
+  var btn  = document.querySelector('[data-act="'+btnAct+'"]');
+  if(!drop||!btn) return;
+  var r = btn.getBoundingClientRect();
+  drop.style.top  = (r.bottom+6)+'px';
+  var left = r.left;
+  if(left+300>window.innerWidth-8) left = window.innerWidth-308;
+  drop.style.left = Math.max(8,left)+'px';
+}
+
 function positionAllDrops(){
   var pairs = [
+    ['toggleCustomCal','custom-cal-drop'],
     ['toggleViewDrop','view-drop'],['toggleFromDrop','from-drop'],
     ['toggleToDrop','to-drop'],['toggleWeeklyDrop','weekly-drop'],
     ['toggleQyrDrop','qyr-drop'],['toggleQuarterDrop','quarter-drop'],
@@ -3455,7 +3541,15 @@ window.addEventListener('scroll', function(e){
   }
 }, true);
 document.addEventListener('click', function(e){
-  // Drill column-filter popup: close it if the click landed outside the popup
+  if (state.customCalOpen) {
+    var insideCal = e.target.closest('#custom-cal-drop');
+    var isCalBtn  = e.target.closest('[data-act="toggleCustomCal"]');
+    if (!insideCal && !isCalBtn) {
+      state.customCalOpen = false;
+      render();
+      return;
+    }
+  }
   // itself and wasn't the toggle trigger (checked BEFORE the generic data-stop
   // guard below, since the popup lives inside the drawer's own data-stop box)
   if (state.drill && state.drill.openFilterCol) {
