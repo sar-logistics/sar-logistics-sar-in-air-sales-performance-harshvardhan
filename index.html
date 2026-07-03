@@ -521,53 +521,11 @@ var _weekDataFetched = false;
 var _weekDataLoading = false;
 var _lobDataFetched  = false;
 
-// Compute weekData entirely client-side from the monthly data already in repsRawOriginal.
-// Each month's GP/ship/tons/teu values are distributed across its ISO weeks proportionally
-// by the number of days each week overlaps with that month.
-// This is instant (no network), works offline, and is accurate enough for the weekly view.
-function computeWeekDataFromMonthly(){
-  var MONTH_NAME_TO_IDX2 = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
-  repsRawOriginal.forEach(function(rep){
-    if (rep.weekData && Object.keys(rep.weekData).length > 0) return; // already has real weekData
-    var weekData = {};
-    months26.forEach(function(monthLabel, mi){
-      var parts = monthLabel.split('-');
-      var monIdx = MONTH_NAME_TO_IDX2[parts[0]];
-      var year = 2000 + parseInt(parts[1], 10);
-      var daysInMonth = new Date(Date.UTC(year, monIdx+1, 0)).getUTCDate();
-      // Collect all ISO weeks that overlap this month
-      var weekDays = {}; // isoKey → days in this month
-      for (var day = 1; day <= daysInMonth; day++) {
-        var d = new Date(Date.UTC(year, monIdx, day));
-        var iso = getISOWeek(d);
-        weekDays[iso.key] = (weekDays[iso.key] || 0) + 1;
-      }
-      var gp   = (rep.gp   && rep.gp[mi])   || 0;
-      var ship = (rep.ship && rep.ship[mi]) || 0;
-      var tons = (rep.tons && rep.tons[mi]) || 0;
-      var teu  = (rep.teu  && rep.teu[mi])  || 0;
-      var lcl  = (rep.lcl  && rep.lcl[mi])  || 0;
-      Object.keys(weekDays).forEach(function(isoKey){
-        var fraction = weekDays[isoKey] / daysInMonth;
-        if (!weekData[isoKey]) weekData[isoKey] = {gp:0,ship:0,tons:0,teu:0,lcl:0};
-        weekData[isoKey].gp   += gp   * fraction;
-        weekData[isoKey].ship  = Math.round((weekData[isoKey].ship || 0) + ship * fraction);
-        weekData[isoKey].tons += tons * fraction;
-        weekData[isoKey].teu  += teu  * fraction;
-        weekData[isoKey].lcl  += lcl  * fraction;
-      });
-    });
-    rep.weekData = weekData;
-  });
-  _weekDataFetched = true;
-}
-
 function fetchWeekDataIfNeeded(callback){
   if (_weekDataFetched || _weekDataLoading || repsRawOriginal.length === 0) {
     if (callback) callback();
     return;
   }
-  // Check localStorage for real server-computed weekData first
   try {
     var lsCached = localStorage.getItem('sar_week_cache_v1');
     if (lsCached) {
@@ -582,31 +540,29 @@ function fetchWeekDataIfNeeded(callback){
       }
     }
   } catch(e){}
-
-  // Compute instantly from monthly data — no server needed
-  computeWeekDataFromMonthly();
-  if (callback) callback();
-
-  // Also try fetching real server data in background to replace with accurate per-job buckets
   _weekDataLoading = true;
   fetch('/api/mongo-batch?action=sales&includeWeek=1')
     .then(function(r){ return r.json(); })
     .then(function(data){
       _weekDataLoading = false;
+      _weekDataFetched = true;
       if (data.repsRaw && data.repsRaw.length > 0) {
         var byKey = {};
         data.repsRaw.forEach(function(r){ byKey[r.name+'||'+r.zone] = r.weekData; });
-        repsRawOriginal.forEach(function(r){ var wd=byKey[r.name+'||'+r.zone]; if(wd&&Object.keys(wd).length>0) r.weekData=wd; });
+        repsRawOriginal.forEach(function(r){ var wd=byKey[r.name+'||'+r.zone]; if(wd) r.weekData=wd; });
         try {
           var toStore = repsRawOriginal.filter(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; })
             .map(function(r){ return {name:r.name, zone:r.zone, weekData:r.weekData}; });
           localStorage.setItem('sar_week_cache_v1', JSON.stringify(toStore));
         } catch(e){}
-        // Only re-render if still in Weekly view — don't interrupt other views
-        if (state.reportView === 'Weekly') render();
       }
+      if (callback) callback();
     })
-    .catch(function(){ _weekDataLoading = false; });
+    .catch(function(){
+      _weekDataLoading = false;
+      _weekDataFetched = true;
+      if (callback) callback();
+    });
 }
 // Lazily fetch the heavy per-rep lobData breakdown — only called the first
 // time the user opens the Filters panel (where LOB selection lives).
@@ -1047,10 +1003,7 @@ function model(){
 
 // True if the current repsRaw has weekData populated (post-Refresh)
 function weekDataLoaded(){
-  // Return true if we've fetched (or attempted to fetch) weekData.
-  // Using _weekDataFetched flag instead of checking actual data presence
-  // prevents infinite retry loops when the server returns 504.
-  return _weekDataFetched;
+  return _weekDataFetched && repsRawOriginal.some(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; });
 }
 
 function grandEntity(){
@@ -2111,9 +2064,8 @@ function salesTable(M){
 
   // Weekly view — auto-fetch weekData if not loaded yet (no empty screen, just load)
   if (state.reportView === 'Weekly' && !weekDataLoaded()) {
-    // Should not reach here since fetchWeekDataIfNeeded runs before render() in setView.
-    // Compute synchronously as a safety net.
-    fetchWeekDataIfNeeded(null);
+    if (!_weekDataLoading) fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); });
+    return '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;"><div class="login-spinner" style="width:36px;height:36px;border-width:3px;"></div><div style="font-size:13px;color:#9AAFC8;font-weight:500;">Loading weekly data…</div></div>';
   }
 
   // Empty state — no data for the selected filter
@@ -3342,10 +3294,10 @@ document.addEventListener('click', function(ev){
     } else if (v === 'Custom') {
       syncDateRangeToData();
     }
-    if (v === 'Weekly') {
-      fetchWeekDataIfNeeded(null); // synchronous — computes weekData before render below
-    }
     render();
+    if (v === 'Weekly') {
+      fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); });
+    }
   }
   else if(act==='cur'){ ev.stopPropagation(); ev.preventDefault(); state.currency=el.getAttribute('data-cur'); render(); }
   else if(act==='shipToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.shipOpen[n]=!state.shipOpen[n]; render(); }
