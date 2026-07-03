@@ -1497,7 +1497,7 @@ function kpiRow(M){
     return BRAND_A1;
   }
 
-  var achColor = M.achGrand >= 100 ? '#0A7E53' : M.achGrand < 0 ? '#C0392B' : '#0D2B5E';
+  var achColor = M.achGrand >= 75 ? '#15875A' : '#DC2626';
 
   var isWeeklyView = state.reportView === 'Weekly' && weekDataLoaded();
   var wkeys = isWeeklyView ? filteredWeekKeys() : null;
@@ -2014,7 +2014,7 @@ function tableRows(){
 
     var nameWeight = isGrand ? 700 : isZone ? 700 : 600;
     var barColor   = achFy>=100?'#15875A':achFy<50?'#E08A2B':'#2F6FED';
-    var achColor   = achFy>=100?'#15875A':achFy<50?'#C26A12':'#2F6FED';
+    var achColor   = achFy>=75?'#15875A':'#DC2626';
 
     var repInfo = {
       name: e.name, initials: e.initials, avatarBg: avatarBg,
@@ -2040,8 +2040,9 @@ function tableRows(){
       rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
     }
 
-    rows.push(metric('Target',        0, 'cur', '#374151', tgtArr,  sum(tgtArr), false));
-    rows.push(metric('Achievement %', 0, 'pct', '#374151', achArr,  achFy,       false));
+    rows.push(metric('Target',        0, 'cur', '#2563EB', tgtArr,  sum(tgtArr), false));
+    var achRowColor = achFy >= 75 ? '#15875A' : '#DC2626';
+    rows.push(metric('Achievement %', 0, 'pct', achRowColor, achArr, achFy, false));
   });
 
   return rows;
