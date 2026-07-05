@@ -686,7 +686,7 @@ function updateUserField(email, fields, callback){
 
 var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{},
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
-  addUserOpen: false, addUserError: '',
+  addUserOpen: false, addUserError: '', addUserDefaultRole: '',
   weeklyMonth: null,
   selectedQuarter: 'Q1',
   quarterYear: 'FY26',
@@ -1688,113 +1688,83 @@ function adminPage(){
   }
 
   var allUsers = (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]);
-  // Sort: active first, then by name
-  allUsers.sort(function(a,b){
-    if (a.isActive !== b.isActive) return b.isActive ? 1 : -1;
-    return (a.name||'').localeCompare(b.name||'');
-  });
 
+  // Group by role
+  var ROLE_ORDER = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
   var ROLE_COLORS = {
-    'admin':'#7C3AED','hr':'#2563EB','regional manager':'#0891B2',
-    'zonal manager':'#059669','sales rep':'#D97706','user':'#6B7280'
+    'admin':'#15875A','hr':'#DC2626','regional manager':'#D97706',
+    'zonal manager':'#7C3AED','sales rep':'#2563EB','user':'#6B7280'
   };
+  var AVATAR_COLORS = [
+    '#15875A','#2563EB','#7C3AED','#D97706','#0891B2','#DC2626',
+    '#059669','#EA580C','#9333EA','#0284C7','#16A34A','#DC2626'
+  ];
 
-  var rows = allUsers.map(function(u){
+  function avatarColor(name){
+    var h = 0;
+    for(var i=0;i<(name||'').length;i++) h = (h*31+name.charCodeAt(i))&0xffff;
+    return AVATAR_COLORS[h % AVATAR_COLORS.length];
+  }
+
+  function userCard(u){
     var isYou = currentUser && u.email === currentUser.email;
-    var statusColor = u.isActive !== false ? '#15875A' : '#DC2626';
-    var statusBg    = u.isActive !== false ? '#E8F7EF' : '#FEF2F2';
-    var rc = ROLE_COLORS[(u.role||'').toLowerCase()] || '#6B7280';
-    var lastLogin = u.lastLogin ? new Date(u.lastLogin).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
     var ini = (u.name||'?').split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
-
-    return '<tr style="border-bottom:1px solid #F1F5F9;transition:background 0.1s;"'+
-      ' onmouseenter="this.style.background=\'#FAFBFF\'" onmouseleave="this.style.background=\'\'"'+
-      (isYou?' style="background:#FAFBFF;"':'')+'>'+
-      '<td style="padding:10px 14px;white-space:nowrap;">'+
-        '<div style="display:flex;align-items:center;gap:10px;">'+
-          '<div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;">'+
-            esc(ini)+
-          '</div>'+
-          '<div>'+
-            '<div style="font-size:12.5px;font-weight:700;color:#0D2B5E;">'+esc(u.name||'—')+
-              (isYou?' <span style="font-size:9px;background:#EEF2FF;color:#4338CA;border-radius:4px;padding:1px 5px;font-weight:600;vertical-align:middle;">You</span>':'')+
-            '</div>'+
-            '<div style="font-size:10.5px;color:#9AAFC8;margin-top:1px;">'+esc(u.email||'—')+'</div>'+
-          '</div>'+
+    var rc = ROLE_COLORS[(u.role||'').toLowerCase()]||'#6B7280';
+    var ac = avatarColor(u.name);
+    return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:12px;padding:16px;display:flex;align-items:center;gap:12px;min-width:0;">'+
+      '<div style="width:40px;height:40px;border-radius:50%;background:'+ac+';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;">'+esc(ini)+'</div>'+
+      '<div style="flex:1;min-width:0;">'+
+        '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'+
+          '<span style="font-size:13px;font-weight:700;color:#0D2B5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(u.name||'—')+'</span>'+
+          (isYou?'<span style="font-size:9px;background:#EEF2FF;color:#4338CA;border-radius:4px;padding:1px 6px;font-weight:700;flex-shrink:0;">You</span>':'')+
         '</div>'+
-      '</td>'+
-      '<td style="padding:10px 14px;">'+
-        '<span style="font-size:10.5px;font-weight:700;color:'+rc+';background:'+rc+'18;border-radius:5px;padding:3px 9px;white-space:nowrap;text-transform:capitalize;">'+esc(u.role||'user')+'</span>'+
-      '</td>'+
-      '<td style="padding:10px 14px;font-size:11.5px;color:#374151;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(u.zone||'')+'">'+esc(u.zone||'—')+'</td>'+
-      '<td style="padding:10px 14px;font-size:11.5px;color:#374151;">'+esc(u.reportsTo||'—')+'</td>'+
-      '<td style="padding:10px 14px;">'+
-        '<span style="font-size:10.5px;font-weight:700;color:'+statusColor+';background:'+statusBg+';border-radius:5px;padding:3px 9px;">'+
-          (u.isActive !== false ? 'Active' : 'Inactive')+
-        '</span>'+
-      '</td>'+
-      '<td style="padding:10px 14px;font-size:11px;color:#9AAFC8;">'+lastLogin+'</td>'+
-      '<td style="padding:10px 14px;font-size:11px;color:#9AAFC8;text-align:center;">'+String(u.loginCount||0)+'</td>'+
+        '<div style="font-size:11px;color:#9AAFC8;margin:2px 0 6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(u.email||'—')+'</div>'+
+        '<span style="font-size:10px;font-weight:700;color:'+rc+';background:'+rc+'18;border-radius:5px;padding:2px 8px;text-transform:capitalize;">'+esc(u.role||'user')+'</span>'+
+      '</div>'+
       (canEdit ?
-        '<td style="padding:10px 14px;text-align:center;">'+
-          '<button data-act="orgEditOpen" data-email="'+esc(u.email)+'" style="background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:5px 14px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;white-space:nowrap;">Edit</button>'+
-        '</td>'
-      : '<td></td>')+
-    '</tr>';
-  }).join('');
+        '<div style="display:flex;gap:4px;flex-shrink:0;">'+
+          '<button data-act="orgEditOpen" data-email="'+esc(u.email)+'" title="Edit" style="background:none;border:1.5px solid #E8EDF6;border-radius:7px;width:30px;height:30px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#9AAFC8;">'+
+            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" pointer-events="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'+
+          '</button>'+
+          '<button data-act="deleteUser" data-email="'+esc(u.email)+'" title="Remove" style="background:none;border:1.5px solid #E8EDF6;border-radius:7px;width:30px;height:30px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#9AAFC8;">'+
+            '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" pointer-events="none"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>'+
+          '</button>'+
+        '</div>'
+      :'')+
+    '</div>';
+  }
 
-  // Role stat cards
-  var roleStats = {};
-  allUsers.forEach(function(u){ var r=u.role||'user'; roleStats[r]=(roleStats[r]||0)+1; });
-  var activeCount = allUsers.filter(function(u){ return u.isActive!==false; }).length;
+  function addCard(roleLabel){
+    return '<div data-act="addUserOpen" data-role="'+esc(roleLabel)+'" style="background:#FFFFFF;border:1.5px dashed #D1D9E6;border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;color:#9AAFC8;font-size:12px;font-weight:600;min-height:88px;transition:border-color 0.15s,color 0.15s;" onmouseenter="this.style.borderColor=\'#6488D6\';this.style.color=\'#6488D6\'" onmouseleave="this.style.borderColor=\'#D1D9E6\';this.style.color=\'#9AAFC8\'">'+
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" pointer-events="none"><path d="M12 5v14M5 12h14"/></svg>'+
+      '+ Add'+
+    '</div>';
+  }
 
-  var statCards = [
-    { label:'Total Users', value:allUsers.length, color:BRAND_A1 },
-    { label:'Active', value:activeCount, color:'#15875A' },
-    { label:'Inactive', value:allUsers.length-activeCount, color:'#DC2626' },
-  ].concat(Object.entries(roleStats).map(function(e){
-    return { label:e[0], value:e[1], color:ROLE_COLORS[e[0].toLowerCase()]||'#6B7280' };
-  })).map(function(s){
-    return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:12px;padding:14px 18px;min-width:100px;">'+
-      '<div style="font-size:22px;font-weight:800;color:'+s.color+';">'+s.value+'</div>'+
-      '<div style="font-size:10.5px;font-weight:600;color:#9AAFC8;text-transform:capitalize;margin-top:2px;">'+esc(s.label)+'</div>'+
+  var sections = ROLE_ORDER.map(function(roleName){
+    var users = allUsers.filter(function(u){ return (u.role||'').toLowerCase() === roleName.toLowerCase(); });
+    var cards = users.map(userCard).join('');
+    cards += canEdit ? addCard(roleName) : '';
+    return '<div style="margin-bottom:28px;">'+
+      '<div style="font-size:10px;font-weight:700;letter-spacing:0.1em;color:#9AAFC8;text-transform:uppercase;margin-bottom:12px;">'+esc(roleName)+'</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">'+cards+'</div>'+
     '</div>';
   }).join('');
 
-  return '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;">'+
+  return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
     '<div>'+
-      '<div style="font-size:20px;font-weight:800;color:#0D2B5E;">Admin Panel</div>'+
-      '<div style="font-size:12px;color:#9AAFC8;margin-top:2px;">Manage users, roles and access · '+allUsers.length+' users</div>'+
+      '<div style="font-size:22px;font-weight:800;color:#0D2B5E;">Admin Panel</div>'+
+      '<div style="font-size:12px;color:#9AAFC8;margin-top:2px;">Manage users and access</div>'+
     '</div>'+
     (canEdit ?
-      '<button data-act="addUserOpen" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:10px;padding:9px 18px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;gap:6px;">'+
-        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add User'+
+      '<button data-act="addUserOpen" data-role="" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:10px;padding:10px 20px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;gap:7px;">'+
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" pointer-events="none"><path d="M12 5v14M5 12h14"/></svg>Add User'+
       '</button>'
-    : '')+
+    :'')+
   '</div>'+
-  '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">'+statCards+'</div>'+
-  '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'+
-    '<div style="padding:14px 18px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
-      '<span style="font-size:13px;font-weight:700;color:#0D2B5E;flex-shrink:0;">All Users</span>'+
-      (!canEdit ? '<span style="font-size:11px;color:#9AAFC8;">View only — contact Admin to make changes</span>' : '')+
-    '</div>'+
-    '<div style="overflow-x:auto;">'+
-      '<table style="width:100%;border-collapse:collapse;min-width:800px;">'+
-        '<thead><tr style="background:#F8FAFC;">'+
-          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap;">User</th>'+
-          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Role</th>'+
-          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Zone</th>'+
-          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Reports To</th>'+
-          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Status</th>'+
-          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Last Login</th>'+
-          '<th style="padding:9px 14px;text-align:center;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Logins</th>'+
-          '<th style="padding:9px 14px;text-align:center;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">'+(canEdit?'Action':'')+'</th>'+
-        '</tr></thead>'+
-        '<tbody>'+rows+'</tbody>'+
-      '</table>'+
-    '</div>'+
-  '</div>';
+  sections;
 }
+
 
 function customerPage(){
   if (!customerDataReady) {
@@ -2063,12 +2033,13 @@ function addUserModal(){
   var ROLES = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
   var ZONES = [...new Set(repsRawOriginal.map(function(r){ return r.zone; }).filter(Boolean))].sort();
   var allPeople = orgDataReady ? (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]) : [];
+  var defaultRole = state.addUserDefaultRole || '';
 
-  return '<div data-act="addUserClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:60;display:flex;align-items:center;justify-content:center;">'+
-    '<div data-stop="1" style="background:#FFFFFF;border-radius:16px;padding:28px;width:440px;box-shadow:0 20px 60px rgba(13,43,94,0.2);">'+
+  return '<div id="add-user-backdrop" data-act="addUserClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:60;display:flex;align-items:center;justify-content:center;">'+
+    '<div data-stop="1" style="background:#FFFFFF;border-radius:16px;padding:28px;width:440px;max-width:95vw;box-shadow:0 20px 60px rgba(13,43,94,0.2);">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
         '<div style="font-size:16px;font-weight:800;color:#0D2B5E;">Add New User</div>'+
-        '<button data-act="addUserClose" style="background:#F4F7FB;border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px;color:#5B6678;">✕</button>'+
+        '<button id="add-user-close-btn" data-act="addUserClose" style="background:#F4F7FB;border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px;color:#5B6678;">✕</button>'+
       '</div>'+
       '<div style="display:flex;flex-direction:column;gap:14px;">'+
         '<div>'+
@@ -2082,27 +2053,25 @@ function addUserModal(){
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Role *</label>'+
           '<select id="add-user-role" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
-            ROLES.map(function(r){ return '<option value="'+esc(r)+'">'+esc(r)+'</option>'; }).join('')+
+            ROLES.map(function(r){ return '<option value="'+esc(r)+'"'+(r===defaultRole?' selected':'')+'>'+esc(r)+'</option>'; }).join('')+
           '</select>'+
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Zone</label>'+
           '<select id="add-user-zone" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
-            '<option value="">None</option>'+
-            ZONES.map(function(z){ return '<option value="'+esc(z)+'">'+esc(z)+'</option>'; }).join('')+
+            '<option value="">None</option>'+ZONES.map(function(z){ return '<option value="'+esc(z)+'">'+esc(z)+'</option>'; }).join('')+
           '</select>'+
         '</div>'+
         '<div>'+
           '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Reports To</label>'+
           '<select id="add-user-reportsto" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
-            '<option value="">None</option>'+
-            allPeople.map(function(p){ return '<option value="'+esc(p.email)+'">'+esc(p.name)+'</option>'; }).join('')+
+            '<option value="">None</option>'+allPeople.map(function(p){ return '<option value="'+esc(p.email)+'">'+esc(p.name)+'</option>'; }).join('')+
           '</select>'+
         '</div>'+
         (state.addUserError ? '<div style="font-size:11.5px;color:#DC2626;background:#FEF2F2;border-radius:7px;padding:8px 12px;">'+esc(state.addUserError)+'</div>' : '')+
         '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">'+
-          '<button data-act="addUserClose" style="background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 18px;font-size:12.5px;font-weight:700;color:#374151;cursor:pointer;">Cancel</button>'+
-          '<button data-act="addUserSave" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:8px;padding:9px 18px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer;">Add User</button>'+
+          '<button id="add-user-cancel-btn" data-act="addUserClose" style="background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 18px;font-size:12.5px;font-weight:700;color:#374151;cursor:pointer;">Cancel</button>'+
+          '<button id="add-user-submit-btn" data-act="addUserSave" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:8px;padding:9px 18px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer;">Add User</button>'+
         '</div>'+
       '</div>'+
     '</div>'+
@@ -3449,13 +3418,33 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     state.addUserOpen = true;
     state.addUserError = '';
+    state.addUserDefaultRole = el.getAttribute('data-role') || '';
     render();
   }
   else if(act==='addUserClose'){
-    if(ev.target.closest('[data-stop]')&&!el.matches('[data-act="addUserClose"]')) return;
+    // Only close if clicking the backdrop or explicit close/cancel buttons
+    var clickedBackdrop = ev.target.id === 'add-user-backdrop';
+    var clickedCloseBtn = ev.target.id === 'add-user-close-btn' || ev.target.id === 'add-user-cancel-btn';
+    if (!clickedBackdrop && !clickedCloseBtn && !el.matches('[data-act="addUserClose"]')) return;
     state.addUserOpen = false;
     state.addUserError = '';
+    state.addUserDefaultRole = '';
     render();
+  }
+  else if(act==='deleteUser'){
+    ev.stopPropagation();
+    var delEmail = el.getAttribute('data-email');
+    if (!delEmail) return;
+    if (!confirm('Remove user ' + delEmail + '? This cannot be undone.')) return;
+    fetch('/api/mongo-batch?action=deleteUser', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email: delEmail })
+    }).then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.success) fetchOrgData(function(){ render(); }, true);
+      else alert('Failed: ' + (data.error||'Unknown error'));
+    }).catch(function(e){ alert('Error: ' + e.message); });
   }
   else if(act==='addUserSave'){
     ev.stopPropagation();
