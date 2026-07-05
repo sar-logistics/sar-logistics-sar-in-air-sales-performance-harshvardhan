@@ -294,7 +294,7 @@ function normalizeName(name) {
 // In-memory cache — survives across warm Lambda invocations (same container)
 let salesCache = null;
 let salesCacheTime = 0;
-const SALES_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes — reduces cold fetches significantly
+const SALES_CACHE_TTL_MS = 120 * 60 * 1000; // 2 hours — data pushed from sheets periodically
 
 // ── DRILL-DOWN: real job rows behind a clicked table cell ──────────
 // entity: "Grand Total" | zone name | rep display name
@@ -1091,26 +1091,28 @@ module.exports = async function handler(req, res) {
       const includeWeek = req.query?.includeWeek === "1";
       const includeLob  = req.query?.includeLob  === "1";
 
-      // Serve from salesCache immediately if warm — no DB query needed.
-      // This makes every non-cold request respond in <50ms regardless of DB speed.
-      if (!forceRefresh && salesCache && (Date.now() - salesCacheTime) < SALES_CACHE_TTL_MS) {
-        const trimmed = { ...salesCache, repsRaw: salesCache.repsRaw.map(r => {
-          const copy = { ...r };
-          if (!includeWeek) delete copy.weekData;
-          if (!includeLob)  delete copy.lobData;
-          return copy;
-        })};
-        return res.status(200).json(trimmed);
-      }
-
-      const result = await getSalesAggregate(db, forceRefresh);
-      const trimmed = { ...result, repsRaw: result.repsRaw.map(r => {
+      const strip = (result) => ({ ...result, repsRaw: result.repsRaw.map(r => {
         const copy = { ...r };
         if (!includeWeek) delete copy.weekData;
         if (!includeLob)  delete copy.lobData;
         return copy;
-      })};
-      return res.status(200).json(trimmed);
+      })});
+
+      // Always serve from salesCache if available — even if stale.
+      // This makes EVERY request instant after the first successful load.
+      // The ping endpoint keeps the cache fresh in the background.
+      if (salesCache) {
+        const isStale = (Date.now() - salesCacheTime) > SALES_CACHE_TTL_MS;
+        if (isStale && !forceRefresh) {
+          // Trigger background refresh without blocking this response
+          getSalesAggregate(db, true).catch(() => {});
+        }
+        return res.status(200).json(strip(salesCache));
+      }
+
+      // No cache at all (first cold start) — must wait for DB
+      const result = await getSalesAggregate(db, forceRefresh);
+      return res.status(200).json(strip(result));
     }
 
     if (action === "customers") {
