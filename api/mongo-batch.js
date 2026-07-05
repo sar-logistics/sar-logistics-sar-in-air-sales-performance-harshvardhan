@@ -1159,6 +1159,13 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(result);
     }
 
+    if (action === "deleteUser") {
+      const { email } = req.body || {};
+      if (!email) return res.status(400).json({ error: "email required" });
+      await db.collection("users").deleteOne({ email: email.toLowerCase().trim() });
+      return res.status(200).json({ success: true });
+    }
+
     if (action === "addUser") {
       const { email, name, role, zone, reportsTo } = req.body || {};
       if (!email || !name) return res.status(400).json({ error: "email and name required" });
