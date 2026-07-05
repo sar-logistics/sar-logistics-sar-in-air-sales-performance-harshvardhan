@@ -50,7 +50,7 @@ module.exports = async function handler(req, res) {
     const db   = await getDB();
     const user = await db.collection(COLLECTION_USERS).findOne(
       { email, isActive: true },
-      { projection: { name: 1, email: 1, role: 1, photoUrl: 1 } }
+      { projection: { name: 1, email: 1, role: 1, photoUrl: 1, reportsTo: 1, zone: 1 } }
     );
 
     if (!user) {
@@ -85,10 +85,12 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       success: true,
       user: {
-        name:     user.name,
-        email:    user.email,
-        role:     user.role,
-        photoUrl: picture || user.photoUrl || "",
+        name:      user.name,
+        email:     user.email,
+        role:      user.role,
+        photoUrl:  picture || user.photoUrl || "",
+        reportsTo: user.reportsTo || "",
+        zone:      user.zone || "",
       },
     });
 
