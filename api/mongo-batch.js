@@ -818,9 +818,8 @@ async function computeSalesAggregate(db) {
     const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
     const lcl  = activeMonths.map(m => Math.round((monthData[m]?.lcl  || 0) * 100) / 100);
 
-    // Use rep's own target if set; otherwise fall back to zone target
-    const zoneTgt = zoneTargetsByFY.FY27[meta.zone] || zoneTargetsByFY.FY26[meta.zone] || {};
-    const repTgt = meta.monthlyTarget > 0 ? meta.monthlyTarget : (zoneTgt.monthlyTarget || 0);
+    // Use rep's own target from sheet
+    const repTgt = meta.monthlyTarget || 0;
 
     repsRaw.push({
       name:  meta.displayName,
@@ -834,6 +833,48 @@ async function computeSalesAggregate(db) {
       weekData: repWeekData[repKey] || {},
       lobData: repLobData[repKey] || {},
     });
+  }
+
+  // ── Zone-head adjustment ────────────────────────────────────────────────
+  // Zone names encode the head's name (e.g. "INAZ01 (Enterprises) - Niranjan").
+  // The zone head absorbs any unallocated portion of the zone target:
+  //   zone_head_final_target = own_target + (zone_total - sum_of_all_rep_targets_in_zone)
+  // This ensures zone totals match the Zone Target Mapping sheet exactly.
+  const zoneHeadKeyword = {}; // zone → normalized keyword to match zone head
+  for (const fy of ['FY26', 'FY27']) {
+    for (const [zone, tgtData] of Object.entries(zoneTargetsByFY[fy] || {})) {
+      if (!tgtData.monthlyTarget) continue;
+      // Extract head keyword from zone name after last " - "
+      const parts = zone.split(' - ');
+      if (parts.length >= 2) {
+        zoneHeadKeyword[zone] = parts[parts.length - 1].toLowerCase().trim();
+      }
+    }
+  }
+
+  // Sum rep targets per zone, find zone head
+  const zoneSumRepTgts = {}; // zone → sum of all rep targets
+  const zoneHeadRep = {};    // zone → repsRaw index of zone head
+  repsRaw.forEach((rep, i) => {
+    const z = rep.zone;
+    zoneSumRepTgts[z] = (zoneSumRepTgts[z] || 0) + (rep.tgt || 0);
+    const keyword = zoneHeadKeyword[z];
+    if (keyword && rep.name.toLowerCase().includes(keyword)) {
+      // Pick the rep whose name matches the zone head keyword
+      zoneHeadRep[z] = i;
+    }
+  });
+
+  // Apply adjustment to zone heads
+  for (const [zone, headIdx] of Object.entries(zoneHeadRep)) {
+    const fyForZone = 'FY26'; // targets are FY26 for now
+    const zoneTgt = (zoneTargetsByFY.FY26[zone] || zoneTargetsByFY.FY27[zone] || {}).monthlyTarget || 0;
+    if (!zoneTgt) continue;
+    const sumReps = zoneSumRepTgts[zone] || 0;
+    const remaining = zoneTgt - sumReps;
+    if (remaining > 0) {
+      repsRaw[headIdx].tgt = (repsRaw[headIdx].tgt || 0) + remaining;
+    }
   }
 
   // Cross Sales branches
