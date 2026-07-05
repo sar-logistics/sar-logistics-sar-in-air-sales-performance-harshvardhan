@@ -686,6 +686,7 @@ function updateUserField(email, fields, callback){
 
 var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{},
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
+  addUserOpen: false, addUserError: '',
   weeklyMonth: null,
   selectedQuarter: 'Q1',
   quarterYear: 'FY26',
@@ -1186,7 +1187,7 @@ function sidebar(){
   return '<aside id="sidebar-el" style="background:'+SIDEBAR_BG+';display:flex;flex-direction:column;height:100%;">'
     +'<div style="padding:18px 18px 16px;border-bottom:1px solid rgba(255,255,255,0.08);min-width:240px;">'
       +'<img src="'+SAR_LOGO_URI+'" alt="SAR" style="height:38px;width:auto;filter:brightness(0) invert(1);display:block;margin-bottom:8px;" />'
-      +'<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.45);letter-spacing:0.06em;text-transform:uppercase;" id="sidebar-subrole">Harshvardhan Rawat · Admin</div>'
+      +'<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.45);letter-spacing:0.06em;text-transform:uppercase;" id="sidebar-subrole">'+(currentUser ? currentUser.name+' · '+(currentUser.role||'') : 'SAR_IN – Air')+'</div>'
     +'</div>'
     +'<nav style="flex:1;overflow-y:auto;padding:10px;overscroll-behavior:contain;min-width:240px;">'
       +'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:6px 8px 5px;text-transform:uppercase;">Reports</div>'
@@ -1687,89 +1688,112 @@ function adminPage(){
   }
 
   var allUsers = (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]);
-  var ROLES = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
-  var ZONES = [...new Set(repsRawOriginal.map(function(r){ return r.zone; }).filter(Boolean))].sort();
+  // Sort: active first, then by name
+  allUsers.sort(function(a,b){
+    if (a.isActive !== b.isActive) return b.isActive ? 1 : -1;
+    return (a.name||'').localeCompare(b.name||'');
+  });
+
+  var ROLE_COLORS = {
+    'admin':'#7C3AED','hr':'#2563EB','regional manager':'#0891B2',
+    'zonal manager':'#059669','sales rep':'#D97706','user':'#6B7280'
+  };
 
   var rows = allUsers.map(function(u){
     var isYou = currentUser && u.email === currentUser.email;
-    var statusColor = u.isActive ? '#15875A' : '#DC2626';
-    var statusBg    = u.isActive ? '#E8F7EF' : '#FEF2F2';
-    var roleBadgeColor = {
-      'admin':'#7C3AED','hr':'#2563EB','regional manager':'#0891B2',
-      'zonal manager':'#059669','sales rep':'#D97706','user':'#6B7280'
-    }[(u.role||'').toLowerCase()] || '#6B7280';
+    var statusColor = u.isActive !== false ? '#15875A' : '#DC2626';
+    var statusBg    = u.isActive !== false ? '#E8F7EF' : '#FEF2F2';
+    var rc = ROLE_COLORS[(u.role||'').toLowerCase()] || '#6B7280';
+    var lastLogin = u.lastLogin ? new Date(u.lastLogin).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
+    var ini = (u.name||'?').split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
 
-    return '<tr style="border-bottom:1px solid #F1F5F9;'+(isYou?'background:#FAFBFF;':'')+'">'+
-      '<td style="padding:10px 12px;white-space:nowrap;">'+
+    return '<tr style="border-bottom:1px solid #F1F5F9;transition:background 0.1s;"'+
+      ' onmouseenter="this.style.background=\'#FAFBFF\'" onmouseleave="this.style.background=\'\'"'+
+      (isYou?' style="background:#FAFBFF;"':'')+'>'+
+      '<td style="padding:10px 14px;white-space:nowrap;">'+
         '<div style="display:flex;align-items:center;gap:10px;">'+
-          '<div style="width:32px;height:32px;border-radius:50%;background:'+BRAND_A1+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;">'+
-            esc((u.name||'?').split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase())+
+          '<div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;">'+
+            esc(ini)+
           '</div>'+
           '<div>'+
-            '<div style="font-size:12.5px;font-weight:700;color:#0D2B5E;">'+esc(u.name||'—')+(isYou?' <span style="font-size:9px;background:#EEF2FF;color:#4338CA;border-radius:4px;padding:1px 5px;font-weight:600;">You</span>':'')+'</div>'+
-            '<div style="font-size:11px;color:#9AAFC8;">'+esc(u.email||'—')+'</div>'+
+            '<div style="font-size:12.5px;font-weight:700;color:#0D2B5E;">'+esc(u.name||'—')+
+              (isYou?' <span style="font-size:9px;background:#EEF2FF;color:#4338CA;border-radius:4px;padding:1px 5px;font-weight:600;vertical-align:middle;">You</span>':'')+
+            '</div>'+
+            '<div style="font-size:10.5px;color:#9AAFC8;margin-top:1px;">'+esc(u.email||'—')+'</div>'+
           '</div>'+
         '</div>'+
       '</td>'+
-      '<td style="padding:10px 12px;">'+
-        '<span style="font-size:10.5px;font-weight:700;color:'+roleBadgeColor+';background:'+roleBadgeColor+'18;border-radius:5px;padding:3px 8px;white-space:nowrap;">'+esc(u.role||'user')+'</span>'+
+      '<td style="padding:10px 14px;">'+
+        '<span style="font-size:10.5px;font-weight:700;color:'+rc+';background:'+rc+'18;border-radius:5px;padding:3px 9px;white-space:nowrap;text-transform:capitalize;">'+esc(u.role||'user')+'</span>'+
       '</td>'+
-      '<td style="padding:10px 12px;font-size:11.5px;color:#374151;">'+esc(u.zone||'—')+'</td>'+
-      '<td style="padding:10px 12px;font-size:11.5px;color:#374151;">'+esc(u.reportsTo||'—')+'</td>'+
-      '<td style="padding:10px 12px;">'+
-        '<span style="font-size:10.5px;font-weight:700;color:'+statusColor+';background:'+statusBg+';border-radius:5px;padding:3px 8px;">'+
-          (u.isActive?'Active':'Inactive')+
+      '<td style="padding:10px 14px;font-size:11.5px;color:#374151;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(u.zone||'')+'">'+esc(u.zone||'—')+'</td>'+
+      '<td style="padding:10px 14px;font-size:11.5px;color:#374151;">'+esc(u.reportsTo||'—')+'</td>'+
+      '<td style="padding:10px 14px;">'+
+        '<span style="font-size:10.5px;font-weight:700;color:'+statusColor+';background:'+statusBg+';border-radius:5px;padding:3px 9px;">'+
+          (u.isActive !== false ? 'Active' : 'Inactive')+
         '</span>'+
       '</td>'+
-      '<td style="padding:10px 12px;font-size:11px;color:#9AAFC8;">'+
-        (u.lastLogin ? new Date(u.lastLogin).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—')+
-      '</td>'+
+      '<td style="padding:10px 14px;font-size:11px;color:#9AAFC8;">'+lastLogin+'</td>'+
+      '<td style="padding:10px 14px;font-size:11px;color:#9AAFC8;text-align:center;">'+String(u.loginCount||0)+'</td>'+
       (canEdit ?
-        '<td style="padding:10px 12px;text-align:center;">'+
-          '<button data-act="orgEditOpen" data-email="'+esc(u.email)+'" style="background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;">Edit</button>'+
+        '<td style="padding:10px 14px;text-align:center;">'+
+          '<button data-act="orgEditOpen" data-email="'+esc(u.email)+'" style="background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:5px 14px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;white-space:nowrap;">Edit</button>'+
         '</td>'
       : '<td></td>')+
     '</tr>';
   }).join('');
 
+  // Role stat cards
   var roleStats = {};
-  allUsers.forEach(function(u){ var r = u.role||'user'; roleStats[r]=(roleStats[r]||0)+1; });
-  var statCards = Object.entries(roleStats).map(function(e){
-    var c = {'admin':'#7C3AED','hr':'#2563EB','regional manager':'#0891B2','zonal manager':'#059669','sales rep':'#D97706'}[e[0].toLowerCase()]||'#6B7280';
-    return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:12px;">'+
-      '<div style="width:36px;height:36px;border-radius:10px;background:'+c+'18;display:flex;align-items:center;justify-content:center;">'+
-        '<div style="width:12px;height:12px;border-radius:50%;background:'+c+';"></div>'+
-      '</div>'+
-      '<div>'+
-        '<div style="font-size:20px;font-weight:800;color:#0D2B5E;">'+e[1]+'</div>'+
-        '<div style="font-size:10.5px;font-weight:600;color:#9AAFC8;text-transform:capitalize;">'+e[0]+'</div>'+
-      '</div>'+
+  allUsers.forEach(function(u){ var r=u.role||'user'; roleStats[r]=(roleStats[r]||0)+1; });
+  var activeCount = allUsers.filter(function(u){ return u.isActive!==false; }).length;
+
+  var statCards = [
+    { label:'Total Users', value:allUsers.length, color:BRAND_A1 },
+    { label:'Active', value:activeCount, color:'#15875A' },
+    { label:'Inactive', value:allUsers.length-activeCount, color:'#DC2626' },
+  ].concat(Object.entries(roleStats).map(function(e){
+    return { label:e[0], value:e[1], color:ROLE_COLORS[e[0].toLowerCase()]||'#6B7280' };
+  })).map(function(s){
+    return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:12px;padding:14px 18px;min-width:100px;">'+
+      '<div style="font-size:22px;font-weight:800;color:'+s.color+';">'+s.value+'</div>'+
+      '<div style="font-size:10.5px;font-weight:600;color:#9AAFC8;text-transform:capitalize;margin-top:2px;">'+esc(s.label)+'</div>'+
     '</div>';
   }).join('');
 
-  return '<div style="font-size:20px;font-weight:800;color:#0D2B5E;margin-bottom:6px;">Admin Panel</div>'+
-    '<div style="font-size:12px;color:#9AAFC8;margin-bottom:18px;">Manage users, roles and access levels · '+allUsers.length+' total users</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px;">'+statCards+'</div>'+
-    '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'+
-      '<div style="padding:14px 18px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between;">'+
-        '<span style="font-size:13px;font-weight:700;color:#0D2B5E;">All Users</span>'+
-        (!canEdit ? '<span style="font-size:11px;color:#9AAFC8;">View only — contact Admin to make changes</span>' : '')+
-      '</div>'+
-      '<div style="overflow-x:auto;">'+
-        '<table style="width:100%;border-collapse:collapse;">'+
-          '<thead><tr style="background:#F8FAFC;">'+
-            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap;">User</th>'+
-            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Role</th>'+
-            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Zone</th>'+
-            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Reports To</th>'+
-            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Status</th>'+
-            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Last Login</th>'+
-            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">'+(canEdit?'Action':'')+'</th>'+
-          '</tr></thead>'+
-          '<tbody>'+rows+'</tbody>'+
-        '</table>'+
-      '</div>'+
-    '</div>';
+  return '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;">'+
+    '<div>'+
+      '<div style="font-size:20px;font-weight:800;color:#0D2B5E;">Admin Panel</div>'+
+      '<div style="font-size:12px;color:#9AAFC8;margin-top:2px;">Manage users, roles and access · '+allUsers.length+' users</div>'+
+    '</div>'+
+    (canEdit ?
+      '<button data-act="addUserOpen" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:10px;padding:9px 18px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;gap:6px;">'+
+        '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add User'+
+      '</button>'
+    : '')+
+  '</div>'+
+  '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;">'+statCards+'</div>'+
+  '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'+
+    '<div style="padding:14px 18px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between;gap:12px;">'+
+      '<span style="font-size:13px;font-weight:700;color:#0D2B5E;flex-shrink:0;">All Users</span>'+
+      (!canEdit ? '<span style="font-size:11px;color:#9AAFC8;">View only — contact Admin to make changes</span>' : '')+
+    '</div>'+
+    '<div style="overflow-x:auto;">'+
+      '<table style="width:100%;border-collapse:collapse;min-width:800px;">'+
+        '<thead><tr style="background:#F8FAFC;">'+
+          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap;">User</th>'+
+          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Role</th>'+
+          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Zone</th>'+
+          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Reports To</th>'+
+          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Status</th>'+
+          '<th style="padding:9px 14px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Last Login</th>'+
+          '<th style="padding:9px 14px;text-align:center;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Logins</th>'+
+          '<th style="padding:9px 14px;text-align:center;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">'+(canEdit?'Action':'')+'</th>'+
+        '</tr></thead>'+
+        '<tbody>'+rows+'</tbody>'+
+      '</table>'+
+    '</div>'+
+  '</div>';
 }
 
 function customerPage(){
@@ -2033,6 +2057,57 @@ function orgEditModal(){
   '</div>';
 }
 
+
+function addUserModal(){
+  if (!state.addUserOpen) return '';
+  var ROLES = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
+  var ZONES = [...new Set(repsRawOriginal.map(function(r){ return r.zone; }).filter(Boolean))].sort();
+  var allPeople = orgDataReady ? (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]) : [];
+
+  return '<div data-act="addUserClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:60;display:flex;align-items:center;justify-content:center;">'+
+    '<div data-stop="1" style="background:#FFFFFF;border-radius:16px;padding:28px;width:440px;box-shadow:0 20px 60px rgba(13,43,94,0.2);">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
+        '<div style="font-size:16px;font-weight:800;color:#0D2B5E;">Add New User</div>'+
+        '<button data-act="addUserClose" style="background:#F4F7FB;border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px;color:#5B6678;">✕</button>'+
+      '</div>'+
+      '<div style="display:flex;flex-direction:column;gap:14px;">'+
+        '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Full Name *</label>'+
+          '<input type="text" id="add-user-name" placeholder="e.g. Rahul Sharma" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;box-sizing:border-box;" />'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Email *</label>'+
+          '<input type="email" id="add-user-email" placeholder="rahul@sarlogistics.com" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;box-sizing:border-box;" />'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Role *</label>'+
+          '<select id="add-user-role" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
+            ROLES.map(function(r){ return '<option value="'+esc(r)+'">'+esc(r)+'</option>'; }).join('')+
+          '</select>'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Zone</label>'+
+          '<select id="add-user-zone" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
+            '<option value="">None</option>'+
+            ZONES.map(function(z){ return '<option value="'+esc(z)+'">'+esc(z)+'</option>'; }).join('')+
+          '</select>'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Reports To</label>'+
+          '<select id="add-user-reportsto" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
+            '<option value="">None</option>'+
+            allPeople.map(function(p){ return '<option value="'+esc(p.email)+'">'+esc(p.name)+'</option>'; }).join('')+
+          '</select>'+
+        '</div>'+
+        (state.addUserError ? '<div style="font-size:11.5px;color:#DC2626;background:#FEF2F2;border-radius:7px;padding:8px 12px;">'+esc(state.addUserError)+'</div>' : '')+
+        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">'+
+          '<button data-act="addUserClose" style="background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 18px;font-size:12.5px;font-weight:700;color:#374151;cursor:pointer;">Cancel</button>'+
+          '<button data-act="addUserSave" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:8px;padding:9px 18px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer;">Add User</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
 
 function buildSummaryCells(e, colLabels){
   var gpSeries=[sum(e.gp)].concat(e.gp);
@@ -3074,7 +3149,7 @@ function render(){
     : state.page==='teams' ? teamsPage()
     : state.page==='admin' ? adminPage()
     : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
-  document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal();
+  document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
   requestAnimationFrame(positionAllDrops);
 }
@@ -3369,6 +3444,46 @@ document.addEventListener('click', function(ev){
     if(customerDataReady){ pending++; fetchCustomerData(done, true); }
     if(usageDataReady){ pending++; fetchUsageData(done, true); }
     if(orgDataReady){ pending++; fetchOrgData(done, true); }
+  }
+  else if(act==='addUserOpen'){
+    ev.stopPropagation();
+    state.addUserOpen = true;
+    state.addUserError = '';
+    render();
+  }
+  else if(act==='addUserClose'){
+    if(ev.target.closest('[data-stop]')&&!el.matches('[data-act="addUserClose"]')) return;
+    state.addUserOpen = false;
+    state.addUserError = '';
+    render();
+  }
+  else if(act==='addUserSave'){
+    ev.stopPropagation();
+    var nameIn  = document.getElementById('add-user-name');
+    var emailIn = document.getElementById('add-user-email');
+    var roleSel = document.getElementById('add-user-role');
+    var zoneSel = document.getElementById('add-user-zone');
+    var rtSel   = document.getElementById('add-user-reportsto');
+    var newName  = nameIn  ? nameIn.value.trim()  : '';
+    var newEmail = emailIn ? emailIn.value.trim()  : '';
+    var newRole  = roleSel ? roleSel.value         : 'Sales Rep';
+    var newZone  = zoneSel ? zoneSel.value         : '';
+    var newRT    = rtSel   ? rtSel.value           : '';
+    if(!newName){ state.addUserError='Name is required.'; render(); return; }
+    if(!newEmail){ state.addUserError='Email is required.'; render(); return; }
+    el.disabled = true; el.textContent = 'Adding...';
+    fetch('/api/mongo-batch?action=addUser', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name:newName, email:newEmail, role:newRole, zone:newZone, reportsTo:newRT })
+    }).then(function(r){ return r.json(); })
+    .then(function(data){
+      if(!data.success){ state.addUserError = data.error||'Failed to add user.'; render(); return; }
+      state.addUserOpen = false;
+      state.addUserError = '';
+      fetchOrgData(function(){ render(); }, true);
+    })
+    .catch(function(e){ state.addUserError = e.message; render(); });
   }
   else if(act==='orgEditOpen'){
     ev.stopPropagation();
