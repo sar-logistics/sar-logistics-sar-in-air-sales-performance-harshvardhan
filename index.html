@@ -2035,7 +2035,7 @@ function addUserModal(){
   var allPeople = orgDataReady ? (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]) : [];
   var defaultRole = state.addUserDefaultRole || '';
 
-  return '<div id="add-user-backdrop" data-act="addUserClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:60;display:flex;align-items:center;justify-content:center;">'+
+  return '<div data-act="addUserClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:60;display:flex;align-items:center;justify-content:center;">'+
     '<div data-stop="1" style="background:#FFFFFF;border-radius:16px;padding:28px;width:440px;max-width:95vw;box-shadow:0 20px 60px rgba(13,43,94,0.2);">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
         '<div style="font-size:16px;font-weight:800;color:#0D2B5E;">Add New User</div>'+
@@ -3362,7 +3362,7 @@ document.addEventListener('click', function(ev){
   // up to that wrapper and incorrectly trigger close. Guard against it:
   var stopEl = ev.target.closest('[data-stop]');
   var actName = el.getAttribute('data-act');
-  if(stopEl && (actName==='feedbackClose' || actName==='orgEditClose') && ev.target !== el){
+  if(stopEl && (actName==='feedbackClose' || actName==='orgEditClose' || actName==='addUserClose') && ev.target !== el){
     return; // click was inside the modal box, not on the close button/overlay itself
   }
 
@@ -3422,10 +3422,7 @@ document.addEventListener('click', function(ev){
     render();
   }
   else if(act==='addUserClose'){
-    // Only close if clicking the backdrop or explicit close/cancel buttons
-    var clickedBackdrop = ev.target.id === 'add-user-backdrop';
-    var clickedCloseBtn = ev.target.id === 'add-user-close-btn' || ev.target.id === 'add-user-cancel-btn';
-    if (!clickedBackdrop && !clickedCloseBtn && !el.matches('[data-act="addUserClose"]')) return;
+    ev.stopPropagation();
     state.addUserOpen = false;
     state.addUserError = '';
     state.addUserDefaultRole = '';
