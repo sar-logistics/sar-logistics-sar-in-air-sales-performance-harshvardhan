@@ -125,7 +125,10 @@ async function getOrgChart(db) {
       name:      u.name  || "",
       role:      u.role  || "user",
       reportsTo: (u.reportsTo || "").toLowerCase().trim(),
+      zone:      u.zone  || "",
       isActive:  u.isActive !== false,
+      lastLogin: u.lastLogin || null,
+      loginCount: u.loginCount || 0,
     };
   });
 
@@ -168,11 +171,13 @@ async function getOrgChart(db) {
 async function updateUserFields(db, email, fields) {
   if (!email) return { error: "email is required" };
   var allowed = {};
-  if (fields.role !== undefined)      allowed.role      = fields.role;
+  if (fields.role      !== undefined) allowed.role      = fields.role;
   if (fields.reportsTo !== undefined) allowed.reportsTo = String(fields.reportsTo || "").toLowerCase().trim();
+  if (fields.zone      !== undefined) allowed.zone      = String(fields.zone || "").trim();
+  if (fields.isActive  !== undefined) allowed.isActive  = !!fields.isActive;
+  if (fields.name      !== undefined) allowed.name      = String(fields.name || "").trim();
   if (Object.keys(allowed).length === 0) return { error: "No valid fields to update" };
   allowed.updatedAt = new Date();
-
   var result = await db.collection("users").updateOne(
     { email: email.toLowerCase().trim() },
     { $set: allowed }
@@ -1155,8 +1160,8 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "updateUser") {
-      const { email, role, reportsTo } = req.body || {};
-      const result = await updateUserFields(db, email, { role, reportsTo });
+      const { email, role, reportsTo, zone, isActive, name } = req.body || {};
+      const result = await updateUserFields(db, email, { role, reportsTo, zone, isActive, name });
       if (result.error) return res.status(400).json({ error: result.error });
       return res.status(200).json({ success: true, ...result });
     }
