@@ -1108,16 +1108,21 @@ module.exports = async function handler(req, res) {
         return copy;
       })});
 
-      // Serve from cache unless force refresh requested
+      // Force refresh: wipe server cache first, then re-fetch from MongoDB
+      if (forceRefresh) {
+        salesCache = null;
+        salesCacheTime = 0;
+        drillRowsCache = null;
+        drillRowsCacheTime = 0;
+      }
+
+      // Serve from cache unless force refresh
       if (salesCache && !forceRefresh) {
         const isStale = (Date.now() - salesCacheTime) > SALES_CACHE_TTL_MS;
-        if (isStale) {
-          getSalesAggregate(db, true).catch(() => {});
-        }
+        if (isStale) getSalesAggregate(db, true).catch(() => {});
         return res.status(200).json(strip(salesCache));
       }
 
-      // Force refresh or no cache — hit MongoDB
       const result = await getSalesAggregate(db, forceRefresh);
       return res.status(200).json(strip(result));
     }
