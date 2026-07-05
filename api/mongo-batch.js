@@ -565,13 +565,21 @@ async function computeSalesAggregate(db) {
   for (const row of mappingRows) {
     const key = normalizeName(row["Sales Rep Name"]);
     if (!key) continue;
-    const fy = (row._fy === "FY27") ? "FY27" : "FY26"; // untagged/legacy rows default to FY26
+    const fy = (row._fy === "FY27") ? "FY27" : "FY26";
     if (!repLookupByFY[fy]) repLookupByFY[fy] = {};
+    // Monthly Target (INR) = direct INR value (new format from July 2026 push)
+    // Monhtly Target (USD) / Monthly Target (USD) = old USD format * conversion rate
+    const tgtINR = parseFloat(row["Monthly Target (INR)"] || 0) || 0;
+    const tgtUSD = (parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR;
+    const monthlyTarget = tgtINR > 0 ? tgtINR : tgtUSD;
+    // Only overwrite if this row has a non-zero target (prefer the filled row over the empty one)
+    const existing = repLookupByFY[fy][key];
+    if (existing && existing.monthlyTarget > 0 && monthlyTarget === 0) continue;
     repLookupByFY[fy][key] = {
       displayName:   String(row["Display Name"] || row["Sales Rep Name"] || "").trim(),
       zone:          String(row["Zone"] || "Unassigned").trim(),
       lob:           String(row["LOB"] || "").trim(),
-      monthlyTarget: (parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR,
+      monthlyTarget,
       email:         String(row["Email ID"] || "").toLowerCase().trim(),
     };
   }
@@ -584,9 +592,15 @@ async function computeSalesAggregate(db) {
     if (!zone) continue;
     const fy = (row._fy === "FY27") ? "FY27" : "FY26";
     if (!zoneTargetsByFY[fy]) zoneTargetsByFY[fy] = {};
+    // Zone targets: prefer Monthly Target (INR) if present (new format), else USD * rate
+    const zTgtINR = parseFloat(row["Monthly Target (INR)"] || 0) || 0;
+    const zTgtUSD = (parseFloat(row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR;
+    const existing = zoneTargetsByFY[fy][zone];
+    const newMonthlyTarget = zTgtINR > 0 ? zTgtINR : zTgtUSD;
+    if (existing && existing.monthlyTarget > 0 && newMonthlyTarget === 0) continue;
     zoneTargetsByFY[fy][zone] = {
-      yearlyTarget:  (parseFloat(row["Yearly Target (USD)"]  || 0) || 0) * USD_TO_INR,
-      monthlyTarget: (parseFloat(row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR,
+      yearlyTarget:  (parseFloat(row["Yearly Target (INR)"] || 0) || 0) || (parseFloat(row["Yearly Target (USD)"] || 0) || 0) * USD_TO_INR,
+      monthlyTarget: newMonthlyTarget,
     };
   }
 
