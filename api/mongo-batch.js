@@ -1108,19 +1108,16 @@ module.exports = async function handler(req, res) {
         return copy;
       })});
 
-      // Always serve from salesCache if available — even if stale.
-      // This makes EVERY request instant after the first successful load.
-      // The ping endpoint keeps the cache fresh in the background.
-      if (salesCache) {
+      // Serve from cache unless force refresh requested
+      if (salesCache && !forceRefresh) {
         const isStale = (Date.now() - salesCacheTime) > SALES_CACHE_TTL_MS;
-        if (isStale && !forceRefresh) {
-          // Trigger background refresh without blocking this response
+        if (isStale) {
           getSalesAggregate(db, true).catch(() => {});
         }
         return res.status(200).json(strip(salesCache));
       }
 
-      // No cache at all (first cold start) — must wait for DB
+      // Force refresh or no cache — hit MongoDB
       const result = await getSalesAggregate(db, forceRefresh);
       return res.status(200).json(strip(result));
     }
