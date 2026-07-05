@@ -1052,12 +1052,8 @@ module.exports = async function handler(req, res) {
 
     if (action === "debug") {
       const sample = {};
-      sample.mapping_sales_targets = await db.collection("mapping_sales_targets").find({}).limit(5).toArray();
-      sample.mapping_zone_targets  = await db.collection("mapping_zone_targets").find({}).limit(10).toArray();
-      sample.jobs_air_export_count = await db.collection("jobs_air_export").countDocuments({});
-      sample.jobs_air_import_count = await db.collection("jobs_air_import").countDocuments({});
-      sample.jobs_air_export_sample = await db.collection("jobs_air_export").find({}).limit(2).toArray();
-      sample.jobs_air_import_sample = await db.collection("jobs_air_import").find({}).limit(2).toArray();
+      sample.mapping_sales_targets = await db.collection("mapping_sales_targets").find({}).toArray();
+      sample.mapping_zone_targets  = await db.collection("mapping_zone_targets").find({}).toArray();
       return res.status(200).json(sample);
     }
 
