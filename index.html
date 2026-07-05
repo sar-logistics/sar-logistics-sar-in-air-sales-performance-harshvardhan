@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v8'; // clean - no allDrillRows in localStorage
+var CACHE_VERSION = 'v13'; // force clear old cached targets
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -473,7 +473,6 @@ var _liveDataRetryCount = 0;
 
 function fetchLiveData(callback, force){
   if (force) {
-    // Clear all localStorage caches so fresh data is used everywhere
     try {
       Object.keys(localStorage).filter(function(k){ return k.startsWith('sar_'); })
         .forEach(function(k){ localStorage.removeItem(k); });
@@ -481,52 +480,58 @@ function fetchLiveData(callback, force){
       _drillResultCache = {};
     } catch(e){}
   }
-  fetch('/api/mongo-batch?action=sales' + (force ? '&force=1' : ''), {
-    priority: 'high',
-    cache: force ? 'no-cache' : 'default'
-  })
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (data.repsRaw && data.repsRaw.length > 0) {
-        _liveDataRetryCount = 0;
-        repsRawOriginal = data.repsRaw;
-        zonesRaw  = data.zones  || [];
-        months26  = data.months || months26;
-        syncDateRangeToData();
-        dataReady = true;
-        setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
-        console.log('✅ Live data:', repsRawOriginal.length, 'reps,', zonesRaw.length, 'zones');
-        if (callback) callback();
-      } else if (_liveDataRetryCount < 2 && !force) {
-        _liveDataRetryCount++;
-        console.warn('⚠️ Empty sales response, retrying ('+_liveDataRetryCount+'/2)…');
-        setTimeout(function(){ fetchLiveData(callback, force); }, 1800);
-      } else {
-        if (callback) callback();
-      }
+
+  var maxRetries = force ? 3 : 2;
+
+  function attempt(retriesLeft){
+    fetch('/api/mongo-batch?action=sales' + (force ? '&force=1' : ''), {
+      priority: 'high',
+      cache: 'no-cache'
     })
-    .catch(function(e){
-      console.warn('⚠️ Live data fetch failed:', e.message);
-      if (_liveDataRetryCount < 2 && !force) {
-        _liveDataRetryCount++;
-        setTimeout(function(){ fetchLiveData(callback, force); }, 1800);
-        return;
-      }
-      // All retries failed — use stale localStorage cache if available
-      // so the dashboard shows last-known data instead of nothing.
-      if (!dataReady) {
-        var stale = getCachedSalesData();
-        if (stale && stale.repsRaw && stale.repsRaw.length > 0) {
-          repsRawOriginal = stale.repsRaw;
-          zonesRaw  = stale.zones  || [];
-          months26  = stale.months || months26;
+      .then(function(r){
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data){
+        if (data.repsRaw && data.repsRaw.length > 0) {
+          _liveDataRetryCount = 0;
+          repsRawOriginal = data.repsRaw;
+          zonesRaw  = data.zones  || [];
+          months26  = data.months || months26;
           syncDateRangeToData();
           dataReady = true;
-          console.warn('⚠️ Using stale cache due to fetch failure');
+          setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
+          console.log('✅ Live data:', repsRawOriginal.length, 'reps, tgt[0]=', repsRawOriginal[0] && repsRawOriginal[0].tgt);
+          if (callback) callback();
+        } else if (retriesLeft > 0) {
+          console.warn('⚠️ Empty response, retrying…');
+          setTimeout(function(){ attempt(retriesLeft - 1); }, 2000);
+        } else {
+          if (callback) callback();
         }
-      }
-      if (callback) callback();
-    });
+      })
+      .catch(function(e){
+        console.warn('⚠️ Fetch failed:', e.message, 'retries left:', retriesLeft);
+        if (retriesLeft > 0) {
+          setTimeout(function(){ attempt(retriesLeft - 1); }, 2000);
+        } else {
+          if (!dataReady) {
+            var stale = getCachedSalesData();
+            if (stale && stale.repsRaw && stale.repsRaw.length > 0) {
+              repsRawOriginal = stale.repsRaw;
+              zonesRaw  = stale.zones  || [];
+              months26  = stale.months || months26;
+              syncDateRangeToData();
+              dataReady = true;
+              console.warn('⚠️ Using stale cache');
+            }
+          }
+          if (callback) callback();
+        }
+      });
+  }
+
+  attempt(maxRetries);
 }
 
 var _weekDataFetched = false;
