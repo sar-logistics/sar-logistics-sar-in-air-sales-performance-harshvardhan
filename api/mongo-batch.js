@@ -1006,20 +1006,26 @@ async function getUsageAnalytics(db, force) {
 
 async function computeUsageAnalytics(db) {
   const users = await db.collection("users").find({}).toArray();
-
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  // Count logins from login_events for accuracy (users.loginCount can be stale)
+  const loginEvents = await db.collection("login_events").find({}).toArray();
+  const loginCountByEmail = {};
+  loginEvents.forEach(function(e){
+    var em = (e.email||'').toLowerCase().trim();
+    loginCountByEmail[em] = (loginCountByEmail[em]||0) + 1;
+  });
 
   const userRows = users.map((u, i) => ({
     index:       i + 1,
     name:        u.name || "",
     email:       u.email || "",
     role:        u.role || "user",
-    totalLogins: u.loginCount || 0,
+    totalLogins: loginCountByEmail[(u.email||'').toLowerCase().trim()] || u.loginCount || 0,
     lastLogin:   u.lastLogin ? u.lastLogin.toISOString() : null,
     isActive:    u.isActive !== false,
   }));
 
-  // Sort by total logins descending, matching the reference screenshot
   userRows.sort((a, b) => b.totalLogins - a.totalLogins);
   userRows.forEach((u, i) => { u.index = i + 1; });
 
