@@ -1159,6 +1159,25 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(result);
     }
 
+    if (action === "addUser") {
+      const { email, name, role, zone, reportsTo } = req.body || {};
+      if (!email || !name) return res.status(400).json({ error: "email and name required" });
+      const newUser = {
+        email: email.toLowerCase().trim(),
+        name: name.trim(),
+        role: role || "Sales Rep",
+        zone: zone || "",
+        reportsTo: (reportsTo || "").toLowerCase().trim(),
+        isActive: true,
+        loginCount: 0,
+        createdAt: new Date(),
+      };
+      const existing = await db.collection("users").findOne({ email: newUser.email });
+      if (existing) return res.status(400).json({ error: "User with this email already exists" });
+      await db.collection("users").insertOne(newUser);
+      return res.status(200).json({ success: true });
+    }
+
     if (action === "updateUser") {
       const { email, role, reportsTo, zone, isActive, name } = req.body || {};
       const result = await updateUserFields(db, email, { role, reportsTo, zone, isActive, name });
