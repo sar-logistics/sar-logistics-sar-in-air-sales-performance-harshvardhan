@@ -561,19 +561,19 @@ async function computeSalesAggregate(db) {
   // FY26 and FY27 mapping rows now coexist in the same collection and a
   // rep's zone/target can legitimately differ between the two years.
   const mappingRows = await db.collection("mapping_sales_targets").find({}).toArray();
+  // Sort oldest→newest so newest rows overwrite old ones for the same rep+FY
+  mappingRows.sort((a,b) => new Date(a._insertedAt||0) - new Date(b._insertedAt||0));
   const repLookupByFY = { FY26: {}, FY27: {} };
   for (const row of mappingRows) {
     const key = normalizeName(row["Sales Rep Name"]);
     if (!key) continue;
     const fy = (row._fy === "FY27") ? "FY27" : "FY26";
     if (!repLookupByFY[fy]) repLookupByFY[fy] = {};
-    // Monthly Target (INR) = direct INR value (new format from July 2026 push)
-    // Monhtly Target (USD) / Monthly Target (USD) = old USD format * conversion rate
     const tgtINR = parseFloat(row["Monthly Target (INR)"] || 0) || 0;
     const tgtUSD = (parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR;
     const monthlyTarget = tgtINR > 0 ? tgtINR : tgtUSD;
-    // Only overwrite if this row has a non-zero target (prefer the filled row over the empty one)
     const existing = repLookupByFY[fy][key];
+    // Overwrite unless existing has a target and new one doesn't
     if (existing && existing.monthlyTarget > 0 && monthlyTarget === 0) continue;
     repLookupByFY[fy][key] = {
       displayName:   String(row["Display Name"] || row["Sales Rep Name"] || "").trim(),
@@ -584,22 +584,24 @@ async function computeSalesAggregate(db) {
     };
   }
 
-  // 2. Load zone targets — same per-FY split
+  // 2. Load zone targets — sort oldest→newest so newest wins
   const zoneTargetRows = await db.collection("mapping_zone_targets").find({}).toArray();
+  zoneTargetRows.sort((a,b) => new Date(a._insertedAt||0) - new Date(b._insertedAt||0));
   const zoneTargetsByFY = { FY26: {}, FY27: {} };
   for (const row of zoneTargetRows) {
     const zone = String(row["Zone"] || "").trim();
     if (!zone) continue;
     const fy = (row._fy === "FY27") ? "FY27" : "FY26";
     if (!zoneTargetsByFY[fy]) zoneTargetsByFY[fy] = {};
-    // Zone targets: prefer Monthly Target (INR) if present (new format), else USD * rate
     const zTgtINR = parseFloat(row["Monthly Target (INR)"] || 0) || 0;
     const zTgtUSD = (parseFloat(row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR;
-    const existing = zoneTargetsByFY[fy][zone];
     const newMonthlyTarget = zTgtINR > 0 ? zTgtINR : zTgtUSD;
+    const existing = zoneTargetsByFY[fy][zone];
     if (existing && existing.monthlyTarget > 0 && newMonthlyTarget === 0) continue;
+    const yearlyINR = parseFloat(row["Yearly Target (INR)"] || 0) || 0;
+    const yearlyUSD = (parseFloat(row["Yearly Target (USD)"] || 0) || 0) * USD_TO_INR;
     zoneTargetsByFY[fy][zone] = {
-      yearlyTarget:  (parseFloat(row["Yearly Target (INR)"] || 0) || 0) || (parseFloat(row["Yearly Target (USD)"] || 0) || 0) * USD_TO_INR,
+      yearlyTarget:  yearlyINR > 0 ? yearlyINR : yearlyUSD,
       monthlyTarget: newMonthlyTarget,
     };
   }
