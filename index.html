@@ -1180,6 +1180,29 @@ var IC = {
   sliders:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h14"/><circle cx="9" cy="7" r="2" fill="#fff"/><circle cx="15" cy="17" r="2" fill="#fff"/></svg>'
 };
 
+function sidebarNav(){
+  var canSeeAdmin = (function(){
+    var r = (currentUser && currentUser.role||'').toLowerCase();
+    return r==='admin'||r==='hr';
+  })();
+  return '<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:6px 8px 5px;text-transform:uppercase;">Reports</div>'
+    +'<div style="display:flex;flex-direction:column;gap:1px;">'
+      +navItem('Sales Performance',state.page==='sales',IC.bar,'page','sales')
+      +navItem('Tradelane Insights',false,IC.route,'','',true)
+      +navItem('Customer Insights',state.page==='customers',IC.person,'page','customers')
+      +navItem('Agent Insights',false,IC.headset,'','',true)
+      +'<div style="height:1px;background:rgba(255,255,255,0.07);margin:7px 6px;"></div>'
+      +navItem('Operation Pendency',false,IC.clip)
+      +navItem('Finance Pendency',false,IC.dollar)
+    +'</div>'
+    +'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>'
+    +'<div style="display:flex;flex-direction:column;gap:1px;">'
+      +navItem('Usage Analytics',state.page==='usage',IC.line,'page','usage')
+      +navItem('Teams',state.page==='teams',IC.people,'page','teams')
+      +(canSeeAdmin ? navItem('Admin Panel',state.page==='admin',IC.sliders,'page','admin') : '')
+    +'</div>';
+}
+
 function sidebar(){
   var now = new Date();
   var ts = now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0')+':'+now.getSeconds().toString().padStart(2,'0');
@@ -1189,27 +1212,8 @@ function sidebar(){
       +'<img src="'+SAR_LOGO_URI+'" alt="SAR" style="height:38px;width:auto;filter:brightness(0) invert(1);display:block;margin-bottom:8px;" />'
       +'<div style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.45);letter-spacing:0.06em;text-transform:uppercase;" id="sidebar-subrole">'+(currentUser ? currentUser.name+' · '+(currentUser.role||'') : 'SAR_IN – Air')+'</div>'
     +'</div>'
-    +'<nav style="flex:1;overflow-y:auto;padding:10px;overscroll-behavior:contain;min-width:240px;">'
-      +'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:6px 8px 5px;text-transform:uppercase;">Reports</div>'
-      +'<div style="display:flex;flex-direction:column;gap:1px;">'
-        +navItem('Sales Performance',state.page==='sales',IC.bar,'page','sales')
-        +navItem('Tradelane Insights',false,IC.route,'','',true)
-        +navItem('Customer Insights',state.page==='customers',IC.person,'page','customers')
-        +navItem('Agent Insights',false,IC.headset,'','',true)
-        +'<div style="height:1px;background:rgba(255,255,255,0.07);margin:7px 6px;"></div>'
-        +navItem('Operation Pendency',false,IC.clip)
-        +navItem('Finance Pendency',false,IC.dollar)
-      +'</div>'
-      +'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>'
-      +'<div style="display:flex;flex-direction:column;gap:1px;">'
-        +navItem('Usage Analytics',state.page==='usage',IC.line,'page','usage')
-        +navItem('Teams',state.page==='teams',IC.people,'page','teams')
-        +(function(){
-          var r = (currentUser && currentUser.role||'').toLowerCase();
-          var canSeeAdmin = r==='admin'||r==='hr';
-          return canSeeAdmin ? navItem('Admin Panel',state.page==='admin',IC.sliders,'page','admin') : '';
-        })()
-      +'</div>'
+    +'<nav id="sidebar-nav" style="flex:1;overflow-y:auto;padding:10px;overscroll-behavior:contain;min-width:240px;">'
+      +sidebarNav()
     +'</nav>'
     +'<div style="padding:10px 14px 12px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:9px;min-width:240px;">'
       +'<div id="sidebar-avatar" style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.18);color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:1.5px solid rgba(255,255,255,0.25);">HR</div>'
@@ -3109,6 +3113,10 @@ function render(){
         + '</div>'
       + '<div id="drawer-slot"></div>'
       + '<div id="dropdown-portal" style="position:fixed;top:0;left:0;z-index:9999;pointer-events:none;"></div>';
+  } else {
+    // Rebuild just the nav section so active state updates on page change
+    var navEl = document.getElementById('sidebar-nav');
+    if (navEl) navEl.innerHTML = sidebarNav();
   }
   var mainEl=document.getElementById('main-slot');
   var scrollTop=mainEl?mainEl.scrollTop:0;
