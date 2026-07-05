@@ -422,16 +422,33 @@ function computeFilteredRepsRaw(){
   var filterLobs = state.filterLobs || [];
 
   var base = repsRawOriginal;
-  // 1. Filter by rep/branch name — strict selection. When a Rep filter is
-  //    active, ONLY the selected names are shown (branches included only if
-  //    explicitly checked, same as any individual rep). This is what makes
-  //    checking/unchecking a rep actually move the Grand Total — nothing is
-  //    exempted from the filter.
+
+  // ── Role-Based Access Control ─────────────────────────────────────
+  // Sales Rep  → only their own row
+  // Zonal Manager → only reps in their zone
+  // Regional Manager / Admin / HR → all reps (no restriction)
+  if (currentUser) {
+    var role = (currentUser.role || '').toLowerCase().trim();
+    if (role === 'sales rep') {
+      // Show only the rep whose display name matches current user
+      base = base.filter(function(r){
+        return r.name && currentUser.name && r.name.toLowerCase() === currentUser.name.toLowerCase();
+      });
+    } else if (role === 'zonal manager') {
+      // Show only reps in this user's zone (zone stored in user or matched from mapping)
+      var userZone = currentUser.zone || '';
+      if (userZone) {
+        base = base.filter(function(r){ return r.zone === userZone; });
+      }
+    }
+    // Regional Manager, Admin, HR → see all
+  }
+
+  // Manual rep/LOB filters on top of RLS
   if (filterReps.length > 0) {
     base = base.filter(function(r){ return filterReps.indexOf(r.name) > -1; });
   }
 
-  // 2. Filter by LOB — rebuild gp/gpProv/gpActual/ship/tons/teu/lcl arrays from lobData
   if (filterLobs.length === 0) {
     repsRaw = base;
     return;
@@ -454,8 +471,6 @@ function computeFilteredRepsRaw(){
       gp.push(g); gpProv.push(gpv); gpActual.push(gac);
       ship.push(sh); tons.push(tn); teu.push(tu); lcl.push(lc);
     }
-    // Weekly data isn't tracked per-LOB — when a LOB filter is active, Weekly view
-    // will show zero for filtered reps (acceptable trade-off; documented behaviour)
     return Object.assign({}, r, { gp:gp, gpProv:gpProv, gpActual:gpActual, ship:ship, tons:tons, teu:teu, lcl:lcl, weekData: {} });
   });
 }
@@ -1188,7 +1203,11 @@ function sidebar(){
       +'<div style="display:flex;flex-direction:column;gap:1px;">'
         +navItem('Usage Analytics',state.page==='usage',IC.line,'page','usage')
         +navItem('Teams',state.page==='teams',IC.people,'page','teams')
-        +navItem('Admin Panel',false,IC.sliders)
+        +(function(){
+          var r = (currentUser && currentUser.role||'').toLowerCase();
+          var canSeeAdmin = r==='admin'||r==='hr';
+          return canSeeAdmin ? navItem('Admin Panel',state.page==='admin',IC.sliders,'page','admin') : '';
+        })()
       +'</div>'
     +'</nav>'
     +'<div style="padding:10px 14px 12px;border-top:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;gap:9px;min-width:240px;">'
@@ -1658,6 +1677,101 @@ function horizontalBarPanel(title, items, valueKey, fmtFn, barColor){
   +'</div>';
 }
 
+function adminPage(){
+  var role = (currentUser && currentUser.role || '').toLowerCase();
+  var canEdit = role === 'admin' || role === 'hr';
+
+  if (!orgDataReady) {
+    fetchOrgData(function(){ render(); });
+    return '<div style="display:flex;align-items:center;justify-content:center;padding:80px;"><div class="login-spinner" style="width:28px;height:28px;border-width:3px;"></div></div>';
+  }
+
+  var allUsers = (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]);
+  var ROLES = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
+  var ZONES = [...new Set(repsRawOriginal.map(function(r){ return r.zone; }).filter(Boolean))].sort();
+
+  var rows = allUsers.map(function(u){
+    var isYou = currentUser && u.email === currentUser.email;
+    var statusColor = u.isActive ? '#15875A' : '#DC2626';
+    var statusBg    = u.isActive ? '#E8F7EF' : '#FEF2F2';
+    var roleBadgeColor = {
+      'admin':'#7C3AED','hr':'#2563EB','regional manager':'#0891B2',
+      'zonal manager':'#059669','sales rep':'#D97706','user':'#6B7280'
+    }[(u.role||'').toLowerCase()] || '#6B7280';
+
+    return '<tr style="border-bottom:1px solid #F1F5F9;'+(isYou?'background:#FAFBFF;':'')+'">'+
+      '<td style="padding:10px 12px;white-space:nowrap;">'+
+        '<div style="display:flex;align-items:center;gap:10px;">'+
+          '<div style="width:32px;height:32px;border-radius:50%;background:'+BRAND_A1+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;">'+
+            esc((u.name||'?').split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase())+
+          '</div>'+
+          '<div>'+
+            '<div style="font-size:12.5px;font-weight:700;color:#0D2B5E;">'+esc(u.name||'—')+(isYou?' <span style="font-size:9px;background:#EEF2FF;color:#4338CA;border-radius:4px;padding:1px 5px;font-weight:600;">You</span>':'')+'</div>'+
+            '<div style="font-size:11px;color:#9AAFC8;">'+esc(u.email||'—')+'</div>'+
+          '</div>'+
+        '</div>'+
+      '</td>'+
+      '<td style="padding:10px 12px;">'+
+        '<span style="font-size:10.5px;font-weight:700;color:'+roleBadgeColor+';background:'+roleBadgeColor+'18;border-radius:5px;padding:3px 8px;white-space:nowrap;">'+esc(u.role||'user')+'</span>'+
+      '</td>'+
+      '<td style="padding:10px 12px;font-size:11.5px;color:#374151;">'+esc(u.zone||'—')+'</td>'+
+      '<td style="padding:10px 12px;font-size:11.5px;color:#374151;">'+esc(u.reportsTo||'—')+'</td>'+
+      '<td style="padding:10px 12px;">'+
+        '<span style="font-size:10.5px;font-weight:700;color:'+statusColor+';background:'+statusBg+';border-radius:5px;padding:3px 8px;">'+
+          (u.isActive?'Active':'Inactive')+
+        '</span>'+
+      '</td>'+
+      '<td style="padding:10px 12px;font-size:11px;color:#9AAFC8;">'+
+        (u.lastLogin ? new Date(u.lastLogin).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) : '—')+
+      '</td>'+
+      (canEdit ?
+        '<td style="padding:10px 12px;text-align:center;">'+
+          '<button data-act="orgEditOpen" data-email="'+esc(u.email)+'" style="background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;">Edit</button>'+
+        '</td>'
+      : '<td></td>')+
+    '</tr>';
+  }).join('');
+
+  var roleStats = {};
+  allUsers.forEach(function(u){ var r = u.role||'user'; roleStats[r]=(roleStats[r]||0)+1; });
+  var statCards = Object.entries(roleStats).map(function(e){
+    var c = {'admin':'#7C3AED','hr':'#2563EB','regional manager':'#0891B2','zonal manager':'#059669','sales rep':'#D97706'}[e[0].toLowerCase()]||'#6B7280';
+    return '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:12px;">'+
+      '<div style="width:36px;height:36px;border-radius:10px;background:'+c+'18;display:flex;align-items:center;justify-content:center;">'+
+        '<div style="width:12px;height:12px;border-radius:50%;background:'+c+';"></div>'+
+      '</div>'+
+      '<div>'+
+        '<div style="font-size:20px;font-weight:800;color:#0D2B5E;">'+e[1]+'</div>'+
+        '<div style="font-size:10.5px;font-weight:600;color:#9AAFC8;text-transform:capitalize;">'+e[0]+'</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+
+  return '<div style="font-size:20px;font-weight:800;color:#0D2B5E;margin-bottom:6px;">Admin Panel</div>'+
+    '<div style="font-size:12px;color:#9AAFC8;margin-bottom:18px;">Manage users, roles and access levels · '+allUsers.length+' total users</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px;">'+statCards+'</div>'+
+    '<div style="background:#FFFFFF;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'+
+      '<div style="padding:14px 18px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between;">'+
+        '<span style="font-size:13px;font-weight:700;color:#0D2B5E;">All Users</span>'+
+        (!canEdit ? '<span style="font-size:11px;color:#9AAFC8;">View only — contact Admin to make changes</span>' : '')+
+      '</div>'+
+      '<div style="overflow-x:auto;">'+
+        '<table style="width:100%;border-collapse:collapse;">'+
+          '<thead><tr style="background:#F8FAFC;">'+
+            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap;">User</th>'+
+            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Role</th>'+
+            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Zone</th>'+
+            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Reports To</th>'+
+            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Status</th>'+
+            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">Last Login</th>'+
+            '<th style="padding:9px 12px;text-align:left;font-size:9.5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.05em;">'+(canEdit?'Action':'')+'</th>'+
+          '</tr></thead>'+
+          '<tbody>'+rows+'</tbody>'+
+        '</table>'+
+      '</div>'+
+    '</div>';
+}
+
 function customerPage(){
   if (!customerDataReady) {
     return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'
@@ -1854,48 +1968,71 @@ function teamsPage(){
 
 function orgEditModal(){
   if (!orgEditTarget || !orgDataReady) return '';
-
-  var allPeople = orgData.hierarchy.concat(orgData.directReports).concat(orgData.support);
+  var allPeople = (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]);
   var person = allPeople.find(function(p){ return p.email === orgEditTarget; });
   if (!person) return '';
 
-  var roleOptions = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
-  var roleOptsHtml = roleOptions.map(function(r){
+  var ROLES = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
+  var ZONES = [...new Set(repsRawOriginal.map(function(r){ return r.zone; }).filter(Boolean))].sort();
+
+  var roleOptsHtml = ROLES.map(function(r){
     return '<option value="'+esc(r)+'"'+(r===person.role?' selected':'')+'>'+esc(r)+'</option>';
   }).join('');
 
-  var managerCandidates = orgData.hierarchy.filter(function(p){ return p.email !== person.email; });
+  var zoneOptsHtml = '<option value="">None</option>' + ZONES.map(function(z){
+    return '<option value="'+esc(z)+'"'+(z===person.zone?' selected':'')+'>'+esc(z)+'</option>';
+  }).join('');
+
+  var managerCandidates = allPeople.filter(function(p){
+    return p.email !== person.email && ['admin','regional manager','zonal manager'].indexOf((p.role||'').toLowerCase()) > -1;
+  });
   var managerOptsHtml = '<option value="">None</option>' + managerCandidates.map(function(m){
     return '<option value="'+esc(m.email)+'"'+(m.email===person.reportsTo?' selected':'')+'>'+esc(m.name)+'</option>';
   }).join('');
 
-  return '<div data-act="orgEditClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.4);z-index:300;display:flex;align-items:center;justify-content:center;animation:ovFade 0.15s ease;">'
-    +'<div data-stop="1" style="background:#FFFFFF;border-radius:12px;box-shadow:0 20px 60px rgba(15,23,40,0.18);width:380px;max-width:92vw;overflow:hidden;animation:drwSlide 0.2s cubic-bezier(0.22,1,0.36,1);">'
-      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:18px 22px;border-bottom:1px solid #F1F5F9;">'
-        +'<div>'
-          +'<div style="font-size:14px;font-weight:700;color:#15233B;">Edit Team Member</div>'
-          +'<div style="font-size:11px;color:#94A3B8;font-weight:500;margin-top:2px;">'+esc(person.name)+'</div>'
-        +'</div>'
-        +'<button data-act="orgEditClose" style="border:none;background:transparent;width:24px;height:24px;cursor:pointer;color:#94A3B8;font-size:15px;">✕</button>'
-      +'</div>'
-      +'<div style="padding:20px 22px;">'
-        +'<div style="margin-bottom:14px;">'
-          +'<div style="font-size:10.5px;font-weight:700;letter-spacing:0.04em;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Role</div>'
-          +'<select id="org-edit-role" style="width:100%;border:1px solid #E2E8F0;border-radius:7px;padding:8px 10px;font-size:12.5px;font-family:inherit;outline:none;color:#15233B;background:#fff;cursor:pointer;">'+roleOptsHtml+'</select>'
-        +'</div>'
-        +'<div style="margin-bottom:6px;">'
-          +'<div style="font-size:10.5px;font-weight:700;letter-spacing:0.04em;color:#64748B;text-transform:uppercase;margin-bottom:6px;">Reports To</div>'
-          +'<select id="org-edit-reportsto" style="width:100%;border:1px solid #E2E8F0;border-radius:7px;padding:8px 10px;font-size:12.5px;font-family:inherit;outline:none;color:#15233B;background:#fff;cursor:pointer;">'+managerOptsHtml+'</select>'
-        +'</div>'
-        +(state.orgEditError ? '<div style="font-size:11px;color:#DC2626;font-weight:600;margin-top:8px;">'+esc(state.orgEditError)+'</div>' : '')
-        +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:16px;border-top:1px solid #F1F5F9;">'
-          +'<button data-act="orgEditClose" style="border:1px solid #E2E8F0;background:#FFFFFF;border-radius:7px;padding:8px 16px;font-size:12.5px;font-weight:600;cursor:pointer;color:#374151;font-family:inherit;">Cancel</button>'
-          +'<button data-act="orgEditSave" data-email="'+esc(person.email)+'" style="border:none;background:#2563EB;color:#fff;border-radius:7px;padding:8px 16px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;">Save Changes</button>'
-        +'</div>'
-      +'</div>'
-    +'</div>'
-  +'</div>';
+  return '<div data-act="orgEditClose" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:60;display:flex;align-items:center;justify-content:center;animation:ovFade 0.16s ease;">'+
+    '<div data-stop="1" style="background:#FFFFFF;border-radius:16px;padding:28px;width:440px;box-shadow:0 20px 60px rgba(13,43,94,0.2);">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
+        '<div>'+
+          '<div style="font-size:16px;font-weight:800;color:#0D2B5E;">Edit User</div>'+
+          '<div style="font-size:11px;color:#9AAFC8;margin-top:2px;">'+esc(person.email)+'</div>'+
+        '</div>'+
+        '<button data-act="orgEditClose" style="background:#F4F7FB;border:none;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:15px;color:#5B6678;">✕</button>'+
+      '</div>'+
+      '<div style="display:flex;flex-direction:column;gap:14px;">'+
+        '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Name</label>'+
+          '<input type="text" id="org-edit-name" value="'+esc(person.name)+'" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;box-sizing:border-box;" />'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Role</label>'+
+          '<select id="org-edit-role" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+roleOptsHtml+'</select>'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Zone</label>'+
+          '<select id="org-edit-zone" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+zoneOptsHtml+'</select>'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Reports To</label>'+
+          '<select id="org-edit-reportsto" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+managerOptsHtml+'</select>'+
+        '</div>'+
+        '<div>'+
+          '<label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.05em;">Status</label>'+
+          '<select id="org-edit-active" style="width:100%;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 12px;font-size:13px;color:#0D2B5E;outline:none;background:#FFFFFF;box-sizing:border-box;">'+
+            '<option value="true"'+(person.isActive?' selected':'')+'>Active</option>'+
+            '<option value="false"+(!person.isActive?' selected':'')+'>Inactive</option>'+
+          '</select>'+
+        '</div>'+
+        (state.orgEditError ? '<div style="font-size:11.5px;color:#DC2626;background:#FEF2F2;border-radius:7px;padding:8px 12px;">'+esc(state.orgEditError)+'</div>' : '')+
+        '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">'+
+          '<button data-act="orgEditClose" style="background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:8px;padding:9px 18px;font-size:12.5px;font-weight:700;color:#374151;cursor:pointer;">Cancel</button>'+
+          '<button data-act="orgEditSave" data-email="'+esc(person.email)+'" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:8px;padding:9px 18px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer;">Save Changes</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
 }
+
 
 function buildSummaryCells(e, colLabels){
   var gpSeries=[sum(e.gp)].concat(e.gp);
@@ -2935,6 +3072,7 @@ function render(){
   mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='usage' ? usagePage()
     : state.page==='teams' ? teamsPage()
+    : state.page==='admin' ? adminPage()
     : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
@@ -3247,17 +3385,20 @@ document.addEventListener('click', function(ev){
   else if(act==='orgEditSave'){
     ev.stopPropagation();
     var email = el.getAttribute('data-email');
+    var nameSel = document.getElementById('org-edit-name');
     var roleSel = document.getElementById('org-edit-role');
+    var zoneSel = document.getElementById('org-edit-zone');
     var reportsToSel = document.getElementById('org-edit-reportsto');
+    var activeSel = document.getElementById('org-edit-active');
+    var newName = nameSel ? nameSel.value.trim() : '';
     var newRole = roleSel ? roleSel.value : '';
+    var newZone = zoneSel ? zoneSel.value : '';
     var newReportsTo = reportsToSel ? reportsToSel.value : '';
-
+    var newActive = activeSel ? activeSel.value === 'true' : true;
     if(!newRole){ state.orgEditError='Please select a role.'; render(); return; }
-
     el.disabled = true;
     el.textContent = 'Saving...';
-
-    updateUserField(email, { role:newRole, reportsTo:newReportsTo }, function(result){
+    updateUserField(email, { name:newName, role:newRole, zone:newZone, reportsTo:newReportsTo, isActive:newActive }, function(result){
       if(!result.success){
         state.orgEditError = result.error || 'Failed to save changes.';
         render();
