@@ -3603,7 +3603,7 @@ window.addEventListener('load', function() {
     fetch('/api/mongo-batch?action=ping').catch(function(){});
   }
   pingAPI(); // immediate warm-up on page load
-  setInterval(pingAPI, 3 * 60 * 1000); // ping every 3 minutes to keep container warm
+  setInterval(pingAPI, 2 * 60 * 1000); // ping every 2 minutes to keep container warm
 });
 
 </script>
