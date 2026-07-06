@@ -2901,8 +2901,18 @@ function drawer(){
 function leaderboard(){
   var M = model();
   var idxs = filteredMonthIndices();
+
+  // Only show actual Sales Reps — exclude zone aggregates, nomination sales, etc.
+  var EXCLUDE_NAMES = ['nomination sales', 'nomination sales - us', 'cross sell', 'others'];
+  var salesRepsOnly = repsRaw.filter(function(r){
+    var nameLower = (r.name||'').toLowerCase();
+    // Exclude non-individual entries
+    if (EXCLUDE_NAMES.some(function(x){ return nameLower.includes(x); })) return false;
+    return true;
+  });
+
   // Sort reps by GP total for the filtered period only
-  var sorted = repsRaw.map(function(r){
+  var sorted = salesRepsOnly.map(function(r){
     var gpTotal   = sum(idxs.map(function(i){ return r.gp[i]||0; }));
     var shipTotal = sum(idxs.map(function(i){ return r.ship[i]||0; }));
     var tgtTotal  = r.tgt * idxs.length;
