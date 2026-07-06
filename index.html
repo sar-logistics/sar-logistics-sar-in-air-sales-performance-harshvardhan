@@ -2081,11 +2081,214 @@ function opPage(){
       fetchOpData(function(){ opDataLoading = false; render(); });
     }
     return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'
-      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'
+      +'<div style="width:18px;height:18px;border:2.5px solid #7C3AED;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading operation pendency\u2026</div>'
       +'</div>';
   }
-  return pendencyPage(opData, 'Operation Pendency', 'OL Pending Jobs', 'OL Done Jobs', '#7C3AED', true);
+
+  var d = opData;
+  var isWeekly = state.reportView === 'Weekly';
+  var idxs = filteredMonthIndices();
+  var activeCols = isWeekly ? filteredWeekKeys() : idxs.map(function(i){ return months26[i]; });
+  var colHeaders = isWeekly ? activeCols.map(function(wk){ return wk.replace('2026-',''); }) : activeCols;
+
+  var BRAND = '#7C3AED';
+
+  // Build repsFiltered with jobOwners
+  var repsFiltered = (d.reps||[]).map(function(rep){
+    function colData(monthData){
+      return activeCols.map(function(col){
+        var m = isWeekly ? (state.weeklyMonth||months26[months26.length-1]) : col;
+        return monthData[m] || {pending:0,done:0};
+      });
+    }
+    var cd = colData(rep.monthData);
+    var tp = cd.reduce(function(s,c){return s+c.pending;},0);
+    var td = cd.reduce(function(s,c){return s+c.done;},0);
+    var jos = (rep.jobOwners||[]).map(function(jo){
+      var jcd = colData(jo.monthData);
+      var jp = jcd.reduce(function(s,c){return s+c.pending;},0);
+      var jd = jcd.reduce(function(s,c){return s+c.done;},0);
+      return {name:jo.name, colData:jcd, totalPending:jp, totalDone:jd, total:jp+jd};
+    }).filter(function(j){return j.total>0;});
+    return {name:rep.name, zone:rep.zone||'Unassigned', colData:cd, totalPending:tp, totalDone:td, total:tp+td, jobOwners:jos};
+  }).filter(function(r){return r.total>0;});
+
+  // Grand totals
+  var gtP = repsFiltered.reduce(function(s,r){return s+r.totalPending;},0);
+  var gtD = repsFiltered.reduce(function(s,r){return s+r.totalDone;},0);
+  var gtT = gtP+gtD;
+
+  // Zone aggregates
+  var zoneTotals = {};
+  repsFiltered.forEach(function(r){
+    if(!zoneTotals[r.zone]) zoneTotals[r.zone]={totalPending:0,totalDone:0,total:0,colData:activeCols.map(function(){return{pending:0,done:0};})};
+    var zt=zoneTotals[r.zone];
+    zt.totalPending+=r.totalPending; zt.totalDone+=r.totalDone; zt.total+=r.total;
+    r.colData.forEach(function(cd,ci){zt.colData[ci].pending+=cd.pending||0;zt.colData[ci].done+=cd.done||0;});
+  });
+  var CROSS='Cross Sales';
+  var zoneOrder=Object.keys(zoneTotals).sort(function(a,b){
+    if(a===CROSS&&b!==CROSS)return 1; if(b===CROSS&&a!==CROSS)return -1;
+    return a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'});
+  });
+
+  var dateLabel = activeCols.length===0?'\u2014':activeCols.length===1?activeCols[0]:activeCols[0]+' \u2013 '+activeCols[activeCols.length-1];
+
+  function ini(name){return name.split(' ').map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase();}
+  function hue(name){var h=0;for(var i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))&0xffff;return h%360;}
+  function zHue(z){var h=0;for(var i=0;i<z.length;i++)h=(h*31+z.charCodeAt(i))&0xffff;return h%360;}
+
+  function numTd(v,bg){
+    var s='padding:8px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+(v>0?'700':'400')+';color:'+(v>0?'#0D2B5E':'#C5D0E0')+';white-space:nowrap;'+(bg?'background:'+bg+';':'');
+    return '<td style="'+s+'">'+v+'</td>';
+  }
+
+  // Single row: name | open | closed | total per month
+  function singleRow(nameEl, data, rowBg, zgAttr, extraStyle){
+    var hidden = (zgAttr && data._zoneCollapsed) ? 'display:none;' : '';
+    var cells = data.colData.map(function(cd){
+      return numTd(cd.pending||0)
+           + numTd(cd.done||0)
+           + numTd((cd.pending||0)+(cd.done||0));
+    }).join('');
+    return '<tr'+(zgAttr?' data-zone-group="'+zgAttr+'"':'')+' style="background:'+rowBg+';border-bottom:1px solid #EEF2F8;'+(hidden||extraStyle||'')+'">'
+      +'<td style="padding:9px 12px;vertical-align:middle;border-right:1px solid #EEF2F8;white-space:nowrap;">'+nameEl+'</td>'
+      + numTd(data.totalPending, '#FFF5F5')
+      + numTd(data.totalDone,    '#F0FDF4')
+      + numTd(data.total,        '#FEFBEB')
+      + cells
+      +'</tr>';
+  }
+
+  // KPI cards
+  var kpis = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">'
+    +'<div style="background:#fff;border:1px solid #E3EAF3;border-radius:10px;border-top:3px solid #E53E3E;padding:16px 20px;">'
+      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#E53E3E;text-transform:uppercase;margin-bottom:6px;">OL Pending Jobs</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:28px;font-weight:800;color:#E53E3E;line-height:1;">'+gtP+'</div>'
+      +'<div style="font-size:11px;color:#94A3B8;margin-top:4px;">Operation Lock empty</div>'
+    +'</div>'
+    +'<div style="background:#fff;border:1px solid #E3EAF3;border-radius:10px;border-top:3px solid #0A7E53;padding:16px 20px;">'
+      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#0A7E53;text-transform:uppercase;margin-bottom:6px;">OL Done Jobs</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:28px;font-weight:800;color:#0A7E53;line-height:1;">'+gtD+'</div>'
+      +'<div style="font-size:11px;color:#94A3B8;margin-top:4px;">Operation Lock filled</div>'
+    +'</div>'
+    +'<div style="background:#fff;border:1px solid #E3EAF3;border-radius:10px;border-top:3px solid '+BRAND+';padding:16px 20px;">'
+      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:'+BRAND+';text-transform:uppercase;margin-bottom:6px;">Total Jobs</div>'
+      +'<div style="font-family:\'DM Mono\',monospace;font-size:28px;font-weight:800;color:'+BRAND+';line-height:1;">'+gtT+'</div>'
+      +'<div style="font-size:11px;color:#94A3B8;margin-top:4px;">All shipments</div>'
+    +'</div>'
+  +'</div>';
+
+  // Build multi-column headers: for each month col → 3 sub-headers
+  var thBase='padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#8B97A8;text-transform:uppercase;white-space:nowrap;background:#F8FAFC;text-align:right;';
+  var gtBase='padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap;text-align:right;';
+
+  var subColThs = colHeaders.map(function(h){
+    return '<th colspan="3" style="'+thBase+'text-align:center;border-left:1px solid #E3EAF3;">'+h+'</th>';
+  }).join('');
+
+  var subSubThs = colHeaders.map(function(){
+    return '<th style="'+thBase+'border-left:1px solid #E3EAF3;">\uD83D\uDD34 Open</th>'
+         + '<th style="'+thBase+'">\u2705 Closed</th>'
+         + '<th style="'+thBase+'">Total</th>';
+  }).join('');
+
+  var thead = '<thead>'
+    +'<tr style="border-bottom:1px solid #E3EAF3;">'
+      +'<th rowspan="2" style="'+thBase+'text-align:left;width:200px;vertical-align:bottom;border-right:1px solid #EEF2F8;">Sales Rep / Job Owner</th>'
+      +'<th style="'+gtBase+'background:#FFF5F5;color:#E53E3E;border-left:1px solid #E3EAF3;">\uD83D\uDD34 Open</th>'
+      +'<th style="'+gtBase+'background:#F0FDF4;color:#0A7E53;">Closed</th>'
+      +'<th style="'+gtBase+'background:#FEFBEB;color:#B45309;">Total</th>'
+      + subColThs
+    +'</tr>'
+    +'<tr style="border-bottom:1.5px solid #E3EAF3;">'
+      +'<th style="'+gtBase+'background:#FFF5F5;color:#E53E3E;font-size:9px;border-left:1px solid #E3EAF3;">Grand</th>'
+      +'<th style="'+gtBase+'background:#F0FDF4;color:#0A7E53;font-size:9px;">Grand</th>'
+      +'<th style="'+gtBase+'background:#FEFBEB;color:#B45309;font-size:9px;">Grand</th>'
+      + subSubThs
+    +'</tr>'
+  +'</thead>';
+
+  // Grand total row
+  var grandData = {colData:activeCols.map(function(_,ci){return{pending:repsFiltered.reduce(function(s,r){return s+(r.colData[ci]&&r.colData[ci].pending||0);},0),done:repsFiltered.reduce(function(s,r){return s+(r.colData[ci]&&r.colData[ci].done||0);},0)};}),totalPending:gtP,totalDone:gtD,total:gtT};
+  var grandNameEl='<div style="display:flex;align-items:center;gap:9px;">'
+    +'<div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#1D5FCC,#0D2B5E);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;">GT</div>'
+    +'<span style="font-size:13px;font-weight:700;color:#0D2B5E;">Grand Total</span>'
+    +'</div>';
+  var grandRow = singleRow(grandNameEl, grandData, '#F0F4FA', null, '');
+
+  // Zone + rep + job owner rows
+  var bodyRows = '';
+  zoneOrder.forEach(function(zone){
+    var zt=zoneTotals[zone]; if(!zt||zt.total===0)return;
+    var isCollapsed=state.pendencyZoneOpen[zone]===false;
+    var zAvBg='oklch(0.55 0.14 '+zHue(zone)+')';
+    var chevron='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5B6678" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.2s;transform:rotate('+(isCollapsed?'-90':'0')+'deg);flex-shrink:0;margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>';
+    var zoneNameEl='<div data-act="pendencyZoneToggle" data-zone="'+esc(zone)+'" style="display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none;">'
+      +'<div style="width:32px;height:32px;border-radius:8px;background:'+zAvBg+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+zone.slice(0,2).toUpperCase()+'</div>'
+      +'<span style="font-size:13px;font-weight:700;color:#0D2B5E;">'+esc(zone)+'</span>'
+      +chevron+'</div>';
+    bodyRows += singleRow(zoneNameEl, {colData:zt.colData,totalPending:zt.totalPending,totalDone:zt.totalDone,total:zt.total}, '#F8FAFC', null, '');
+
+    if(isCollapsed)return;
+
+    repsFiltered.filter(function(r){return r.zone===zone;}).forEach(function(rep){
+      var repOpen = state.pendencyZoneOpen['rep_'+rep.name]!==false;
+      var hasOwners = rep.jobOwners && rep.jobOwners.length>0;
+      var avatarBg='oklch(0.6 0.12 '+hue(rep.name)+')';
+      var repChevron = hasOwners
+        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5B6678" stroke-width="2.5" stroke-linecap="round" style="transform:rotate('+(repOpen?'0':'-90')+'deg);transition:transform 0.2s;flex-shrink:0;margin-left:4px;"><polyline points="6 9 12 15 18 9"/></svg>'
+        : '';
+      var repNameEl='<div '+(hasOwners?'data-act="pendencyZoneToggle" data-zone="rep_'+esc(rep.name)+'"':'')+' style="display:flex;align-items:center;gap:8px;padding-left:12px;'+(hasOwners?'cursor:pointer;user-select:none;':'')+'">'
+        +'<div style="width:28px;height:28px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini(rep.name)+'</div>'
+        +'<span style="font-size:12.5px;font-weight:600;color:#374151;">'+esc(rep.name)+'</span>'
+        +repChevron+'</div>';
+      bodyRows += singleRow(repNameEl, rep, '#FFFFFF', zone, '');
+
+      if(hasOwners && repOpen){
+        rep.jobOwners.forEach(function(jo){
+          var joAvBg='oklch(0.6 0.1 '+hue(jo.name)+')';
+          var joNameEl='<div style="display:flex;align-items:center;gap:7px;padding-left:28px;">'
+            +'<div style="width:22px;height:22px;border-radius:50%;background:'+joAvBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini(jo.name)+'</div>'
+            +'<span style="font-size:11.5px;font-weight:500;color:#64748B;">'+esc(jo.name)+'</span>'
+            +'<span style="font-size:10px;color:#94A3B8;">(Job Owner)</span>'
+            +'</div>';
+          bodyRows += singleRow(joNameEl, jo, '#FAFBFD', zone, '');
+        });
+      }
+    });
+  });
+
+  // Expand all button
+  var anyCollapsed=zoneOrder.some(function(z){return state.pendencyZoneOpen[z]===false;});
+  var btnLabel=anyCollapsed?'Expand All':'Collapse All';
+  var btnIcon=anyCollapsed
+    ?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+    :'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>';
+  var expandBtn='<button data-act="pendencyExpandAll" data-zones="'+esc(JSON.stringify(zoneOrder))+'" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+btnIcon+btnLabel+'</button>';
+
+  var table='<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(13,43,94,0.05);">'
+    +'<div style="padding:14px 18px;border-bottom:1px solid #E3EAF3;display:flex;align-items:center;justify-content:space-between;">'
+      +'<div style="display:flex;align-items:center;gap:10px;">'
+        +'<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#7C3AED,#4C1D95);display:flex;align-items:center;justify-content:center;">'
+          +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>'
+        +'</div>'
+        +'<span style="font-size:14px;font-weight:700;color:#0D2B5E;">Operation Pendency</span>'
+        +'<span style="font-size:11px;color:#94A3B8;padding:2px 8px;background:#F1F5F9;border-radius:999px;font-weight:600;">'+state.reportView.replace('View','').trim()+'</span>'
+        +expandBtn
+      +'</div>'
+      +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
+    +'</div>'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 330px);overflow-y:auto;">'
+      +'<table style="width:100%;border-collapse:collapse;min-width:700px;">'
+        +thead
+        +'<tbody>'+grandRow+bodyRows+'</tbody>'
+      +'</table>'
+    +'</div>'
+  +'</div>';
+
+  return kpis + table;
 }
 
 /* ====================== USAGE ANALYTICS ====================== */
