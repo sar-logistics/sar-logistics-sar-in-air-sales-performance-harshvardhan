@@ -1943,15 +1943,17 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     return '<td style="'+s+'">'+v+'</td>';
   }
 
-  function metricRows(data, nameEl, rowBg, isZone, zoneGroup){
+  function metricRows(data, nameEl, rowBg, isZone, zoneGroup, repGroup){
     var border = 'border-bottom:1px solid #EEF2F8;';
     var isZoneCollapsed = zoneGroup && state.pendencyZoneOpen[zoneGroup] === false;
-    var rowStyle = 'background:'+rowBg+';'+border+(isZoneCollapsed?'display:none;':'');
+    var isRepCollapsed  = repGroup  && state.pendencyZoneOpen[repGroup]  === false;
+    var rowStyle = 'background:'+rowBg+';'+border+((isZoneCollapsed||isRepCollapsed)?'display:none;':'');
     var zgAttr = zoneGroup ? ' data-zone-group="'+esc(zoneGroup)+'"' : '';
+    var rgAttr = repGroup  ? ' data-rep-group="'+esc(repGroup)+'"'   : '';
 
     function mRow(label, icon, getV, total, idx){
       var colCells = data.colData.map(function(cd){ return numCell(getV(cd)); }).join('');
-      return '<tr'+zgAttr+' style="'+rowStyle+'">'
+      return '<tr'+zgAttr+rgAttr+' style="'+rowStyle+'">'
         +(idx===0 ? '<td rowspan="3" style="padding:10px 12px;vertical-align:middle;border-right:1px solid #EEF2F8;white-space:nowrap;">'+nameEl+'</td>' : '')
         +'<td style="padding:9px 12px;font-size:12px;font-weight:500;color:#374151;white-space:nowrap;">'+icon+' '+label+'</td>'
         + numCell(total, '#FEFBEB')
@@ -2027,7 +2029,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
             +'<span style="font-size:11.5px;font-weight:500;color:#64748B;">'+esc(jo.name)+'</span>'
             +'<span style="font-size:10px;color:#94A3B8;font-weight:500;">(Job Owner)</span>'
             +'</div>';
-          bodyRows += metricRows(joFiltered, joNameEl, '#FAFBFD', false, zone);
+          bodyRows += metricRows(joFiltered, joNameEl, '#FAFBFD', false, zone, repKey);
         });
       }
     });
@@ -3986,8 +3988,28 @@ document.addEventListener('click', function(ev){
     // Toggle rows without full re-render — find all rows belonging to this zone
     var tbody = el.closest('table') && el.closest('table').querySelector('tbody');
     if (tbody) {
-      var rows = tbody.querySelectorAll('tr[data-zone-group="'+zn+'"]');
-      rows.forEach(function(r){ r.style.display = isNowCollapsed ? 'none' : ''; });
+      // Rep keys start with 'rep__' — toggle only job owner rows for that rep
+      var isRepToggle = zn.indexOf('rep__') === 0;
+      var rows = isRepToggle
+        ? tbody.querySelectorAll('tr[data-rep-group="'+zn+'"]')
+        : tbody.querySelectorAll('tr[data-zone-group="'+zn+'"]');
+      rows.forEach(function(r){
+        if (isNowCollapsed) {
+          r.style.display = 'none';
+        } else {
+          if (isRepToggle) {
+            r.style.display = ''; // rep expand: always show job owner rows
+          } else {
+            // Zone expand: only show if parent rep is not collapsed
+            var repGroup = r.getAttribute('data-rep-group');
+            if (repGroup && state.pendencyZoneOpen[repGroup] === false) {
+              r.style.display = 'none';
+            } else {
+              r.style.display = '';
+            }
+          }
+        }
+      });
       // Flip chevron
       var chevronEl = el.querySelector('svg');
       if (chevronEl) chevronEl.style.transform = isNowCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
