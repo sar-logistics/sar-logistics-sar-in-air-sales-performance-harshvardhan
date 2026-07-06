@@ -946,6 +946,7 @@ async function computeCustomerAggregate(db) {
           "Customer": 1,
           "Billed Revenue (C)": 1,
           "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1, "Financial Lock": 1, "Operation Lock": 1,
+          "Chargeable Weight": 1, "Gross Weight": 1, "Weight Unit": 1, "Chargeable Weight Unit": 1,
         }
       }
     ).toArray();
@@ -960,12 +961,12 @@ async function computeCustomerAggregate(db) {
       const _cls = { kind: "AIR", direction: collName.includes("import") ? "IMPORT" : "EXPORT" };
       const { gp }  = pickGP(job, _cls);
 
-      const rawWeight = parseFloat(job["Chargeable Weight"] || job["Gross Weight"] || 0) || 0;
-      const wUnit = String(job["Weight Unit"] || job["Chargeable Weight Unit"] || "").toLowerCase().trim();
+      const rawWeight = parseFloat(job["Chargeable Weight"] || 0) || 0;
+      const wUnit = String(job["Chargeable Weight Unit"] || "").toLowerCase().trim();
       let tons = 0;
       if (wUnit === "ton" || wUnit === "tons" || wUnit === "mt") { tons = rawWeight; }
       else if (wUnit === "lb" || wUnit === "lbs") { tons = rawWeight * 0.000453592; }
-      else { tons = rawWeight / 1000; }
+      else { tons = rawWeight / 1000; } // default: kg → tons
 
       if (!custMap[customer]) custMap[customer] = { shipments: 0, revenue: 0, gp: 0, tons: 0 };
       custMap[customer].shipments += 1;

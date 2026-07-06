@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v13'; // force clear old cached targets
+var CACHE_VERSION = 'v14'; // force clear old cached targets — v14: customer tons added
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -1791,7 +1791,7 @@ function customerPage(){
   +'</div>'
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
     + horizontalBarPanel('Top 10 Customers by Shipments', d.topByShipments, 'shipments', fmtInt, '#1D5FCC')
-    + horizontalBarPanel('Top 10 Customers by Volume (Tons)', d.topByTons,  'tons',      fmtTons,'#2E7CF6')
+    + horizontalBarPanel('Top 10 Customers by Volume (Tons)', d.topByTons||[],  'tons',      fmtTons,'#2E7CF6')
     + horizontalBarPanel('Top 10 Customers by Revenue',   d.topByRevenue,   'revenue',   fmtCur, '#1A4FA0')
     + horizontalBarPanel('Top 10 Customers by GP',        d.topByGP,        'gp',        fmtCur, '#0D2B5E')
     + horizontalBarPanel('Top 10 Customers by GP%',       d.topByGPPct,     'gpPct',     fmtPct, '#4B8CF5')
