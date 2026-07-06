@@ -2033,16 +2033,17 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         +'</div>'
         +'<span style="font-size:14px;font-weight:700;color:#0D2B5E;">'+title+'</span>'
         +'<span style="font-size:11px;color:#94A3B8;padding:2px 8px;background:#F1F5F9;border-radius:999px;font-weight:600;">'+state.reportView.replace('View','').trim()+'</span>'
-      +'</div>'
-      +'<div style="display:flex;align-items:center;gap:10px;">'
-        +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
         +(function(){
           var anyCollapsed = zoneOrder.some(function(z){ return state.pendencyZoneOpen[z] === false; });
           var btnLabel = anyCollapsed ? 'Expand All' : 'Collapse All';
+          var btnIcon = anyCollapsed
+            ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'
+            : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>';
           var zArg = esc(JSON.stringify(zoneOrder));
-          return '<button data-act="pendencyExpandAll" data-zones="'+zArg+'" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border:1.5px solid #D8E1F0;border-radius:999px;background:#F4F7FC;font-size:11px;font-weight:700;color:#1D5FCC;cursor:pointer;">'+btnLabel+'</button>';
+          return '<button data-act="pendencyExpandAll" data-zones="'+zArg+'" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+btnIcon+btnLabel+'</button>';
         })()
       +'</div>'
+      +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
     +'</div>'
     +'<div style="overflow-x:auto;max-height:calc(100vh - 330px);overflow-y:auto;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:700px;">'
