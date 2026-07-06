@@ -1068,45 +1068,50 @@ async function getFinancePendency(db, force) {
 }
 
 async function computeFinancePendency(db) {
-  // Reuse drillRowsCache if already warm, else build it
-  const now = Date.now();
-  const cacheStale = (now - drillRowsCacheTime) > SALES_CACHE_TTL_MS;
-  if (!drillRowsCache || cacheStale) {
-    await getDrillRows(db, "__warmup__", "shipments", FY_MONTHS[0]);
-  }
-  if (!drillRowsCache) return { success: false, error: "No data" };
+  // Direct lean query — only 4 fields needed, no drill cache dependency
+  const ALL_JOB_COLLS = Object.values(COLLECTIONS);
+  const repMonthMap = {}; // repName → monthLabel → { pending, done }
+  const seenMonths = new Set();
 
-  const { allRows, normByDisplayByFY } = drillRowsCache;
+  await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
+    const isExport = collName.includes("export");
+    const isImport = collName.includes("import");
+    const dateField = isExport ? "ETD Loading Port" : isImport ? "ETA Discharge" : "Job Date";
 
-  // Build rep display name lookup (normalized → display name)
-  const normToDisplay = {};
-  for (const [fy, map] of Object.entries(normByDisplayByFY || {})) {
-    for (const [display, norm] of Object.entries(map)) {
-      normToDisplay[norm] = display;
+    const jobs = await db.collection(collName).find(
+      {},
+      { projection: {
+          "Sales Person": 1,
+          "Financial Lock": 1,
+          [dateField]: 1,
+          "Job Date": 1,
+        }
+      }
+    ).toArray();
+
+    for (const job of jobs) {
+      const salesPerson = String(job["Sales Person"] || "").trim();
+      if (!salesPerson) continue;
+
+      const rawDate = job[dateField] || job["Job Date"];
+      if (!rawDate) continue;
+      const d = new Date(rawDate);
+      if (isNaN(d.getTime())) continue;
+      const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
+      if (!FY_MONTHS.includes(monthLabel)) continue;
+
+      const flDone = job["Financial Lock"] && String(job["Financial Lock"]).trim() !== "";
+
+      if (!repMonthMap[salesPerson]) repMonthMap[salesPerson] = {};
+      if (!repMonthMap[salesPerson][monthLabel]) repMonthMap[salesPerson][monthLabel] = { pending: 0, done: 0 };
+      if (flDone) repMonthMap[salesPerson][monthLabel].done++;
+      else        repMonthMap[salesPerson][monthLabel].pending++;
+      seenMonths.add(monthLabel);
     }
-  }
+  }));
 
-  // Aggregate per rep per month: flPending, flDone, total
-  // Financial Lock: empty = pending, non-empty = done
-  const repMonthMap = {}; // repDisplayName → monthLabel → { pending, done }
+  const monthsInData = FY_MONTHS.filter(m => seenMonths.has(m));
 
-  for (const row of allRows) {
-    const repNorm = row._sp;
-    if (!repNorm) continue;
-    const repDisplay = normToDisplay[repNorm] || repNorm;
-    const month = row._ml;
-    const flDone = row.financialLock && String(row.financialLock).trim() !== "";
-
-    if (!repMonthMap[repDisplay]) repMonthMap[repDisplay] = {};
-    if (!repMonthMap[repDisplay][month]) repMonthMap[repDisplay][month] = { pending: 0, done: 0 };
-    if (flDone) repMonthMap[repDisplay][month].done++;
-    else        repMonthMap[repDisplay][month].pending++;
-  }
-
-  // Build sorted unique months list from FY_MONTHS (preserves FY order)
-  const monthsInData = FY_MONTHS.filter(m => allRows.some(r => r._ml === m));
-
-  // Build rep list sorted by total pending desc
   const reps = Object.entries(repMonthMap).map(([name, monthData]) => {
     let totalPending = 0, totalDone = 0;
     for (const m of monthsInData) {
