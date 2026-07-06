@@ -3396,8 +3396,9 @@ document.addEventListener('click', function(ev){
     if(state.page==='customers' && !customerDataReady){
       fetchCustomerData(function(){ render(); });
     }
-    if(state.page==='usage' && !usageDataReady){
-      fetchUsageData(function(){ render(); });
+    if(state.page==='usage'){
+      // Always force-fetch on every visit so login counts are real-time
+      fetchUsageData(function(){ render(); }, true);
     }
     if(state.page==='teams' && !orgDataReady){
       fetchOrgData(function(){ render(); });
