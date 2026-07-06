@@ -479,6 +479,7 @@ var dataReady = false;
 var customerData = null; // { topByShipments, topByRevenue, topByGP, topByGPPct, totalCustomers }
 var financeData = null; // { months, reps, ... }
 var financeDataReady = false;
+var financeDataLoading = false;
 var customerDataReady = false;
 var usageData = null; // { totalUsers, activeUsers, loggedIn7Day, users }
 var usageDataReady = false;
@@ -1820,7 +1821,10 @@ function customerPage(){
 /* ====================== FINANCE PENDENCY ====================== */
 function financePage(){
   if (!financeDataReady) {
-    fetchFinanceData(function(){ render(); });
+    if (!financeDataLoading) {
+      financeDataLoading = true;
+      fetchFinanceData(function(){ financeDataLoading = false; render(); });
+    }
     return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'
       +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading finance pendency…</div>'
