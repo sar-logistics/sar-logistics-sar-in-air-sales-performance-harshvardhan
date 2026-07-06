@@ -1058,7 +1058,7 @@ let financeCache = null;
 let financeCacheTime = 0; // v2: zone lookup fixed
 
 let opCache = null;
-let opCacheTime = 0;
+let opCacheTime = 0; // v2: jobOwners added
 
 async function getOpPendency(db, force) {
   if (!force && opCache && (Date.now() - opCacheTime) < SALES_CACHE_TTL_MS) {

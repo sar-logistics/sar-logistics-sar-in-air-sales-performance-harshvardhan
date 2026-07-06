@@ -1857,7 +1857,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     });
     var tp = colData.reduce(function(s,c){ return s+c.pending; }, 0);
     var td = colData.reduce(function(s,c){ return s+c.done;    }, 0);
-    return { name: rep.name, zone: rep.zone||'Unassigned', colData: colData, totalPending: tp, totalDone: td, total: tp+td };
+    return { name: rep.name, zone: rep.zone||'Unassigned', colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
   }).filter(function(r){ return r.total > 0; });
 
   // Grand totals
