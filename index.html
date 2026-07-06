@@ -3610,7 +3610,11 @@ document.addEventListener('click', function(ev){
       // Always force-fetch on every visit so login counts are real-time
       fetchUsageData(function(){ render(); }, true);
     }
-    if(state.page==='finance' && !financeDataReady){
+    if(state.page==='finance'){
+      // Always re-fetch on page visit to pick up zone fixes / fresh data
+      financeDataReady = false;
+      financeDataLoading = false;
+      financeData = null;
       fetchFinanceData(function(){ render(); });
     }
     if(state.page==='teams' && !orgDataReady){

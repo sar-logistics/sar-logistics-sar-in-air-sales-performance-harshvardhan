@@ -1055,7 +1055,7 @@ async function computeUsageAnalytics(db) {
 }
 
 let financeCache = null;
-let financeCacheTime = 0;
+let financeCacheTime = 0; // v2: zone lookup fixed
 
 async function getFinancePendency(db, force) {
   if (!force && financeCache && (Date.now() - financeCacheTime) < SALES_CACHE_TTL_MS) {
@@ -1073,17 +1073,25 @@ async function computeFinancePendency(db) {
     {}, { projection: { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1, "_fy": 1 } }
   ).toArray();
 
-  // Build normName → zone lookup (prefer FY26, fallback FY27)
-  const repZoneMap = {}; // normalizedName → zone
-  const repDisplayMap = {}; // normalizedName → displayName
+  // Build lookup: normalized key → { zone, displayName }
+  // Keys: both normalized(Sales Rep Name) AND normalized(Display Name) so we match
+  // whatever format the job's "Sales Person" field uses
+  const repZoneMap = {};    // any normalized name variant → zone
+  const repDisplayMap = {}; // any normalized name variant → canonical display name
   for (const row of mappingRows) {
-    const norm = normalizeName(row["Sales Rep Name"]);
-    if (!norm) continue;
-    const zone = String(row["Zone"] || "Unassigned").trim();
-    const display = String(row["Display Name"] || row["Sales Rep Name"] || "").trim();
-    if (!repZoneMap[norm] || row._fy === "FY26") {
-      repZoneMap[norm] = zone;
-      repDisplayMap[norm] = display;
+    const rawName = row["Sales Rep Name"];
+    const display = String(row["Display Name"] || rawName || "").trim();
+    const zone    = String(row["Zone"] || "Unassigned").trim();
+    const normRaw = normalizeName(rawName);
+    const normDis = normalizeName(display);
+    // Prefer FY26 entries; don't overwrite an already-set FY26 value with FY27
+    const isFY26 = row._fy !== "FY27";
+    for (const key of [normRaw, normDis]) {
+      if (!key) continue;
+      if (!repZoneMap[key] || isFY26) {
+        repZoneMap[key]    = zone;
+        repDisplayMap[key] = display;
+      }
     }
   }
 
