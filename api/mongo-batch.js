@@ -960,10 +960,18 @@ async function computeCustomerAggregate(db) {
       const _cls = { kind: "AIR", direction: collName.includes("import") ? "IMPORT" : "EXPORT" };
       const { gp }  = pickGP(job, _cls);
 
-      if (!custMap[customer]) custMap[customer] = { shipments: 0, revenue: 0, gp: 0 };
+      const rawWeight = parseFloat(job["Chargeable Weight"] || job["Gross Weight"] || 0) || 0;
+      const wUnit = String(job["Weight Unit"] || job["Chargeable Weight Unit"] || "").toLowerCase().trim();
+      let tons = 0;
+      if (wUnit === "ton" || wUnit === "tons" || wUnit === "mt") { tons = rawWeight; }
+      else if (wUnit === "lb" || wUnit === "lbs") { tons = rawWeight * 0.000453592; }
+      else { tons = rawWeight / 1000; }
+
+      if (!custMap[customer]) custMap[customer] = { shipments: 0, revenue: 0, gp: 0, tons: 0 };
       custMap[customer].shipments += 1;
       custMap[customer].revenue   += revenue;
       custMap[customer].gp        += gp;
+      custMap[customer].tons      += tons;
     }
   }
 
@@ -972,6 +980,7 @@ async function computeCustomerAggregate(db) {
     shipments: d.shipments,
     revenue:   Math.round(d.revenue),
     gp:        Math.round(d.gp),
+    tons:      Math.round(d.tons * 100) / 100,
     gpPct:     d.revenue > 0 ? Math.round((d.gp / d.revenue) * 1000) / 10 : 0,
   }));
 
@@ -984,6 +993,7 @@ async function computeCustomerAggregate(db) {
     topByShipments: top10(customers, "shipments"),
     topByRevenue:   top10(customers, "revenue"),
     topByGP:        top10(customers, "gp"),
+    topByTons:      top10(customers.filter(c => c.tons > 0), "tons"),
     topByGPPct:     top10(customers.filter(c => c.shipments >= 2), "gpPct"), // filter noise from 1-off jobs
     totalCustomers: customers.length,
     pushedAt: new Date().toISOString(),
