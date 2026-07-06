@@ -1994,17 +1994,23 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
 
     // Reps under this zone
     repsFiltered.filter(function(r){ return r.zone===zone; }).forEach(function(rep){
+      var repKey = 'rep__' + zone + '__' + rep.name;
+      var repCollapsed = state.pendencyZoneOpen[repKey] === false;
+      var hasOwners = showJobOwners && rep.jobOwners && rep.jobOwners.length > 0;
       var avatarBg = 'oklch(0.6 0.12 '+hue(rep.name)+')';
-      var repNameEl = '<div style="display:flex;align-items:center;gap:9px;padding-left:14px;">'
+      var chevron = hasOwners
+        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.2s;transform:rotate('+(repCollapsed?'-90':'0')+'deg);flex-shrink:0;margin-left:2px;"><polyline points="6 9 12 15 18 9"/></svg>'
+        : '';
+      var repNameEl = '<div '+(hasOwners ? 'data-act="pendencyZoneToggle" data-zone="'+esc(repKey)+'"' : '')+' style="display:flex;align-items:center;gap:9px;padding-left:14px;'+(hasOwners?'cursor:pointer;user-select:none;':'')+'">'
         +'<div style="width:28px;height:28px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini(rep.name)+'</div>'
         +'<span style="font-size:12.5px;font-weight:600;color:#374151;">'+esc(rep.name)+'</span>'
+        +chevron
         +'</div>';
       bodyRows += metricRows(rep, repNameEl, '#FFFFFF', false, zone);
 
       // Job owners nested under rep (OL page only)
-      if (showJobOwners && rep.jobOwners && rep.jobOwners.length > 0) {
+      if (hasOwners && !repCollapsed) {
         rep.jobOwners.forEach(function(jo){
-          // Build job owner colData from filtered active cols
           var joColData = activeCols.map(function(col){
             if (isWeekly) {
               var m = state.weeklyMonth || months26[months26.length-1];
