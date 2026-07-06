@@ -1887,9 +1887,14 @@ function financePage(){
       zt.colData[ci].done    += cd.done||0;
     });
   });
-  // Order zones by total desc (matching sales performance zone order)
-  var zoneOrder = Object.keys(zoneTotals).sort(function(a,b){
-    return zoneTotals[b].total - zoneTotals[a].total;
+  // Order zones: alphanumeric (INAZ01, INAZ02...), Cross Sales always last
+  var CROSS_SALES_ZONE = 'Cross Sales';
+  var zoneOrder = Object.keys(zoneTotals).sort(function(a, b){
+    var aIsCross = a === CROSS_SALES_ZONE;
+    var bIsCross = b === CROSS_SALES_ZONE;
+    if (aIsCross && !bIsCross) return 1;
+    if (bIsCross && !aIsCross) return -1;
+    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
   });
 
   var BRAND = '#1D5FCC';
