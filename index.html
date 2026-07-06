@@ -1928,7 +1928,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // Table styles — match sales performance sizing
   var thBase = 'padding:9px 12px;font-size:10px;font-weight:700;letter-spacing:0.07em;color:#8B97A8;text-transform:uppercase;white-space:nowrap;background:#F8FAFC;';
   var colThs = colHeaders.map(function(h){ return '<th style="'+thBase+'text-align:right;">'+h+'</th>'; }).join('');
-  var thead = '<thead><tr style="border-bottom:1.5px solid #E3EAF3;">'
+  var thead = '<thead style="position:sticky;top:0;z-index:4;"><tr style="border-bottom:1.5px solid #E3EAF3;">'
     +'<th style="'+thBase+'width:190px;">Sales Rep</th>'
     +'<th style="'+thBase+'width:150px;">Metric</th>'
     +'<th style="'+thBase+'text-align:right;background:#FEFBEB;color:#B45309;min-width:90px;">Grand Total</th>'
@@ -2169,8 +2169,9 @@ function usagePage(){
     + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
   +'</div>'
   +'<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;overflow:hidden;">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 340px);">'
     +'<table style="width:100%;border-collapse:collapse;">'
-      +'<thead><tr style="background:#F8FAFC;border-bottom:2px solid #E2E8F0;">'
+      +'<thead style="position:sticky;top:0;z-index:4;"><tr style="background:#F8FAFC;border-bottom:2px solid #E2E8F0;">'
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">#</th>'
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Name</th>'
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Email</th>'
@@ -3128,7 +3129,7 @@ function drawer(){
     bodyContent = tabBar
       + '<div style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;position:relative;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
-        +'<thead><tr>'+headCells+'</tr></thead>'
+        +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
         +'<tbody id="drill-tbody">'+bodyRows+'</tbody>'
         +totalRow
       +'</table>'
@@ -3281,9 +3282,9 @@ function leaderboard(){
       +'</div>'
     +'</div>'
     // table
-    +'<div style="overflow-x:auto;">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 320px);">'
       +'<table style="width:100%;border-collapse:collapse;">'
-        +'<thead style="background:#F4F7FB;">'
+        +'<thead style="position:sticky;top:0;z-index:4;background:#F4F7FB;">'
           +'<tr>'
             +'<th style="padding:9px 14px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:left;width:42px;">#</th>'
             +'<th style="padding:9px 12px;font-size:9.5px;font-weight:700;color:#9AAFC8;text-transform:uppercase;letter-spacing:0.06em;border-bottom:2px solid #E3EAF3;text-align:left;">Sales Rep</th>'
