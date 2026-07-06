@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v14'; // force clear old cached targets — v14: customer tons added
+var CACHE_VERSION = 'v15'; // v15: full localStorage caching for all data types
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -268,8 +268,7 @@ function showDashboard() {
     loginScreen.style.display = 'none';
     appEl.style.display = 'flex';
 
-    // Render instantly from localStorage cache if we have one — no TTL,
-    // it lives until MongoDB actually has newer data
+    // ── Instant boot: load ALL caches from localStorage synchronously ──────────
     var cached = getCachedSalesData();
     if (cached) {
       repsRawOriginal = cached.repsRaw;
@@ -277,6 +276,17 @@ function showDashboard() {
       months26  = cached.months || months26;
       syncDateRangeToData();
       dataReady = true;
+    }
+
+    // Pre-populate all secondary data from localStorage before first render
+    (function bootstrapSecondaryCache() {
+      var cc = lsGet('customers'); if (cc && cc.success) { customerData = cc; customerDataReady = true; }
+      var fc = lsGet('finance');   if (fc && fc.success) { financeData  = fc; financeDataReady  = true; }
+      var oc = lsGet('op');        if (oc && oc.success) { opData       = oc; opDataReady       = true; }
+      var gc = lsGet('org');       if (gc && gc.success) { orgData      = gc; orgDataReady      = true; }
+    })();
+
+    if (dataReady) {
       render();
     } else {
       appEl.innerHTML = loadingScreen();
@@ -301,6 +311,13 @@ function showDashboard() {
             var p = window._pendingUserPatch;
             patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
           }
+          // Background-prefetch all secondary data after sales loads
+          // so navigation to any page is instant. Staggered to avoid
+          // hammering the server simultaneously.
+          setTimeout(function(){ fetchCustomerData(null); },  200);
+          setTimeout(function(){ fetchFinanceData(null);  },  600);
+          setTimeout(function(){ fetchOpData(null);       }, 1000);
+          setTimeout(function(){ fetchOrgData(null);      }, 1400);
         });
       }, 500);
     });
@@ -623,81 +640,74 @@ function fetchLobDataIfNeeded(callback){
     .catch(function(){ if (callback) callback(); });
 }
 
-function fetchCustomerData(callback, force){
-  fetch('/api/mongo-batch?action=customers' + (force ? '&force=1' : ''))
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (data.success) {
-        customerData = data;
-        customerDataReady = true;
-        console.log('✅ Customer data:', data.totalCustomers, 'customers');
-      }
-      if (callback) callback();
-    })
-    .catch(function(e){
-      console.warn('⚠️ Customer data failed:', e.message);
-      if (callback) callback();
-    });
+// ── Generic localStorage cache helpers ───────────────────────────────────────
+var CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours — matches server TTL
+
+function lsGet(key) {
+  try {
+    var raw = localStorage.getItem('sar_' + key + '_' + CACHE_VERSION);
+    if (!raw) return null;
+    var d = JSON.parse(raw);
+    // Treat as stale after TTL but still return it (caller decides to background-refresh)
+    d._isStale = d._cachedAt && (Date.now() - d._cachedAt) > CACHE_TTL_MS;
+    return d;
+  } catch(e) { return null; }
 }
 
-function fetchFinanceData(callback, force){
-  fetch('/api/mongo-batch?action=finance' + (force ? '&force=1' : ''))
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (data.success) {
-        financeData = data;
-        financeDataReady = true;
-      }
-      if (callback) callback();
-    })
-    .catch(function(e){
-      console.warn('Finance data failed:', e.message);
-      if (callback) callback();
-    });
+function lsSet(key, data) {
+  try {
+    data._cachedAt = Date.now();
+    localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, JSON.stringify(data));
+  } catch(e) { /* quota exceeded — ignore */ }
 }
 
-function fetchOpData(callback, force){
-  fetch('/api/mongo-batch?action=op' + (force ? '&force=1' : ''))
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (data.success) { opData = data; opDataReady = true; }
-      if (callback) callback();
-    })
-    .catch(function(e){ console.warn('Op data failed:', e.message); if (callback) callback(); });
+// ── Generic fetch-with-cache factory ─────────────────────────────────────────
+function makeFetcher(action, lsKey, setReady) {
+  return function(callback, force) {
+    // Serve from localStorage instantly if available and not forced
+    if (!force) {
+      var cached = lsGet(lsKey);
+      if (cached && cached.success) {
+        setReady(cached);
+        if (callback) callback();
+        // Background refresh if stale
+        if (cached._isStale) {
+          fetch('/api/mongo-batch?action=' + action + '&force=1')
+            .then(function(r){ return r.json(); })
+            .then(function(data){ if (data.success) { setReady(data); lsSet(lsKey, data); render(); } })
+            .catch(function(){});
+        }
+        return;
+      }
+    }
+    // No cache or forced — fetch live
+    fetch('/api/mongo-batch?action=' + action + (force ? '&force=1' : ''))
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (data.success) { setReady(data); lsSet(lsKey, data); }
+        if (callback) callback();
+      })
+      .catch(function(e){
+        console.warn('⚠️ ' + action + ' failed:', e.message);
+        if (callback) callback();
+      });
+  };
 }
+
+var fetchCustomerData = makeFetcher('customers', 'customers', function(d){ customerData = d; customerDataReady = true; });
+var fetchFinanceData  = makeFetcher('finance',   'finance',   function(d){ financeData  = d; financeDataReady  = true; });
+var fetchOpData       = makeFetcher('op',        'op',        function(d){ opData       = d; opDataReady       = true; });
+var fetchOrgData      = makeFetcher('org',       'org',       function(d){ orgData      = d; orgDataReady      = true; });
 
 function fetchUsageData(callback, force){
+  // Usage always fetches live (login counts must be real-time)
   fetch('/api/mongo-batch?action=usage' + (force ? '&force=1' : ''))
     .then(function(r){ return r.json(); })
     .then(function(data){
-      if (data.success) {
-        usageData = data;
-        usageDataReady = true;
-        console.log('✅ Usage data:', data.totalUsers, 'users');
-      }
+      if (data.success) { usageData = data; usageDataReady = true; }
       if (callback) callback();
     })
-    .catch(function(e){
-      console.warn('⚠️ Usage data failed:', e.message);
-      if (callback) callback();
-    });
-}
-
-function fetchOrgData(callback, force){
-  fetch('/api/mongo-batch?action=org' + (force ? '&force=1' : ''))
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (data.success) {
-        orgData = data;
-        orgDataReady = true;
-        console.log('✅ Org data:', data.totalUsers, 'users');
-      }
-      if (callback) callback();
-    })
-    .catch(function(e){
-      console.warn('⚠️ Org data failed:', e.message);
-      if (callback) callback();
-    });
+    .catch(function(e){ console.warn('⚠️ usage failed:', e.message); if (callback) callback(); });
 }
 
 function updateUserField(email, fields, callback){
@@ -3703,12 +3713,10 @@ document.addEventListener('click', function(ev){
       // Always force-fetch on every visit so login counts are real-time
       fetchUsageData(function(){ render(); }, true);
     }
-    if(state.page==='finance'){
-      financeDataReady = false; financeDataLoading = false; financeData = null;
+    if(state.page==='finance' && !financeDataReady){
       fetchFinanceData(function(){ render(); });
     }
-    if(state.page==='op'){
-      opDataReady = false; opDataLoading = false; opData = null;
+    if(state.page==='op' && !opDataReady){
       fetchOpData(function(){ render(); });
     }
     if(state.page==='teams' && !orgDataReady){
@@ -3742,13 +3750,16 @@ document.addEventListener('click', function(ev){
     } catch(e){}
     _weekDataFetched = false;
     _drillResultCache = {};
+    // Reset all secondary data ready flags so pages show fresh data
+    customerDataReady = false; financeDataReady = false; financeDataLoading = false;
+    opDataReady = false; opDataLoading = false; usageDataReady = false; orgDataReady = false;
 
     fetchLiveData(done, true);
-    if(customerDataReady){ pending++; fetchCustomerData(done, true); }
-    if(usageDataReady){ pending++; fetchUsageData(done, true); }
-    if(orgDataReady){ pending++; fetchOrgData(done, true); }
-    if(financeDataReady){ pending++; fetchFinanceData(done, true); }
-    if(opDataReady){ pending++; fetchOpData(done, true); }
+    pending++; fetchCustomerData(done, true);
+    pending++; fetchFinanceData(done, true);
+    pending++; fetchOpData(done, true);
+    pending++; fetchOrgData(done, true);
+    pending++; fetchUsageData(done, true);
   }
   else if(act==='addUserOpen'){
     ev.stopPropagation();
