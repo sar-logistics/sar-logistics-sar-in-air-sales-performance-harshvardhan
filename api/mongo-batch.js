@@ -1073,19 +1073,31 @@ async function computeFinancePendency(db) {
     {}, { projection: { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1, "_fy": 1 } }
   ).toArray();
 
-  // Build lookup: normalized key → { zone, displayName }
-  // Keys: both normalized(Sales Rep Name) AND normalized(Display Name) so we match
-  // whatever format the job's "Sales Person" field uses
-  const repZoneMap = {};    // any normalized name variant → zone
-  const repDisplayMap = {}; // any normalized name variant → canonical display name
+  // Build two lookups from mapping:
+  // 1. normalized rep name → zone
+  // 2. INZ code (e.g. "INZ05") → zone name (extracted from pipe-separated Sales Rep Name fields)
+  const repZoneMap = {};    // normalized name → zone
+  const repDisplayMap = {}; // normalized name → display name
+  const inzCodeZoneMap = {}; // "INZ05" → zone name
+
   for (const row of mappingRows) {
-    const rawName = row["Sales Rep Name"];
+    const rawName = String(row["Sales Rep Name"] || "").trim();
     const display = String(row["Display Name"] || rawName || "").trim();
     const zone    = String(row["Zone"] || "Unassigned").trim();
+    const isFY26  = row._fy !== "FY27";
+
+    // Extract INZ code from pipe-separated Sales Rep Name: "Sachin | INZ16" → "INZ16"
+    const parts = rawName.split("|").map(s => s.trim());
+    for (const part of parts) {
+      if (/^IN[A-Z]?\d+$/i.test(part)) {
+        const code = part.toUpperCase();
+        if (!inzCodeZoneMap[code] || isFY26) inzCodeZoneMap[code] = zone;
+      }
+    }
+
+    // Name-based lookup (both raw and display)
     const normRaw = normalizeName(rawName);
     const normDis = normalizeName(display);
-    // Prefer FY26 entries; don't overwrite an already-set FY26 value with FY27
-    const isFY26 = row._fy !== "FY27";
     for (const key of [normRaw, normDis]) {
       if (!key) continue;
       if (!repZoneMap[key] || isFY26) {
@@ -1123,8 +1135,28 @@ async function computeFinancePendency(db) {
       if (!FY_MONTHS.includes(monthLabel)) continue;
 
       const flDone = job["Financial Lock"] && String(job["Financial Lock"]).trim() !== "";
-      const zone = repZoneMap[norm] || "Unassigned";
-      const displayName = repDisplayMap[norm] || rawName;
+
+      // Display name = first pipe segment of Sales Person field
+      const nameParts = rawName.split("|").map(s => s.trim());
+      const cleanName = nameParts[0] || rawName;
+
+      // Zone resolution priority:
+      // 1. Mapping by normalized name
+      // 2. INZ code lookup built from mapping (e.g. INZ05 → INAZ05 zone)
+      // 3. Extract zone code directly from Sales Person pipe segments
+      let zone = repZoneMap[norm] || "";
+      let displayName = repDisplayMap[norm] || cleanName;
+
+      if (!zone) {
+        // Find INZ/zone code in pipe segments and look up in inzCodeZoneMap
+        for (const part of nameParts.slice(1)) {
+          const trimmed = part.toUpperCase();
+          if (inzCodeZoneMap[trimmed]) { zone = inzCodeZoneMap[trimmed]; break; }
+          // Fallback: use the code itself as zone name if it looks like a zone
+          if (/^IN[A-Z]?\d+$/.test(trimmed)) { zone = zone || trimmed; }
+        }
+      }
+      if (!zone) zone = "Unassigned";
 
       if (!repMonthMap[norm]) repMonthMap[norm] = { zone, displayName, monthData: {} };
       if (!repMonthMap[norm].monthData[monthLabel]) repMonthMap[norm].monthData[monthLabel] = { pending: 0, done: 0 };
