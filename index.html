@@ -2902,11 +2902,13 @@ function leaderboard(){
   var M = model();
   var idxs = filteredMonthIndices();
 
-  // Only show actual Sales Reps — exclude zone aggregates, nomination sales, etc.
+  // Only show actual Sales Reps — exclude zone aggregates, nomination sales, branch/cross-sell entities
   var EXCLUDE_NAMES = ['nomination sales', 'nomination sales - us', 'cross sell', 'others'];
   var salesRepsOnly = repsRaw.filter(function(r){
+    // Exclude branch/cross-sell entities (Mumbai, AMS, etc.)
+    if (r.isBranch) return false;
     var nameLower = (r.name||'').toLowerCase();
-    // Exclude non-individual entries
+    // Exclude non-individual entries by name
     if (EXCLUDE_NAMES.some(function(x){ return nameLower.includes(x); })) return false;
     return true;
   });
