@@ -716,7 +716,7 @@ function updateUserField(email, fields, callback){
     });
 }
 
-var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{},
+var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{},
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
   addUserOpen: false, addUserError: '', addUserDefaultRole: '',
   weeklyMonth: null,
@@ -1971,18 +1971,24 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
 
   // Zone + rep rows
   var bodyRows = '';
+  var pageKey = title.replace(/\s+/g,'');
   zoneOrder.forEach(function(zone){
     var zt = zoneTotals[zone];
     if (!zt || zt.total === 0) return;
+    var isCollapsed = state.pendencyZoneOpen[zone] === false; // default open
     var zHue = zoneHueVal(zone);
     var zAvBg = 'oklch(0.55 0.14 '+zHue+')';
     var zIni = zone.slice(0,2).toUpperCase();
-    var zoneNameEl = '<div style="display:flex;align-items:center;gap:9px;">'
+    var chevron = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5B6678" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.2s;transform:rotate('+(isCollapsed?'-90':'0')+'deg);flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>';
+    var zoneNameEl = '<div data-act="pendencyZoneToggle" data-zone="'+esc(zone)+'" style="display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none;">'
       +'<div style="width:32px;height:32px;border-radius:8px;background:'+zAvBg+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+zIni+'</div>'
       +'<span style="font-size:13px;font-weight:700;color:#0D2B5E;">'+esc(zone)+'</span>'
+      + chevron
       +'</div>';
     var zoneData = { colData: zt.colData, totalPending: zt.totalPending, totalDone: zt.totalDone, total: zt.total };
     bodyRows += metricRows(zoneData, zoneNameEl, '#F8FAFC', true);
+
+    if (isCollapsed) return; // skip reps if zone collapsed
 
     // Reps under this zone
     repsFiltered.filter(function(r){ return r.zone===zone; }).forEach(function(rep){
@@ -2028,7 +2034,15 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         +'<span style="font-size:14px;font-weight:700;color:#0D2B5E;">'+title+'</span>'
         +'<span style="font-size:11px;color:#94A3B8;padding:2px 8px;background:#F1F5F9;border-radius:999px;font-weight:600;">'+state.reportView.replace('View','').trim()+'</span>'
       +'</div>'
-      +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
+      +'<div style="display:flex;align-items:center;gap:10px;">'
+        +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
+        +(function(){
+          var anyCollapsed = zoneOrder.some(function(z){ return state.pendencyZoneOpen[z] === false; });
+          var btnLabel = anyCollapsed ? 'Expand All' : 'Collapse All';
+          var zArg = esc(JSON.stringify(zoneOrder));
+          return '<button data-act="pendencyExpandAll" data-zones="'+zArg+'" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border:1.5px solid #D8E1F0;border-radius:999px;background:#F4F7FC;font-size:11px;font-weight:700;color:#1D5FCC;cursor:pointer;">'+btnLabel+'</button>';
+        })()
+      +'</div>'
     +'</div>'
     +'<div style="overflow-x:auto;max-height:calc(100vh - 330px);overflow-y:auto;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:700px;">'
@@ -3954,6 +3968,16 @@ document.addEventListener('click', function(ev){
   else if(act==='shipToggle'){ ev.stopPropagation(); var n=el.getAttribute('data-name'); state.shipOpen[n]=!state.shipOpen[n]; render(); }
   else if(act==='gpToggle'){  ev.stopPropagation(); var n=el.getAttribute('data-name'); state.gpOpen[n]  =!state.gpOpen[n];   render(); }
   else if(act==='zoneToggle'){ ev.stopPropagation(); var zn=el.getAttribute('data-zone'); state.zoneOpen[zn] = (state.zoneOpen[zn]===false) ? true : false; render(); }
+  else if(act==='pendencyZoneToggle'){ ev.stopPropagation(); var zn=el.getAttribute('data-zone'); state.pendencyZoneOpen[zn] = (state.pendencyZoneOpen[zn]===false) ? true : false; render(); }
+  else if(act==='pendencyExpandAll'){
+    ev.stopPropagation();
+    var pg = el.getAttribute('data-page');
+    var pzones = JSON.parse(el.getAttribute('data-zones')||'[]');
+    var anyCollapsed = pzones.some(function(z){ return state.pendencyZoneOpen[z] === false; });
+    var newVal = anyCollapsed ? true : false; // if any collapsed → expand all; else collapse all
+    pzones.forEach(function(z){ state.pendencyZoneOpen[z] = newVal; });
+    render();
+  }
   else if(act==='toggleAllZones'){
     ev.stopPropagation();
     var zones = getZones();
