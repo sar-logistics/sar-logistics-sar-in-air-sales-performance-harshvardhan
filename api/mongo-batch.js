@@ -1192,7 +1192,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org", "lobCheck", "drill", "ping", "finance"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -1292,6 +1292,46 @@ module.exports = async function handler(req, res) {
     if (action === "finance") {
       const result = await getFinancePendency(db, forceRefresh);
       return res.status(200).json(result);
+    }
+
+    if (action === "financeDebug") {
+      // Returns unrecognized sales person names (not in mapping)
+      const mappingRows = await db.collection("mapping_sales_targets").find(
+        {}, { projection: { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1 } }
+      ).toArray();
+      const knownNorms = new Set();
+      const knownDisplay = {};
+      for (const row of mappingRows) {
+        const n1 = normalizeName(row["Sales Rep Name"]);
+        const n2 = normalizeName(row["Display Name"] || row["Sales Rep Name"]);
+        if (n1) { knownNorms.add(n1); knownDisplay[n1] = { raw: row["Sales Rep Name"], display: row["Display Name"], zone: row["Zone"] }; }
+        if (n2) { knownNorms.add(n2); knownDisplay[n2] = { raw: row["Sales Rep Name"], display: row["Display Name"], zone: row["Zone"] }; }
+      }
+      const ALL_JOB_COLLS = Object.values(COLLECTIONS);
+      const unrecognized = {}; // norm → { rawNames: Set, count }
+      const recognized = {};
+      await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
+        const jobs = await db.collection(collName).find({}, { projection: { "Sales Person": 1 } }).toArray();
+        for (const job of jobs) {
+          const raw = String(job["Sales Person"] || "").trim();
+          if (!raw) continue;
+          const norm = normalizeName(raw);
+          if (knownNorms.has(norm)) {
+            if (!recognized[norm]) recognized[norm] = { display: knownDisplay[norm], count: 0 };
+            recognized[norm].count++;
+          } else {
+            if (!unrecognized[norm]) unrecognized[norm] = { rawNames: [], count: 0 };
+            if (!unrecognized[norm].rawNames.includes(raw)) unrecognized[norm].rawNames.push(raw);
+            unrecognized[norm].count++;
+          }
+        }
+      }));
+      return res.status(200).json({
+        success: true,
+        unrecognized: Object.entries(unrecognized).sort((a,b) => b[1].count - a[1].count).map(([norm, v]) => ({ norm, rawNames: v.rawNames, count: v.count })),
+        recognizedCount: Object.keys(recognized).length,
+        mapping: mappingRows.map(r => ({ raw: r["Sales Rep Name"], display: r["Display Name"], zone: r["Zone"] }))
+      });
     }
 
     if (action === "deleteUser") {
