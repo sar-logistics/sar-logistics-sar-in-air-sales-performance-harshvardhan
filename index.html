@@ -477,6 +477,8 @@ function computeFilteredRepsRaw(){
 var zonesRaw = [];
 var dataReady = false;
 var customerData = null; // { topByShipments, topByRevenue, topByGP, topByGPPct, totalCustomers }
+var financeData = null; // { months, reps, ... }
+var financeDataReady = false;
 var customerDataReady = false;
 var usageData = null; // { totalUsers, activeUsers, loggedIn7Day, users }
 var usageDataReady = false;
@@ -630,6 +632,22 @@ function fetchCustomerData(callback, force){
     })
     .catch(function(e){
       console.warn('⚠️ Customer data failed:', e.message);
+      if (callback) callback();
+    });
+}
+
+function fetchFinanceData(callback, force){
+  fetch('/api/mongo-batch?action=finance' + (force ? '&force=1' : ''))
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.success) {
+        financeData = data;
+        financeDataReady = true;
+      }
+      if (callback) callback();
+    })
+    .catch(function(e){
+      console.warn('Finance data failed:', e.message);
       if (callback) callback();
     });
 }
@@ -1193,7 +1211,7 @@ function sidebarNav(){
       +navItem('Agent Insights',false,IC.headset,'','',true)
       +'<div style="height:1px;background:rgba(255,255,255,0.07);margin:7px 6px;"></div>'
       +navItem('Operation Pendency',false,IC.clip)
-      +navItem('Finance Pendency',false,IC.dollar)
+      +navItem('Finance Pendency',state.page==='finance',IC.dollar,'page','finance')
     +'</div>'
     +'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>'
     +'<div style="display:flex;flex-direction:column;gap:1px;">'
@@ -1796,6 +1814,165 @@ function customerPage(){
     + horizontalBarPanel('Top 10 Customers by GP',        d.topByGP,        'gp',        fmtCur, '#0D2B5E')
     + horizontalBarPanel('Top 10 Customers by GP%',       d.topByGPPct,     'gpPct',     fmtPct, '#4B8CF5')
   +'</div>';
+}
+
+
+/* ====================== FINANCE PENDENCY ====================== */
+function financePage(){
+  if (!financeDataReady) {
+    fetchFinanceData(function(){ render(); });
+    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'
+      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'
+      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading finance pendency…</div>'
+      +'</div>';
+  }
+
+  var d = financeData;
+  var isWeekly = state.reportView === 'Weekly';
+  var activeCols, colHeaders;
+
+  if (isWeekly) {
+    // Weekly: group by ISO week key from _d
+    activeCols = filteredWeekKeys();
+    colHeaders = activeCols.map(function(wk){ return wk.replace('2026-',''); }); // e.g. W14
+  } else {
+    // Monthly/Quarterly/Yearly/Custom: use filteredMonthIndices mapped to month labels
+    var idxs = filteredMonthIndices();
+    activeCols = idxs.map(function(i){ return months26[i]; });
+    colHeaders = activeCols;
+  }
+
+  // Filter reps data to only active columns
+  var repsFiltered = d.reps.map(function(rep){
+    var colData = activeCols.map(function(col){
+      if (isWeekly) {
+        // Weekly: sum all months' data where the week key matches
+        // We store month-level data on backend, so for weekly we show monthly totals for the selected month
+        var m = state.weeklyMonth || months26[months26.length-1];
+        var md = rep.monthData[m] || { pending:0, done:0 };
+        return md;
+      }
+      return rep.monthData[col] || { pending:0, done:0 };
+    });
+    var totalPending = colData.reduce(function(s,c){ return s+c.pending; }, 0);
+    var totalDone    = colData.reduce(function(s,c){ return s+c.done;    }, 0);
+    return { name: rep.name, colData: colData, totalPending: totalPending, totalDone: totalDone, total: totalPending + totalDone };
+  }).filter(function(r){ return r.total > 0; });
+
+  // Grand totals
+  var gtPending = repsFiltered.reduce(function(s,r){ return s+r.totalPending; }, 0);
+  var gtDone    = repsFiltered.reduce(function(s,r){ return s+r.totalDone;    }, 0);
+  var gtTotal   = gtPending + gtDone;
+  var gtColData = activeCols.map(function(_, ci){
+    return {
+      pending: repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]&&r.colData[ci].pending||0); }, 0),
+      done:    repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]&&r.colData[ci].done||0);    }, 0),
+    };
+  });
+
+  var BRAND = '#1D5FCC';
+  var dateLabel = (function(){
+    if (activeCols.length === 0) return '—';
+    if (activeCols.length === 1) return activeCols[0];
+    return activeCols[0] + ' – ' + activeCols[activeCols.length-1];
+  })();
+
+  function ini(name){ return name.split(' ').map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase(); }
+  function hue(name){ var h=0; for(var i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))&0xffff; return h%360; }
+
+  // KPI cards row
+  var kpis = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">'
+    + '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:10px;border-top:3px solid #E53E3E;padding:16px 20px;">'
+        +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#E53E3E;text-transform:uppercase;margin-bottom:6px;">FL Pending Jobs</div>'
+        +'<div style="font-size:28px;font-weight:800;color:#E53E3E;line-height:1;">'+gtPending+'</div>'
+        +'<div style="font-size:11px;color:#94A3B8;margin-top:4px;">Status ≠ CLS</div>'
+      +'</div>'
+    + '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:10px;border-top:3px solid #0A7E53;padding:16px 20px;">'
+        +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#0A7E53;text-transform:uppercase;margin-bottom:6px;">FL Done Jobs</div>'
+        +'<div style="font-size:28px;font-weight:800;color:#0A7E53;line-height:1;">'+gtDone+'</div>'
+        +'<div style="font-size:11px;color:#94A3B8;margin-top:4px;">Status = CLS</div>'
+      +'</div>'
+    + '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:10px;border-top:3px solid '+BRAND+';padding:16px 20px;">'
+        +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:'+BRAND+';text-transform:uppercase;margin-bottom:6px;">Total Jobs</div>'
+        +'<div style="font-size:28px;font-weight:800;color:'+BRAND+';line-height:1;">'+gtTotal+'</div>'
+        +'<div style="font-size:11px;color:#94A3B8;margin-top:4px;">All shipments</div>'
+      +'</div>'
+    +'</div>';
+
+  // Table header
+  var thStyle = 'padding:10px 14px;font-size:10.5px;font-weight:700;letter-spacing:0.06em;color:#8B97A8;text-transform:uppercase;white-space:nowrap;';
+  var thRight = thStyle+'text-align:right;';
+
+  var colThs = colHeaders.map(function(h){
+    return '<th style="'+thRight+'">'+h+'</th>';
+  }).join('');
+
+  var thead = '<thead><tr style="background:#F8FAFC;border-bottom:1.5px solid #E3EAF3;">'
+    +'<th style="'+thStyle+' width:180px;">Sales Rep</th>'
+    +'<th style="'+thStyle+' width:180px;">Metric</th>'
+    +'<th style="'+thRight+' background:#FEFBEB;color:#B45309;">Grand Total</th>'
+    + colThs
+    +'</tr></thead>';
+
+  // Row builder
+  function repRows(rep, isGrand){
+    var nameLower = isGrand ? 'GT' : ini(rep.name);
+    var avatarBg = isGrand ? 'linear-gradient(135deg,#1D5FCC,#0D2B5E)' : 'oklch(0.6 0.12 '+hue(rep.name)+')';
+    var nameEl = isGrand
+      ? '<div style="display:flex;align-items:center;gap:10px;"><div style="width:32px;height:32px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">GT</div><span style="font-size:13px;font-weight:700;color:#0D2B5E;">Grand Total</span></div>'
+      : '<div style="display:flex;align-items:center;gap:10px;"><div style="width:32px;height:32px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+nameLower+'</div><span style="font-size:13px;font-weight:700;color:#0D2B5E;">'+esc(rep.name)+'</span></div>';
+
+    var data = isGrand
+      ? { colData: gtColData, totalPending: gtPending, totalDone: gtDone, total: gtTotal }
+      : rep;
+
+    var rowBg = isGrand ? '#F8FAFC' : '#FFFFFF';
+    var borderStyle = 'border-bottom:1px solid #EEF2F8;';
+
+    function metricRow(label, icon, getVal, totalVal, rowIdx){
+      var isFirst = rowIdx === 0;
+      var totalStyle = 'padding:9px 14px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:#0D2B5E;background:#FEFBEB;';
+      var tdCells = data.colData.map(function(cd){
+        var v = getVal(cd);
+        return '<td style="padding:9px 14px;text-align:right;font-family:'+"'DM Mono',monospace"+';font-size:12.5px;font-weight:'+(v>0?'700':'400')+';color:'+(v>0?'#0D2B5E':'#C5D0E0')+';">'+ v +'</td>';
+      }).join('');
+      return '<tr style="background:'+rowBg+';'+borderStyle+'">'
+        +(isFirst ? '<td rowspan="3" style="padding:10px 14px;vertical-align:middle;border-right:1px solid #EEF2F8;">'+nameEl+'</td>' : '')
+        +'<td style="padding:9px 14px;font-size:12px;font-weight:500;color:#374151;white-space:nowrap;">'+icon+' '+label+'</td>'
+        +'<td style="'+totalStyle+'">'+totalVal+'</td>'
+        +tdCells
+        +'</tr>';
+    }
+
+    return metricRow('FL Pending Jobs', '🔴', function(cd){ return cd.pending||0; }, data.totalPending, 0)
+         + metricRow('FL Done Jobs',    '✅',    function(cd){ return cd.done||0;    }, data.totalDone,    1)
+         + metricRow('Total Jobs',      '📊', function(cd){ return (cd.pending||0)+(cd.done||0); }, data.total, 2);
+  }
+
+  // Build all rows
+  var grandRow = repRows({ name:'Grand Total', colData: gtColData, totalPending: gtPending, totalDone: gtDone, total: gtTotal }, true);
+  var repRowsHtml = repsFiltered.map(function(r){ return repRows(r, false); }).join('');
+
+  var table = '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(13,43,94,0.05);">'
+    +'<div style="padding:14px 18px;border-bottom:1px solid #E3EAF3;display:flex;align-items:center;justify-content:space-between;">'
+      +'<div style="display:flex;align-items:center;gap:10px;">'
+        +'<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#1D5FCC,#0D2B5E);display:flex;align-items:center;justify-content:center;">'
+          +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.8 9.6c0-1 1-1.6 2.2-1.6s2.2.6 2.2 1.6c0 2.4-4.4 1.2-4.4 3.6 0 1 1 1.6 2.2 1.6s2.2-.6 2.2-1.6"/></svg>'
+        +'</div>'
+        +'<span style="font-size:14px;font-weight:700;color:#0D2B5E;">Finance Pendency</span>'
+        +'<span style="font-size:11px;color:#94A3B8;padding:2px 8px;background:#F1F5F9;border-radius:999px;font-weight:600;">'+state.reportView.replace('View','').trim()+'</span>'
+      +'</div>'
+      +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
+    +'</div>'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 340px);overflow-y:auto;">'
+      +'<table style="width:100%;border-collapse:collapse;min-width:700px;">'
+        +thead
+        +'<tbody>'+grandRow+repRowsHtml+'</tbody>'
+      +'</table>'
+    +'</div>'
+  +'</div>';
+
+  return kpis + table;
 }
 
 /* ====================== USAGE ANALYTICS ====================== */
@@ -3139,6 +3316,7 @@ function render(){
     : state.page==='usage' ? usagePage()
     : state.page==='teams' ? teamsPage()
     : state.page==='admin' ? adminPage()
+    : state.page==='finance' ? financePage()
     : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
@@ -3153,6 +3331,7 @@ function renderKeepTopbar(){
   if(mainEl) mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='usage' ? usagePage()
     : state.page==='teams' ? teamsPage()
+    : state.page==='finance' ? financePage()
     : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
   var drawerEl=document.getElementById('drawer-slot');
   if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal();
@@ -3400,6 +3579,9 @@ document.addEventListener('click', function(ev){
       // Always force-fetch on every visit so login counts are real-time
       fetchUsageData(function(){ render(); }, true);
     }
+    if(state.page==='finance' && !financeDataReady){
+      fetchFinanceData(function(){ render(); });
+    }
     if(state.page==='teams' && !orgDataReady){
       fetchOrgData(function(){ render(); });
     }
@@ -3436,6 +3618,7 @@ document.addEventListener('click', function(ev){
     if(customerDataReady){ pending++; fetchCustomerData(done, true); }
     if(usageDataReady){ pending++; fetchUsageData(done, true); }
     if(orgDataReady){ pending++; fetchOrgData(done, true); }
+    if(financeDataReady){ pending++; fetchFinanceData(done, true); }
   }
   else if(act==='addUserOpen'){
     ev.stopPropagation();

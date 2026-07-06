@@ -1054,6 +1054,76 @@ async function computeUsageAnalytics(db) {
   };
 }
 
+let financeCache = null;
+let financeCacheTime = 0;
+
+async function getFinancePendency(db, force) {
+  if (!force && financeCache && (Date.now() - financeCacheTime) < SALES_CACHE_TTL_MS) {
+    return { ...financeCache, cached: true };
+  }
+  const result = await computeFinancePendency(db);
+  financeCache = result;
+  financeCacheTime = Date.now();
+  return result;
+}
+
+async function computeFinancePendency(db) {
+  // Reuse drillRowsCache if already warm, else build it
+  const now = Date.now();
+  const cacheStale = (now - drillRowsCacheTime) > SALES_CACHE_TTL_MS;
+  if (!drillRowsCache || cacheStale) {
+    await getDrillRows(db, "__warmup__", "shipments", FY_MONTHS[0]);
+  }
+  if (!drillRowsCache) return { success: false, error: "No data" };
+
+  const { allRows, normByDisplayByFY } = drillRowsCache;
+
+  // Build rep display name lookup (normalized → display name)
+  const normToDisplay = {};
+  for (const [fy, map] of Object.entries(normByDisplayByFY || {})) {
+    for (const [display, norm] of Object.entries(map)) {
+      normToDisplay[norm] = display;
+    }
+  }
+
+  // Aggregate per rep per month: flPending, flDone, total
+  // Financial Lock: empty = pending, non-empty = done
+  const repMonthMap = {}; // repDisplayName → monthLabel → { pending, done }
+
+  for (const row of allRows) {
+    const repNorm = row._sp;
+    if (!repNorm) continue;
+    const repDisplay = normToDisplay[repNorm] || repNorm;
+    const month = row._ml;
+    const flDone = row.financialLock && String(row.financialLock).trim() !== "";
+
+    if (!repMonthMap[repDisplay]) repMonthMap[repDisplay] = {};
+    if (!repMonthMap[repDisplay][month]) repMonthMap[repDisplay][month] = { pending: 0, done: 0 };
+    if (flDone) repMonthMap[repDisplay][month].done++;
+    else        repMonthMap[repDisplay][month].pending++;
+  }
+
+  // Build sorted unique months list from FY_MONTHS (preserves FY order)
+  const monthsInData = FY_MONTHS.filter(m => allRows.some(r => r._ml === m));
+
+  // Build rep list sorted by total pending desc
+  const reps = Object.entries(repMonthMap).map(([name, monthData]) => {
+    let totalPending = 0, totalDone = 0;
+    for (const m of monthsInData) {
+      totalPending += (monthData[m]?.pending || 0);
+      totalDone    += (monthData[m]?.done    || 0);
+    }
+    return { name, monthData, totalPending, totalDone, total: totalPending + totalDone };
+  }).sort((a, b) => b.total - a.total);
+
+  return {
+    success: true,
+    months: monthsInData,
+    reps,
+    pushedAt: new Date().toISOString(),
+  };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -1173,6 +1243,11 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ error: "entity, metric, and month are required." });
       }
       const result = await getDrillRows(db, entity, metric, month);
+      return res.status(200).json(result);
+    }
+
+    if (action === "finance") {
+      const result = await getFinancePendency(db, forceRefresh);
       return res.status(200).json(result);
     }
 
