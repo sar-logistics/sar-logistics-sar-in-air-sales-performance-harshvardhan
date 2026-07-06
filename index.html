@@ -480,6 +480,9 @@ var customerData = null; // { topByShipments, topByRevenue, topByGP, topByGPPct,
 var financeData = null; // { months, reps, ... }
 var financeDataReady = false;
 var financeDataLoading = false;
+var opData = null;
+var opDataReady = false;
+var opDataLoading = false;
 var customerDataReady = false;
 var usageData = null; // { totalUsers, activeUsers, loggedIn7Day, users }
 var usageDataReady = false;
@@ -651,6 +654,16 @@ function fetchFinanceData(callback, force){
       console.warn('Finance data failed:', e.message);
       if (callback) callback();
     });
+}
+
+function fetchOpData(callback, force){
+  fetch('/api/mongo-batch?action=op' + (force ? '&force=1' : ''))
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.success) { opData = data; opDataReady = true; }
+      if (callback) callback();
+    })
+    .catch(function(e){ console.warn('Op data failed:', e.message); if (callback) callback(); });
 }
 
 function fetchUsageData(callback, force){
@@ -1211,7 +1224,7 @@ function sidebarNav(){
       +navItem('Customer Insights',state.page==='customers',IC.person,'page','customers')
       +navItem('Agent Insights',false,IC.headset,'','',true)
       +'<div style="height:1px;background:rgba(255,255,255,0.07);margin:7px 6px;"></div>'
-      +navItem('Operation Pendency',false,IC.clip)
+      +navItem('Operation Pendency',state.page==='op',IC.clip,'page','op')
       +navItem('Finance Pendency',state.page==='finance',IC.dollar,'page','finance')
     +'</div>'
     +'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>'
@@ -1819,7 +1832,7 @@ function customerPage(){
 
 
 /* ====================== FINANCE PENDENCY ====================== */
-function financePage(){
+function pendencyPage(data, title, pendingLabel, doneLabel, brandColor){
   if (!financeDataReady) {
     if (!financeDataLoading) {
       financeDataLoading = true;
@@ -1831,7 +1844,7 @@ function financePage(){
       +'</div>';
   }
 
-  var d = financeData;
+  var d = data;
   var isWeekly = state.reportView === 'Weekly';
   var activeCols, colHeaders;
 
@@ -1897,7 +1910,7 @@ function financePage(){
     return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
   });
 
-  var BRAND = '#1D5FCC';
+  var BRAND = brandColor || '#1D5FCC';
   var dateLabel = activeCols.length===0 ? '\u2014' : activeCols.length===1 ? activeCols[0] : activeCols[0]+' \u2013 '+activeCols[activeCols.length-1];
 
   function ini(name){ return name.split(' ').map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase(); }
@@ -1907,12 +1920,12 @@ function financePage(){
   // KPI cards
   var kpis = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">'
     +'<div style="background:#fff;border:1px solid #E3EAF3;border-radius:10px;border-top:3px solid #E53E3E;padding:16px 20px;">'
-      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#E53E3E;text-transform:uppercase;margin-bottom:6px;">FL Pending Jobs</div>'
+      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#E53E3E;text-transform:uppercase;margin-bottom:6px;">'+pendingLabel+'</div>'
       +'<div style="font-family:\'DM Mono\',monospace;font-size:28px;font-weight:800;color:#E53E3E;line-height:1;">'+gtPending+'</div>'
       +'<div style="font-size:11px;color:#94A3B8;margin-top:4px;">Financial Lock empty</div>'
     +'</div>'
     +'<div style="background:#fff;border:1px solid #E3EAF3;border-radius:10px;border-top:3px solid #0A7E53;padding:16px 20px;">'
-      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#0A7E53;text-transform:uppercase;margin-bottom:6px;">FL Done Jobs</div>'
+      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#0A7E53;text-transform:uppercase;margin-bottom:6px;">'+doneLabel+'</div>'
       +'<div style="font-family:\'DM Mono\',monospace;font-size:28px;font-weight:800;color:#0A7E53;line-height:1;">'+gtDone+'</div>'
       +'<div style="font-size:11px;color:#94A3B8;margin-top:4px;">Financial Lock filled</div>'
     +'</div>'
@@ -1954,8 +1967,8 @@ function financePage(){
         + colCells
         +'</tr>';
     }
-    return mRow('FL Pending Jobs','\uD83D\uDD34', function(cd){ return cd.pending||0; }, data.totalPending, 0)
-         + mRow('FL Done Jobs',   '\u2705',       function(cd){ return cd.done||0;    }, data.totalDone,    1)
+    return mRow(pendingLabel,'\uD83D\uDD34', function(cd){ return cd.pending||0; }, data.totalPending, 0)
+         + mRow(doneLabel,   '\u2705',       function(cd){ return cd.done||0;    }, data.totalDone,    1)
          + mRow('Total Jobs',     '\uD83D\uDCCA',  function(cd){ return (cd.pending||0)+(cd.done||0); }, data.total, 2);
   }
 
@@ -1999,7 +2012,7 @@ function financePage(){
         +'<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#1D5FCC,#0D2B5E);display:flex;align-items:center;justify-content:center;">'
           +'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M9.8 9.6c0-1 1-1.6 2.2-1.6s2.2.6 2.2 1.6c0 2.4-4.4 1.2-4.4 3.6 0 1 1 1.6 2.2 1.6s2.2-.6 2.2-1.6"/></svg>'
         +'</div>'
-        +'<span style="font-size:14px;font-weight:700;color:#0D2B5E;">Finance Pendency</span>'
+        +'<span style="font-size:14px;font-weight:700;color:#0D2B5E;">'+title+'</span>'
         +'<span style="font-size:11px;color:#94A3B8;padding:2px 8px;background:#F1F5F9;border-radius:999px;font-weight:600;">'+state.reportView.replace('View','').trim()+'</span>'
       +'</div>'
       +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
@@ -2013,6 +2026,36 @@ function financePage(){
   +'</div>';
 
   return kpis + table;
+}
+
+function financePage(){
+  if (!financeDataReady) {
+    if (!financeDataLoading) {
+      financeDataLoading = true;
+      fetchFinanceData(function(){ financeDataLoading = false; render(); });
+    }
+    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'
+      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'
+      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading finance pendency…</div>'
+      +'</div>';
+  }
+  return pendencyPage(financeData, 'Finance Pendency', 'FL Pending Jobs', 'FL Done Jobs', '#1D5FCC');
+}
+
+
+/* ====================== OPERATION PENDENCY ====================== */
+function opPage(){
+  if (!opDataReady) {
+    if (!opDataLoading) {
+      opDataLoading = true;
+      fetchOpData(function(){ opDataLoading = false; render(); });
+    }
+    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'
+      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'
+      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading operation pendency\u2026</div>'
+      +'</div>';
+  }
+  return pendencyPage(opData, 'Operation Pendency', 'OL Pending Jobs', 'OL Done Jobs', '#7C3AED');
 }
 
 /* ====================== USAGE ANALYTICS ====================== */
@@ -3357,6 +3400,7 @@ function render(){
     : state.page==='teams' ? teamsPage()
     : state.page==='admin' ? adminPage()
     : state.page==='finance' ? financePage()
+    : state.page==='op' ? opPage()
     : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
@@ -3372,6 +3416,7 @@ function renderKeepTopbar(){
     : state.page==='usage' ? usagePage()
     : state.page==='teams' ? teamsPage()
     : state.page==='finance' ? financePage()
+    : state.page==='op' ? opPage()
     : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
   var drawerEl=document.getElementById('drawer-slot');
   if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal();
@@ -3620,11 +3665,12 @@ document.addEventListener('click', function(ev){
       fetchUsageData(function(){ render(); }, true);
     }
     if(state.page==='finance'){
-      // Always re-fetch on page visit to pick up zone fixes / fresh data
-      financeDataReady = false;
-      financeDataLoading = false;
-      financeData = null;
+      financeDataReady = false; financeDataLoading = false; financeData = null;
       fetchFinanceData(function(){ render(); });
+    }
+    if(state.page==='op'){
+      opDataReady = false; opDataLoading = false; opData = null;
+      fetchOpData(function(){ render(); });
     }
     if(state.page==='teams' && !orgDataReady){
       fetchOrgData(function(){ render(); });
@@ -3663,6 +3709,7 @@ document.addEventListener('click', function(ev){
     if(usageDataReady){ pending++; fetchUsageData(done, true); }
     if(orgDataReady){ pending++; fetchOrgData(done, true); }
     if(financeDataReady){ pending++; fetchFinanceData(done, true); }
+    if(opDataReady){ pending++; fetchOpData(done, true); }
   }
   else if(act==='addUserOpen'){
     ev.stopPropagation();

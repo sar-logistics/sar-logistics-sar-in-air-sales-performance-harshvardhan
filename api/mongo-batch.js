@@ -1057,17 +1057,30 @@ async function computeUsageAnalytics(db) {
 let financeCache = null;
 let financeCacheTime = 0; // v2: zone lookup fixed
 
+let opCache = null;
+let opCacheTime = 0;
+
+async function getOpPendency(db, force) {
+  if (!force && opCache && (Date.now() - opCacheTime) < SALES_CACHE_TTL_MS) {
+    return { ...opCache, cached: true };
+  }
+  const result = await computePendency(db, "Operation Lock");
+  opCache = result;
+  opCacheTime = Date.now();
+  return result;
+}
+
 async function getFinancePendency(db, force) {
   if (!force && financeCache && (Date.now() - financeCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...financeCache, cached: true };
   }
-  const result = await computeFinancePendency(db);
+  const result = await computePendency(db, "Financial Lock");
   financeCache = result;
   financeCacheTime = Date.now();
   return result;
 }
 
-async function computeFinancePendency(db) {
+async function computePendency(db, lockField) {
   // Load zone mapping from mapping_sales_targets
   const mappingRows = await db.collection("mapping_sales_targets").find(
     {}, { projection: { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1, "_fy": 1 } }
@@ -1119,7 +1132,7 @@ async function computeFinancePendency(db) {
 
     const jobs = await db.collection(collName).find(
       {},
-      { projection: { "Sales Person": 1, "Financial Lock": 1, [dateField]: 1, "Job Date": 1 } }
+      { projection: { "Sales Person": 1, "Financial Lock": 1, "Operation Lock": 1, [dateField]: 1, "Job Date": 1 } }
     ).toArray();
 
     for (const job of jobs) {
@@ -1134,7 +1147,7 @@ async function computeFinancePendency(db) {
       const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
       if (!FY_MONTHS.includes(monthLabel)) continue;
 
-      const flDone = job["Financial Lock"] && String(job["Financial Lock"]).trim() !== "";
+      const flDone = job[lockField] && String(job[lockField]).trim() !== "";
 
       // Display name = first pipe segment of Sales Person field
       const nameParts = rawName.split("|").map(s => s.trim());
@@ -1224,7 +1237,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -1323,6 +1336,11 @@ module.exports = async function handler(req, res) {
 
     if (action === "finance") {
       const result = await getFinancePendency(db, forceRefresh);
+      return res.status(200).json(result);
+    }
+
+    if (action === "op") {
+      const result = await getOpPendency(db, forceRefresh);
       return res.status(200).json(result);
     }
 
