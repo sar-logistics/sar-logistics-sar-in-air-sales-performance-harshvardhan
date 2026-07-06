@@ -3554,6 +3554,11 @@ function getDrillMapping(){
   return _drillMapping;
 }
 
+// Mirror of backend normalizeName — strips pipe-suffixes, lowercases, collapses spaces
+function normalizeName(name){
+  return String(name||'').split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
+}
+
 // Pure in-browser drill filtering — filters allDrillRows by entity+metric+month
 function computeDrillResult(entity, metric, month){
   if (!allDrillRows) return null;
@@ -3619,10 +3624,21 @@ function computeDrillResult(entity, metric, month){
         var isMapped = repsRawOriginal.some(function(r){ return !r.isBranch && r.name === row.salesPerson; });
         if (isMapped) continue;
       } else {
-        // Zone match: check if any rep in this zone matches
-        var repInZone = repsRawOriginal.some(function(r){ return r.zone === entity && r.name === row.salesPerson; });
-        // Rep match: exact name match
-        var isRepMatch = row.salesPerson === entity;
+        // Normalize entity for comparison
+        var normEntity = entity.toLowerCase().split('|')[0].trim();
+        var normSP     = (row._sp || '').toLowerCase().split('|')[0].trim();
+        var rawSP      = (row.salesPerson || '').split('|')[0].trim().toLowerCase();
+
+        // Zone match: any rep in this zone whose normalized name matches
+        var repInZone = repsRawOriginal.some(function(r){
+          return r.zone === entity && (
+            r.name.toLowerCase() === normSP ||
+            r.name.toLowerCase() === rawSP  ||
+            normalizeName(r.name) === normSP
+          );
+        });
+        // Rep match: normalized name or raw first-segment match
+        var isRepMatch = normSP === normEntity || rawSP === normEntity;
         // Branch match: location
         var isBranchMatch = row._loc === entity;
         if (!repInZone && !isRepMatch && !isBranchMatch) continue;
