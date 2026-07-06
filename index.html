@@ -814,7 +814,7 @@ function filteredMonthIndices(){
   }
 
   // Quarterly: Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar (Indian FY)
-  // Returns months for BOTH years (prev + current) for year-on-year comparison
+  // Returns only current year's quarter — year-on-year is handled by quarterGroups() in tableRows
   if (v === 'Quarterly') {
     var qMap = {
       'Q1': ['Apr','May','Jun'],
@@ -825,17 +825,15 @@ function filteredMonthIndices(){
     var qMos = qMap[state.selectedQuarter] || [];
     var fyYrMap = { 'FY26': { normal:'25', q4:'26' }, 'FY27': { normal:'26', q4:'27' } };
     var fyYr = fyYrMap[state.quarterYear] || fyYrMap['FY26'];
-    // Current year suffix
-    var curYr = (state.selectedQuarter === 'Q4') ? fyYr.q4 : fyYr.normal;
-    // Previous year suffix (one less)
-    var prevYr = String(parseInt(curYr, 10) - 1);
     return months26.reduce(function(acc, m, i){
       var mMonth = mo(m), mYear = yr(m);
       if (qMos.indexOf(mMonth) < 0) return acc;
-      if (mYear === curYr || mYear === prevYr) acc.push(i);
+      var expectedYr = (state.selectedQuarter === 'Q4') ? fyYr.q4 : fyYr.normal;
+      if (mYear === expectedYr) acc.push(i);
       return acc;
     }, []);
   }
+
 
   // Yearly: Financial (Apr-Mar) = all months, Calendar (Jan-Dec) = filter by Jan-Dec months
   if (v === 'Yearly') {
@@ -2541,7 +2539,7 @@ function tableRows(){
       dispTeus = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.teu&&e.teu[i])||0; })); });
       dispLcl  = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.lcl&&e.lcl[i])||0; })); });
       dispTgt  = activeGroups.map(function(g){ return e.tgt * g.idxs.length; });
-      dispAch  = yGroups.map(function(g){
+      dispAch  = activeGroups.map(function(g){
         var gp  = sum(g.idxs.map(function(i){ return e.gp[i]||0; }));
         var tgt = e.tgt * g.idxs.length;
         return tgt > 0 ? Math.round(gp/tgt*100) : 0;
