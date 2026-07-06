@@ -1832,18 +1832,7 @@ function customerPage(){
 
 
 /* ====================== FINANCE PENDENCY ====================== */
-function pendencyPage(data, title, pendingLabel, doneLabel, brandColor){
-  if (!financeDataReady) {
-    if (!financeDataLoading) {
-      financeDataLoading = true;
-      fetchFinanceData(function(){ financeDataLoading = false; render(); });
-    }
-    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'
-      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'
-      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading finance pendency\u2026</div>'
-      +'</div>';
-  }
-
+function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobOwners){
   var d = data;
   var isWeekly = state.reportView === 'Weekly';
   var activeCols, colHeaders;
@@ -2003,6 +1992,30 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor){
         +'<span style="font-size:12.5px;font-weight:600;color:#374151;">'+esc(rep.name)+'</span>'
         +'</div>';
       bodyRows += metricRows(rep, repNameEl, '#FFFFFF', false);
+
+      // Job owners nested under rep (OL page only)
+      if (showJobOwners && rep.jobOwners && rep.jobOwners.length > 0) {
+        rep.jobOwners.forEach(function(jo){
+          // Build job owner colData from filtered active cols
+          var joColData = activeCols.map(function(col){
+            if (isWeekly) {
+              var m = state.weeklyMonth || months26[months26.length-1];
+              return jo.monthData[m] || { pending:0, done:0 };
+            }
+            return jo.monthData[col] || { pending:0, done:0 };
+          });
+          var joFiltered = { colData: joColData, totalPending: joColData.reduce(function(s,c){return s+c.pending;},0), totalDone: joColData.reduce(function(s,c){return s+c.done;},0), total: 0 };
+          joFiltered.total = joFiltered.totalPending + joFiltered.totalDone;
+          if (joFiltered.total === 0) return;
+          var joAvatarBg = 'oklch(0.55 0.09 '+hue(jo.name)+')';
+          var joNameEl = '<div style="display:flex;align-items:center;gap:8px;padding-left:32px;">'
+            +'<div style="width:24px;height:24px;border-radius:50%;background:'+joAvatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini(jo.name)+'</div>'
+            +'<span style="font-size:11.5px;font-weight:500;color:#64748B;">'+esc(jo.name)+'</span>'
+            +'<span style="font-size:10px;color:#94A3B8;font-weight:500;">(Job Owner)</span>'
+            +'</div>';
+          bodyRows += metricRows(joFiltered, joNameEl, '#FAFBFD', false);
+        });
+      }
     });
   });
 
@@ -2055,7 +2068,7 @@ function opPage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading operation pendency\u2026</div>'
       +'</div>';
   }
-  return pendencyPage(opData, 'Operation Pendency', 'OL Pending Jobs', 'OL Done Jobs', '#7C3AED');
+  return pendencyPage(opData, 'Operation Pendency', 'OL Pending Jobs', 'OL Done Jobs', '#7C3AED', true);
 }
 
 /* ====================== USAGE ANALYTICS ====================== */

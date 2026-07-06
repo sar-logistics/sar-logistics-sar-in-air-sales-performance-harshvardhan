@@ -1132,7 +1132,7 @@ async function computePendency(db, lockField) {
 
     const jobs = await db.collection(collName).find(
       {},
-      { projection: { "Sales Person": 1, "Financial Lock": 1, "Operation Lock": 1, [dateField]: 1, "Job Date": 1 } }
+      { projection: { "Sales Person": 1, "Job Owner": 1, "Financial Lock": 1, "Operation Lock": 1, [dateField]: 1, "Job Date": 1 } }
     ).toArray();
 
     for (const job of jobs) {
@@ -1171,10 +1171,21 @@ async function computePendency(db, lockField) {
       }
       if (!zone) zone = "Unassigned";
 
-      if (!repMonthMap[norm]) repMonthMap[norm] = { zone, displayName, monthData: {} };
+      const jobOwner = String(job["Job Owner"] || "").trim().split("|")[0].trim() || "";
+
+      if (!repMonthMap[norm]) repMonthMap[norm] = { zone, displayName, monthData: {}, jobOwners: {} };
       if (!repMonthMap[norm].monthData[monthLabel]) repMonthMap[norm].monthData[monthLabel] = { pending: 0, done: 0 };
+      // Track job owner breakdown
+      if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase()) {
+        if (!repMonthMap[norm].jobOwners[jobOwner]) repMonthMap[norm].jobOwners[jobOwner] = {};
+        if (!repMonthMap[norm].jobOwners[jobOwner][monthLabel]) repMonthMap[norm].jobOwners[jobOwner][monthLabel] = { pending: 0, done: 0 };
+      }
       if (flDone) repMonthMap[norm].monthData[monthLabel].done++;
       else        repMonthMap[norm].monthData[monthLabel].pending++;
+      if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && repMonthMap[norm].jobOwners[jobOwner]) {
+        if (flDone) repMonthMap[norm].jobOwners[jobOwner][monthLabel].done++;
+        else        repMonthMap[norm].jobOwners[jobOwner][monthLabel].pending++;
+      }
       seenMonths.add(monthLabel);
     }
   }));
@@ -1188,7 +1199,13 @@ async function computePendency(db, lockField) {
       totalPending += (rep.monthData[m]?.pending || 0);
       totalDone    += (rep.monthData[m]?.done    || 0);
     }
-    return { name: rep.displayName, zone: rep.zone, monthData: rep.monthData, totalPending, totalDone, total: totalPending + totalDone };
+    // Build job owner summaries
+    const jobOwners = Object.entries(rep.jobOwners || {}).map(([ownerName, ownerMonthData]) => {
+      let op = 0, od = 0;
+      for (const m of monthsInData) { op += ownerMonthData[m]?.pending||0; od += ownerMonthData[m]?.done||0; }
+      return { name: ownerName, monthData: ownerMonthData, totalPending: op, totalDone: od, total: op+od };
+    }).filter(o => o.total > 0).sort((a,b) => b.total - a.total);
+    return { name: rep.displayName, zone: rep.zone, monthData: rep.monthData, totalPending, totalDone, total: totalPending + totalDone, jobOwners };
   }).sort((a, b) => b.total - a.total);
 
   // Build unique zones list (ordered by zone total desc)
