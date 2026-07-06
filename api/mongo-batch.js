@@ -1055,10 +1055,10 @@ async function computeUsageAnalytics(db) {
 }
 
 let financeCache = null;
-let financeCacheTime = 0; // v2: zone lookup fixed
+let financeCacheTime = 0; // v3: jobOwners
 
 let opCache = null;
-let opCacheTime = 0; // v2: jobOwners added
+let opCacheTime = 0; // v3: reset
 
 async function getOpPendency(db, force) {
   if (!force && opCache && (Date.now() - opCacheTime) < SALES_CACHE_TTL_MS) {
