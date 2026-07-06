@@ -1869,23 +1869,27 @@ function financePage(){
     };
   });
 
-  // Build zone aggregates
-  var zoneOrder = d.zones || [];
-  // Also include any zones not in d.zones from filtered reps
-  repsFiltered.forEach(function(r){ if (zoneOrder.indexOf(r.zone)<0) zoneOrder.push(r.zone); });
-
+  // Build zone aggregates purely from repsFiltered (filtered period only)
   var zoneTotals = {};
-  zoneOrder.forEach(function(z){ zoneTotals[z] = { totalPending:0, totalDone:0, total:0, colData: activeCols.map(function(){ return {pending:0,done:0}; }) }; });
   repsFiltered.forEach(function(r){
+    if (!zoneTotals[r.zone]) {
+      zoneTotals[r.zone] = {
+        totalPending: 0, totalDone: 0, total: 0,
+        colData: activeCols.map(function(){ return {pending:0, done:0}; })
+      };
+    }
     var zt = zoneTotals[r.zone];
-    if (!zt) return;
     zt.totalPending += r.totalPending;
     zt.totalDone    += r.totalDone;
     zt.total        += r.total;
-    r.colData.forEach(function(cd,ci){
-      zt.colData[ci].pending += cd.pending;
-      zt.colData[ci].done    += cd.done;
+    r.colData.forEach(function(cd, ci){
+      zt.colData[ci].pending += cd.pending||0;
+      zt.colData[ci].done    += cd.done||0;
     });
+  });
+  // Order zones by total desc (matching sales performance zone order)
+  var zoneOrder = Object.keys(zoneTotals).sort(function(a,b){
+    return zoneTotals[b].total - zoneTotals[a].total;
   });
 
   var BRAND = '#1D5FCC';
