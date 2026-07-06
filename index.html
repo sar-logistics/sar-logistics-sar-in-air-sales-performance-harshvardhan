@@ -814,6 +814,7 @@ function filteredMonthIndices(){
   }
 
   // Quarterly: Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar (Indian FY)
+  // Returns months for BOTH years (prev + current) for year-on-year comparison
   if (v === 'Quarterly') {
     var qMap = {
       'Q1': ['Apr','May','Jun'],
@@ -822,16 +823,16 @@ function filteredMonthIndices(){
       'Q4': ['Jan','Feb','Mar']
     };
     var qMos = qMap[state.selectedQuarter] || [];
-    // FY26 = Apr-25→Mar-26, FY27 = Apr-26→Mar-27
-    // For Q4 (Jan-Mar), the year suffix shifts by 1 (Jan-26 belongs to FY26)
     var fyYrMap = { 'FY26': { normal:'25', q4:'26' }, 'FY27': { normal:'26', q4:'27' } };
     var fyYr = fyYrMap[state.quarterYear] || fyYrMap['FY26'];
+    // Current year suffix
+    var curYr = (state.selectedQuarter === 'Q4') ? fyYr.q4 : fyYr.normal;
+    // Previous year suffix (one less)
+    var prevYr = String(parseInt(curYr, 10) - 1);
     return months26.reduce(function(acc, m, i){
       var mMonth = mo(m), mYear = yr(m);
       if (qMos.indexOf(mMonth) < 0) return acc;
-      // Q4 months (Jan/Feb/Mar) have a different year suffix in the FY
-      var expectedYr = (state.selectedQuarter === 'Q4') ? fyYr.q4 : fyYr.normal;
-      if (mYear === expectedYr) acc.push(i);
+      if (mYear === curYr || mYear === prevYr) acc.push(i);
       return acc;
     }, []);
   }
@@ -1039,7 +1040,36 @@ function yearGroups(){
   return order.map(function(k){ return groups[k]; });
 }
 
-// Display label for a column: ISO week keys show as "Week N" + date range
+// Display label for a column
+// quarterGroups() — returns [{label, range, idxs}, ...] for the 2 year-on-year quarter columns
+function quarterGroups(){
+  var idxs = filteredMonthIndices();
+  var qMap = { 'Q1':['Apr','May','Jun'], 'Q2':['Jul','Aug','Sep'], 'Q3':['Oct','Nov','Dec'], 'Q4':['Jan','Feb','Mar'] };
+  var qMos = qMap[state.selectedQuarter] || [];
+  var MONTH_FULL = { Jan:'Jan',Feb:'Feb',Mar:'Mar',Apr:'Apr',May:'May',Jun:'Jun',Jul:'Jul',Aug:'Aug',Sep:'Sep',Oct:'Oct',Nov:'Nov',Dec:'Dec' };
+
+  // Group indices by calendar year suffix (e.g. '25', '26')
+  var groups = {}, order = [];
+  idxs.forEach(function(i){
+    var parts = months26[i].split('-');
+    var mon = parts[0], y2 = parts[1];
+    if (qMos.indexOf(mon) < 0) return;
+    if (!groups[y2]) { groups[y2] = { key: y2, idxs: [] }; order.push(y2); }
+    groups[y2].idxs.push(i);
+  });
+
+  // Build labels: "JAN – MAR 2025" style
+  return order.map(function(y2){
+    var g = groups[y2];
+    var fullYear = '20' + y2;
+    var first = qMos[0], last = qMos[qMos.length-1];
+    g.label = first.toUpperCase() + ' – ' + last.toUpperCase() + ' ' + fullYear;
+    g.range = fullYear; // used for topbar label
+    return g;
+  });
+}
+
+: ISO week keys show as "Week N" + date range
 // below it (e.g. "Apr 1, 2026 - Apr 7, 2026"); months show as-is
 function colDisplayLabel(key){
   if (key && /^\d{4}-W\d{2}$/.test(key)) {
@@ -2469,13 +2499,17 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
 }
 
 function tableRows(){
-  var isYearly = state.reportView === 'Yearly';
-  var yGroups  = isYearly ? yearGroups() : null;
+  var isYearly    = state.reportView === 'Yearly';
+  var isQuarterly = state.reportView === 'Quarterly';
+  var yGroups  = isYearly    ? yearGroups()    : null;
+  var qGroups  = isQuarterly ? quarterGroups() : null;
 
-  // Build colLabels — yearly uses year labels, others use month labels
+  // Build colLabels — yearly/quarterly use group labels, others use month labels
   var colLabels;
   if (isYearly) {
     colLabels = ['FY Total'].concat(yGroups.map(function(g){ return g.label; }));
+  } else if (isQuarterly) {
+    colLabels = ['FY Total'].concat(qGroups.map(function(g){ return g.label; }));
   } else {
     colLabels = ['FY Total'].concat(filteredMonths().map(colDisplayLabel));
   }
@@ -2495,17 +2529,18 @@ function tableRows(){
     var groupBg = isGrand ? '#EEF3FC' : isZone ? '#F0F4FB' : '#FFFFFF';
     var avatarBg = e.avatarBg;
 
-    // In Yearly view, aggregate monthly arrays into per-year totals
+    // In Yearly/Quarterly view, aggregate monthly arrays into per-group totals
     var dispGp, dispShip, dispTons, dispTeus, dispLcl, dispTgt, dispAch, dispGpProv, dispGpActual;
-    if (isYearly && yGroups) {
-      dispGp     = yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return e.gp[i]||0; })); });
-      dispGpProv = yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.gpProv&&e.gpProv[i])||0; })); });
-      dispGpActual=yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.gpActual&&e.gpActual[i])||0; })); });
-      dispShip = yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return e.ship[i]||0; })); });
-      dispTons = yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.tons&&e.tons[i])||0; })); });
-      dispTeus = yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.teu&&e.teu[i])||0; })); });
-      dispLcl  = yGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.lcl&&e.lcl[i])||0; })); });
-      dispTgt  = yGroups.map(function(g){ return e.tgt * g.idxs.length; });
+    var activeGroups = (isYearly && yGroups) ? yGroups : (isQuarterly && qGroups) ? qGroups : null;
+    if (activeGroups) {
+      dispGp     = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return e.gp[i]||0; })); });
+      dispGpProv = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.gpProv&&e.gpProv[i])||0; })); });
+      dispGpActual=activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.gpActual&&e.gpActual[i])||0; })); });
+      dispShip = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return e.ship[i]||0; })); });
+      dispTons = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.tons&&e.tons[i])||0; })); });
+      dispTeus = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.teu&&e.teu[i])||0; })); });
+      dispLcl  = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.lcl&&e.lcl[i])||0; })); });
+      dispTgt  = activeGroups.map(function(g){ return e.tgt * g.idxs.length; });
       dispAch  = yGroups.map(function(g){
         var gp  = sum(g.idxs.map(function(i){ return e.gp[i]||0; }));
         var tgt = e.tgt * g.idxs.length;
@@ -2542,11 +2577,8 @@ function tableRows(){
       // Weekly view: "Week 1" → actual month label e.g. "May-26"
       // Monthly/Custom/Quarterly: colLabels already are real month labels
       var rawColKeys;
-      if (isYearly && yGroups) {
-        // [0] = FY Total, then one key per year group
-        // For drill: FY Total → "FY Total", year group → pass the year label so backend can match all its months
-        // Better: pass a special key "YEAR:25" that openDrill resolves to a month range
-        rawColKeys = ['FY Total'].concat(yGroups.map(function(g){
+      if (activeGroups) {
+        rawColKeys = ['FY Total'].concat(activeGroups.map(function(g){
           var ms = g.idxs.map(function(i){ return months26[i]; });
           return 'RANGE:'+ms[0]+':'+ms[ms.length-1];
         }));
@@ -2646,10 +2678,13 @@ function salesTable(M){
     +'</div>';
   }
 
-  var isYearly2 = state.reportView === 'Yearly';
-  var yGroups2  = isYearly2 ? yearGroups() : null;
-  var colLabels = isYearly2
-    ? ['FY Total'].concat(yGroups2.map(function(g){ return g.label; }))
+  var isYearly2    = state.reportView === 'Yearly';
+  var isQuarterly2 = state.reportView === 'Quarterly';
+  var yGroups2  = isYearly2    ? yearGroups()    : null;
+  var qGroups2  = isQuarterly2 ? quarterGroups() : null;
+  var activeGroups2 = yGroups2 || qGroups2 || null;
+  var colLabels = activeGroups2
+    ? ['FY Total'].concat(activeGroups2.map(function(g){ return g.label; }))
     : ['FY Total'].concat(filteredMonths().map(colDisplayLabel));
   var FY_COL_LEFT = 185+140; // sticky offset for the FY Total column
   var BORDER = '#D5DCE6';      // main grid border — softened
@@ -2658,7 +2693,7 @@ function salesTable(M){
     +'<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:210px;min-width:210px;">Zones/Sales Rep</th>'
     +'<th style="position:sticky;left:210px;z-index:3;background:#F0F4FA;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">Metrics</th>'
     +'<th style="position:sticky;left:'+FY_COL_LEFT+'px;z-index:3;text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#FCF3DA;white-space:nowrap;box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">Grand Total</th>'
-    + (isYearly2 ? yGroups2.map(function(g, gi){
+    + (activeGroups2 ? activeGroups2.map(function(g, gi){
         return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#FCF3DA;white-space:nowrap;">'
           +'<div style="font-size:11px;font-weight:800;color:#A8720E;">'+g.label+'</div>'
           +'<div style="font-size:9px;font-weight:500;color:#B8955A;margin-top:1px;">'+g.range+'</div>'
@@ -2844,7 +2879,10 @@ function salesTable(M){
   var v = state.reportView;
   var label = '';
   if (v === 'Weekly') label = 'Week of ' + (state.weeklyMonth || '');
-  else if (v === 'Quarterly') label = state.quarterYear + ' ' + state.selectedQuarter;
+  else if (v === 'Quarterly') {
+    var qRangeMap = {'Q1':'Jan–Mar','Q2':'Jul–Sep','Q3':'Oct–Dec','Q4':'Jan–Mar'};
+    label = state.selectedQuarter + ' (' + (qRangeMap[state.selectedQuarter]||'') + ') — Year on Year';
+  }
   else if (v === 'Yearly') label = state.yearType === 'Calendar' ? 'Calendar Year' : 'Financial Year';
   else if (fm.length > 0) label = fm[0] + (fm.length > 1 ? ' – ' + fm[fm.length-1] : '');
   return '<span style="font-size:11.5px;color:#5B7298;font-weight:600;background:#F4F7FC;border-radius:999px;padding:3px 10px;border:1px solid #E3EAF3;">'+label+'</span>';
