@@ -2919,7 +2919,7 @@ function drawer(){
 
   // Compute displayed total from the actual rows array (real-time, no hardcoding)
   var fullMetricSum2 = d.totalMetric || 0;
-  var fullGpSum2     = d.totalGP     || 0;
+  var fullGpSum2     = (d.totalProvGP||0) + (d.totalActualGP||0) || d.totalGP || 0;
 
   var totalDisplay = d.loading
     ? '<span style="display:inline-flex;align-items:center;gap:8px;color:#94A3B8;font-size:18px;">Loading… <span class="login-spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;"></span></span>'
@@ -3198,18 +3198,47 @@ function drawer(){
     : d.metric === 'LCL (Ocean in CBM)' ? 'Total LCL'
     : 'Total';
 
-  var footer = (!d.loading && !d.error && d.rows && d.rows.length > 0)
-    ? '<div style="padding:10px 18px;border-top:1px solid #E8EDF6;background:#F8FAFC;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;">'
+  var footer;
+  if (!d.loading && !d.error && d.rows && d.rows.length > 0) {
+    if (d.metric === 'GP') {
+      // Show Provisional + Actual + Total breakdown
+      var provGP   = d.totalProvGP   || 0;
+      var actualGP = d.totalActualGP || 0;
+      var totGP    = provGP + actualGP;
+      footer = '<div style="padding:10px 18px;border-top:1px solid #E8EDF6;background:#F8FAFC;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">'
+        +'<span style="font-size:11.5px;font-weight:600;color:#5B6678;">'+footerLabel
+          +' <span style="color:#9AAFC8;font-weight:500;">('+totalCount.toLocaleString()+' jobs)</span>'
+        +'</span>'
+        +'<div style="display:flex;align-items:center;gap:20px;">'
+          +'<span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">'
+            +'<span style="font-size:9.5px;font-weight:700;color:#10875A;text-transform:uppercase;letter-spacing:0.05em;">Provisional</span>'
+            +'<span style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#10875A;">'+fmtCur(provGP)+'</span>'
+          +'</span>'
+          +'<span style="color:#CBD5E1;font-size:15px;">+</span>'
+          +'<span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">'
+            +'<span style="font-size:9.5px;font-weight:700;color:#1D5FCC;text-transform:uppercase;letter-spacing:0.05em;">Actual</span>'
+            +'<span style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#1D5FCC;">'+fmtCur(actualGP)+'</span>'
+          +'</span>'
+          +'<span style="color:#CBD5E1;font-size:15px;">=</span>'
+          +'<span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">'
+            +'<span style="font-size:9.5px;font-weight:700;color:#0D2B5E;text-transform:uppercase;letter-spacing:0.05em;">Total GP</span>'
+            +'<span style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:800;color:#0D2B5E;">'+fmtCur(totGP)+'</span>'
+          +'</span>'
+        +'</div>'
+      +'</div>';
+    } else {
+      footer = '<div style="padding:10px 18px;border-top:1px solid #E8EDF6;background:#F8FAFC;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;">'
         +'<span style="font-size:11.5px;font-weight:600;color:#5B6678;">'+footerLabel
           +' <span style="color:#9AAFC8;font-weight:500;">('+totalCount.toLocaleString()+' jobs)</span>'
         +'</span>'
         +'<span style="font-family:\'DM Mono\',monospace;font-size:14px;font-weight:800;color:#15875A;">'
-          +(d.metric==='Shipments' ? totalCount.toLocaleString()
-          : d.metric==='GP'       ? fmtCur(fullGpSum)
-          : fullMetricSum.toFixed(2))
+          +(d.metric==='Shipments' ? totalCount.toLocaleString() : fullMetricSum.toFixed(2))
         +'</span>'
-      +'</div>'
-    : '';
+      +'</div>';
+    }
+  } else {
+    footer = '';
+  }
 
   return '<div data-act="close" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;animation:ovFade 0.16s ease;">'
     +'<div data-stop="1" style="width:min(1200px,96vw);height:min(88vh,900px);background:#FFFFFF;border-radius:16px;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(15,23,40,0.22);animation:fadeUp 0.2s cubic-bezier(0.22,1,0.36,1);overflow:hidden;">'
@@ -3660,13 +3689,23 @@ function computeDrillResult(entity, metric, month){
     return Object.assign({}, item.row, {m: item.m});
   });
   // Sum totals over ALL matched, not just the 6000 slice
-  var allGP=0, allRev=0, allMetric=0;
-  matched.forEach(function(item){ allGP+=item.row.g||0; allRev+=item.row.r||0; allMetric+=item.m||0; });
+  // Split GP into Provisional (OL/FL not done) and Actual (OL/FL done)
+  var allGP=0, allRev=0, allMetric=0, allProvGP=0, allActualGP=0;
+  matched.forEach(function(item){
+    var r = item.row;
+    allGP  += r.g||0;
+    allRev += r.r||0;
+    allMetric += item.m||0;
+    // prov flag: 1 = provisional (lock not done), 0 = actual (lock done)
+    if (r.prov === 1) allProvGP   += r.g||0;
+    else              allActualGP += r.g||0;
+  });
 
   return {
     success:true, entity:entity, metric:metric, month:month,
     count: matched.length,
-    totalGP: allGP, totalRevenue: allRev, totalCost: allRev-allGP, totalMetric: allMetric,
+    totalGP: allGP, totalProvGP: allProvGP, totalActualGP: allActualGP,
+    totalRevenue: allRev, totalCost: allRev-allGP, totalMetric: allMetric,
     rows: outRows,
   };
 }
