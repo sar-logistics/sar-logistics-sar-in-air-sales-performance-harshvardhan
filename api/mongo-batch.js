@@ -1068,9 +1068,28 @@ async function getFinancePendency(db, force) {
 }
 
 async function computeFinancePendency(db) {
-  // Direct lean query — only 4 fields needed, no drill cache dependency
+  // Load zone mapping from mapping_sales_targets
+  const mappingRows = await db.collection("mapping_sales_targets").find(
+    {}, { projection: { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1, "_fy": 1 } }
+  ).toArray();
+
+  // Build normName → zone lookup (prefer FY26, fallback FY27)
+  const repZoneMap = {}; // normalizedName → zone
+  const repDisplayMap = {}; // normalizedName → displayName
+  for (const row of mappingRows) {
+    const norm = normalizeName(row["Sales Rep Name"]);
+    if (!norm) continue;
+    const zone = String(row["Zone"] || "Unassigned").trim();
+    const display = String(row["Display Name"] || row["Sales Rep Name"] || "").trim();
+    if (!repZoneMap[norm] || row._fy === "FY26") {
+      repZoneMap[norm] = zone;
+      repDisplayMap[norm] = display;
+    }
+  }
+
+  // Direct lean query across all collections in parallel
   const ALL_JOB_COLLS = Object.values(COLLECTIONS);
-  const repMonthMap = {}; // repName → monthLabel → { pending, done }
+  const repMonthMap = {}; // normalizedName → { zone, displayName, monthData: { monthLabel → { pending, done } } }
   const seenMonths = new Set();
 
   await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
@@ -1080,18 +1099,13 @@ async function computeFinancePendency(db) {
 
     const jobs = await db.collection(collName).find(
       {},
-      { projection: {
-          "Sales Person": 1,
-          "Financial Lock": 1,
-          [dateField]: 1,
-          "Job Date": 1,
-        }
-      }
+      { projection: { "Sales Person": 1, "Financial Lock": 1, [dateField]: 1, "Job Date": 1 } }
     ).toArray();
 
     for (const job of jobs) {
-      const salesPerson = String(job["Sales Person"] || "").trim();
-      if (!salesPerson) continue;
+      const rawName = String(job["Sales Person"] || "").trim();
+      if (!rawName) continue;
+      const norm = normalizeName(rawName);
 
       const rawDate = job[dateField] || job["Job Date"];
       if (!rawDate) continue;
@@ -1101,30 +1115,46 @@ async function computeFinancePendency(db) {
       if (!FY_MONTHS.includes(monthLabel)) continue;
 
       const flDone = job["Financial Lock"] && String(job["Financial Lock"]).trim() !== "";
+      const zone = repZoneMap[norm] || "Unassigned";
+      const displayName = repDisplayMap[norm] || rawName;
 
-      if (!repMonthMap[salesPerson]) repMonthMap[salesPerson] = {};
-      if (!repMonthMap[salesPerson][monthLabel]) repMonthMap[salesPerson][monthLabel] = { pending: 0, done: 0 };
-      if (flDone) repMonthMap[salesPerson][monthLabel].done++;
-      else        repMonthMap[salesPerson][monthLabel].pending++;
+      if (!repMonthMap[norm]) repMonthMap[norm] = { zone, displayName, monthData: {} };
+      if (!repMonthMap[norm].monthData[monthLabel]) repMonthMap[norm].monthData[monthLabel] = { pending: 0, done: 0 };
+      if (flDone) repMonthMap[norm].monthData[monthLabel].done++;
+      else        repMonthMap[norm].monthData[monthLabel].pending++;
       seenMonths.add(monthLabel);
     }
   }));
 
   const monthsInData = FY_MONTHS.filter(m => seenMonths.has(m));
 
-  const reps = Object.entries(repMonthMap).map(([name, monthData]) => {
+  // Build reps list with zone
+  const reps = Object.values(repMonthMap).map((rep) => {
     let totalPending = 0, totalDone = 0;
     for (const m of monthsInData) {
-      totalPending += (monthData[m]?.pending || 0);
-      totalDone    += (monthData[m]?.done    || 0);
+      totalPending += (rep.monthData[m]?.pending || 0);
+      totalDone    += (rep.monthData[m]?.done    || 0);
     }
-    return { name, monthData, totalPending, totalDone, total: totalPending + totalDone };
+    return { name: rep.displayName, zone: rep.zone, monthData: rep.monthData, totalPending, totalDone, total: totalPending + totalDone };
   }).sort((a, b) => b.total - a.total);
+
+  // Build unique zones list (ordered by zone total desc)
+  const zoneMap = {};
+  for (const rep of reps) {
+    if (!zoneMap[rep.zone]) zoneMap[rep.zone] = { totalPending: 0, totalDone: 0, total: 0 };
+    zoneMap[rep.zone].totalPending += rep.totalPending;
+    zoneMap[rep.zone].totalDone    += rep.totalDone;
+    zoneMap[rep.zone].total        += rep.total;
+  }
+  const zones = Object.entries(zoneMap)
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([name]) => name);
 
   return {
     success: true,
     months: monthsInData,
     reps,
+    zones,
     pushedAt: new Date().toISOString(),
   };
 }
