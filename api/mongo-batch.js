@@ -1092,71 +1092,206 @@ const agentCacheMap = {}; // key → { data, time }
 // ─── Tradelane Insights ───────────────────────────────────────────────────────
 const tradelaneCacheMap = {}; // key → { data, time }
 
-// ── Port code → Country lookup ────────────────────────────────────────────────
-// Port format: "(CCXXX) City" — first 2 chars of code = ISO2 country code
-const ISO2_TO_COUNTRY = {
-  "AF":"Afghanistan","AL":"Albania","DZ":"Algeria","AD":"Andorra","AO":"Angola",
-  "AG":"Antigua and Barbuda","AR":"Argentina","AM":"Armenia","AU":"Australia",
-  "AT":"Austria","AZ":"Azerbaijan","BS":"Bahamas","BH":"Bahrain","BD":"Bangladesh",
-  "BB":"Barbados","BY":"Belarus","BE":"Belgium","BZ":"Belize","BJ":"Benin",
-  "BT":"Bhutan","BO":"Bolivia","BA":"Bosnia and Herzegovina","BW":"Botswana",
-  "BR":"Brazil","BN":"Brunei","BG":"Bulgaria","BF":"Burkina Faso","BI":"Burundi",
-  "CV":"Cape Verde","KH":"Cambodia","CM":"Cameroon","CA":"Canada",
-  "CF":"Central African Republic","TD":"Chad","CL":"Chile","CN":"China",
-  "CO":"Colombia","KM":"Comoros","CG":"Congo","CD":"DR Congo","CR":"Costa Rica",
-  "HR":"Croatia","CU":"Cuba","CY":"Cyprus","CZ":"Czech Republic",
-  "DK":"Denmark","DJ":"Djibouti","DM":"Dominica","DO":"Dominican Republic",
-  "EC":"Ecuador","EG":"Egypt","SV":"El Salvador","GQ":"Equatorial Guinea",
-  "ER":"Eritrea","EE":"Estonia","SZ":"Eswatini","ET":"Ethiopia",
-  "FJ":"Fiji","FI":"Finland","FR":"France","GA":"Gabon","GM":"Gambia",
-  "GE":"Georgia","DE":"Germany","GH":"Ghana","GR":"Greece","GD":"Grenada",
-  "GT":"Guatemala","GN":"Guinea","GW":"Guinea-Bissau","GY":"Guyana",
-  "HT":"Haiti","HN":"Honduras","HK":"Hong Kong","HU":"Hungary",
-  "IS":"Iceland","IN":"India","ID":"Indonesia","IR":"Iran","IQ":"Iraq",
-  "IE":"Ireland","IL":"Israel","IT":"Italy","JM":"Jamaica","JP":"Japan",
-  "JO":"Jordan","KZ":"Kazakhstan","KE":"Kenya","KI":"Kiribati",
-  "KW":"Kuwait","KG":"Kyrgyzstan","LA":"Laos","LV":"Latvia","LB":"Lebanon",
-  "LS":"Lesotho","LR":"Liberia","LY":"Libya","LI":"Liechtenstein",
-  "LT":"Lithuania","LU":"Luxembourg","MO":"Macao","MG":"Madagascar",
-  "MW":"Malawi","MY":"Malaysia","MV":"Maldives","ML":"Mali","MT":"Malta",
-  "MH":"Marshall Islands","MR":"Mauritania","MU":"Mauritius","MX":"Mexico",
-  "FM":"Micronesia","MD":"Moldova","MC":"Monaco","MN":"Mongolia",
-  "ME":"Montenegro","MA":"Morocco","MZ":"Mozambique","MM":"Myanmar",
-  "NA":"Namibia","NR":"Nauru","NP":"Nepal","NL":"Netherlands",
-  "NZ":"New Zealand","NI":"Nicaragua","NE":"Niger","NG":"Nigeria",
-  "NO":"Norway","OM":"Oman","PK":"Pakistan","PW":"Palau","PA":"Panama",
-  "PG":"Papua New Guinea","PY":"Paraguay","PE":"Peru","PH":"Philippines",
-  "PL":"Poland","PT":"Portugal","QA":"Qatar","RO":"Romania","RU":"Russia",
-  "RW":"Rwanda","KN":"Saint Kitts and Nevis","LC":"Saint Lucia",
-  "VC":"Saint Vincent and the Grenadines","WS":"Samoa","SM":"San Marino",
-  "ST":"Sao Tome and Principe","SA":"Saudi Arabia","SN":"Senegal","RS":"Serbia",
-  "SC":"Seychelles","SL":"Sierra Leone","SG":"Singapore","SK":"Slovakia",
-  "SI":"Slovenia","SB":"Solomon Islands","SO":"Somalia","ZA":"South Africa",
-  "SS":"South Sudan","ES":"Spain","LK":"Sri Lanka","SD":"Sudan",
-  "SR":"Suriname","SE":"Sweden","CH":"Switzerland","SY":"Syria",
-  "TW":"Taiwan","TJ":"Tajikistan","TZ":"Tanzania","TH":"Thailand",
-  "TL":"Timor-Leste","TG":"Togo","TO":"Tonga","TT":"Trinidad and Tobago",
-  "TN":"Tunisia","TR":"Turkey","TM":"Turkmenistan","TV":"Tuvalu",
-  "UG":"Uganda","UA":"Ukraine","AE":"UAE","GB":"United Kingdom",
-  "US":"USA","UY":"Uruguay","UZ":"Uzbekistan","VU":"Vanuatu",
-  "VE":"Venezuela","VN":"Vietnam","YE":"Yemen","ZM":"Zambia","ZW":"Zimbabwe",
-  "KR":"South Korea","KP":"North Korea","MK":"North Macedonia",
-  "PS":"Palestine","XK":"Kosovo","PR":"Puerto Rico","HK":"Hong Kong",
-  "MO":"Macao","TW":"Taiwan","AW":"Aruba","CW":"Curacao","SX":"Sint Maarten",
-  "RE":"Reunion","GP":"Guadeloupe","MQ":"Martinique","GF":"French Guiana",
-  "NC":"New Caledonia","PF":"French Polynesia","YT":"Mayotte",
+// ── Port code → Country + Tradelane lookup (from "Tradelane Mapping" sheet) ──
+// iso2 → { country, tradelane }
+const TRADELANE_MAP = {
+  "US":{"country":"United States","tradelane":"US"},
+  "GB":{"country":"United Kingdom","tradelane":"Europe"},
+  "CA":{"country":"Canada","tradelane":"Canada"},
+  "PR":{"country":"Puerto Rico","tradelane":"LATAM"},
+  "BR":{"country":"Brazil","tradelane":"LATAM"},
+  "VN":{"country":"Viet Nam","tradelane":"Asia"},
+  "MX":{"country":"Mexico","tradelane":"LATAM"},
+  "FR":{"country":"France","tradelane":"Med"},
+  "BE":{"country":"Belgium","tradelane":"Europe"},
+  "GE":{"country":"Georgia","tradelane":"Europe"},
+  "DE":{"country":"Germany","tradelane":"Europe"},
+  "NL":{"country":"Netherlands","tradelane":"Europe"},
+  "PY":{"country":"Paraguay","tradelane":"LATAM"},
+  "TR":{"country":"Turkey","tradelane":"Med"},
+  "ES":{"country":"Spain","tradelane":"Med"},
+  "ID":{"country":"Indonesia","tradelane":"Asia"},
+  "SG":{"country":"Singapore","tradelane":"Asia"},
+  "OM":{"country":"Oman","tradelane":"Middle East"},
+  "FI":{"country":"Finland","tradelane":"Europe"},
+  "EG":{"country":"Egypt","tradelane":"Med"},
+  "MA":{"country":"Morocco","tradelane":"Med"},
+  "AE":{"country":"United Arab Emirates","tradelane":"Middle East"},
+  "TN":{"country":"Tunisia","tradelane":"Med"},
+  "ZA":{"country":"South Africa","tradelane":"Africa"},
+  "GH":{"country":"Ghana","tradelane":"Africa"},
+  "CN":{"country":"China","tradelane":"Asia"},
+  "HN":{"country":"Honduras","tradelane":"LATAM"},
+  "PE":{"country":"Peru","tradelane":"LATAM"},
+  "DO":{"country":"Dominican Republic","tradelane":"Dominican Republic"},
+  "PK":{"country":"Pakistan","tradelane":"Asia"},
+  "KE":{"country":"Kenya","tradelane":"Africa"},
+  "MR":{"country":"Mauritania","tradelane":"Africa"},
+  "IT":{"country":"Italy","tradelane":"Med"},
+  "RU":{"country":"Russian Federation","tradelane":"Asia"},
+  "LK":{"country":"Sri Lanka","tradelane":"Asia"},
+  "DZ":{"country":"Algeria","tradelane":"Med"},
+  "PL":{"country":"Poland","tradelane":"Europe"},
+  "GY":{"country":"Guyana","tradelane":"LATAM"},
+  "JP":{"country":"Japan","tradelane":"Asia"},
+  "BD":{"country":"Bangladesh","tradelane":"Asia"},
+  "AU":{"country":"Australia","tradelane":"Oceania"},
+  "KR":{"country":"South Korea","tradelane":"Asia"},
+  "NZ":{"country":"New Zealand","tradelane":"Oceania"},
+  "HR":{"country":"Croatia","tradelane":"Europe"},
+  "IL":{"country":"Israel","tradelane":"Med"},
+  "CL":{"country":"Chile","tradelane":"LATAM"},
+  "PT":{"country":"Portugal","tradelane":"Europe"},
+  "PA":{"country":"Panama","tradelane":"LATAM"},
+  "JO":{"country":"Jordan","tradelane":"Middle East"},
+  "NG":{"country":"Nigeria","tradelane":"Africa"},
+  "SA":{"country":"Saudi Arabia","tradelane":"Middle East"},
+  "SO":{"country":"Somalia","tradelane":"Africa"},
+  "KW":{"country":"Kuwait","tradelane":"Middle East"},
+  "LY":{"country":"Libya","tradelane":"Med"},
+  "AR":{"country":"Argentina","tradelane":"LATAM"},
+  "SE":{"country":"Sweden","tradelane":"Europe"},
+  "EE":{"country":"Estonia","tradelane":"Europe"},
+  "LT":{"country":"Lithuania","tradelane":"Europe"},
+  "NO":{"country":"Norway","tradelane":"Europe"},
+  "DK":{"country":"Denmark","tradelane":"Europe"},
+  "LV":{"country":"Latvia","tradelane":"Europe"},
+  "IE":{"country":"Ireland","tradelane":"Europe"},
+  "EC":{"country":"Ecuador","tradelane":"LATAM"},
+  "CI":{"country":"Cote d'Ivoire","tradelane":"Africa"},
+  "GT":{"country":"Guatemala","tradelane":"LATAM"},
+  "DJ":{"country":"Djibouti","tradelane":"Middle East"},
+  "SL":{"country":"Sierra Leone","tradelane":"Africa"},
+  "CO":{"country":"Colombia","tradelane":"LATAM"},
+  "TH":{"country":"Thailand","tradelane":"Asia"},
+  "TZ":{"country":"Tanzania","tradelane":"Africa"},
+  "MZ":{"country":"Mozambique","tradelane":"Africa"},
+  "BG":{"country":"Bulgaria","tradelane":"Europe"},
+  "MM":{"country":"Myanmar","tradelane":"Asia"},
+  "MV":{"country":"Maldives","tradelane":"Indian Subcontinent"},
+  "SI":{"country":"Slovenia","tradelane":"Europe"},
+  "MY":{"country":"Malaysia","tradelane":"Asia"},
+  "IR":{"country":"Iran","tradelane":"Middle East"},
+  "UY":{"country":"Uruguay","tradelane":"LATAM"},
+  "YE":{"country":"Yemen","tradelane":"Middle East"},
+  "CY":{"country":"Cyprus","tradelane":"Med"},
+  "GR":{"country":"Greece","tradelane":"Med"},
+  "PH":{"country":"Philippines","tradelane":"Asia"},
+  "TW":{"country":"Taiwan","tradelane":"Asia"},
+  "QA":{"country":"Qatar","tradelane":"Middle East"},
+  "LB":{"country":"Lebanon","tradelane":"Med"},
+  "SV":{"country":"El Salvador","tradelane":"LATAM"},
+  "MU":{"country":"Mauritius","tradelane":"Middle East"},
+  "CG":{"country":"Congo","tradelane":"Africa"},
+  "FJ":{"country":"Fiji","tradelane":"Oceania"},
+  "CM":{"country":"Cameroon","tradelane":"Africa"},
+  "CD":{"country":"DR Congo","tradelane":"Africa"},
+  "SR":{"country":"Suriname","tradelane":"LATAM"},
+  "BB":{"country":"Barbados","tradelane":"LATAM"},
+  "UA":{"country":"Ukraine","tradelane":"Europe"},
+  "RO":{"country":"Romania","tradelane":"Europe"},
+  "CU":{"country":"Cuba","tradelane":"LATAM"},
+  "TG":{"country":"Togo","tradelane":"Africa"},
+  "CR":{"country":"Costa Rica","tradelane":"LATAM"},
+  "ZM":{"country":"Zambia","tradelane":"Africa"},
+  "HK":{"country":"Hong Kong","tradelane":"Asia"},
+  "SK":{"country":"Slovakia","tradelane":"Others"},
+  "IQ":{"country":"Iraq","tradelane":"Middle East"},
+  "SC":{"country":"Seychelles","tradelane":"Africa"},
+  "BH":{"country":"Bahrain","tradelane":"Middle East"},
+  "JM":{"country":"Jamaica","tradelane":"LATAM"},
+  "BJ":{"country":"Benin","tradelane":"Africa"},
+  "BN":{"country":"Brunei","tradelane":"Asia"},
+  "AO":{"country":"Angola","tradelane":"Africa"},
+  "SD":{"country":"Sudan","tradelane":"Middle East"},
+  "TT":{"country":"Trinidad and Tobago","tradelane":"LATAM"},
+  "BZ":{"country":"Belize","tradelane":"LATAM"},
+  "BS":{"country":"Bahamas","tradelane":"LATAM"},
+  "GP":{"country":"Guadeloupe","tradelane":"LATAM"},
+  "SY":{"country":"Syria","tradelane":"Middle East"},
+  "VE":{"country":"Venezuela","tradelane":"LATAM"},
+  "BF":{"country":"Burkina Faso","tradelane":"Africa"},
+  "IN":{"country":"India","tradelane":"Asia"},
+  "MG":{"country":"Madagascar","tradelane":"Africa"},
+  "KM":{"country":"Comoros","tradelane":"Africa"},
+  "CZ":{"country":"Czechia","tradelane":"Europe"},
+  "SN":{"country":"Senegal","tradelane":"Africa"},
+  "BI":{"country":"Burundi","tradelane":"Africa"},
+  "KZ":{"country":"Kazakhstan","tradelane":"Asia"},
+  "ME":{"country":"Montenegro","tradelane":"Europe"},
+  "NI":{"country":"Nicaragua","tradelane":"LATAM"},
+  "HT":{"country":"Haiti","tradelane":"LATAM"},
+  "BM":{"country":"Bermuda","tradelane":"Europe"},
+  "GM":{"country":"Gambia","tradelane":"Africa"},
+  "NA":{"country":"Namibia","tradelane":"Africa"},
+  "MT":{"country":"Malta","tradelane":"Europe"},
+  "KH":{"country":"Cambodia","tradelane":"Asia"},
+  "AQ":{"country":"Antarctica","tradelane":"Others"},
+  "LR":{"country":"Liberia","tradelane":"Africa"},
+  "YT":{"country":"Mayotte","tradelane":"Africa"},
+  "HU":{"country":"Hungary","tradelane":"Europe"},
+  "GD":{"country":"Grenada","tradelane":"LATAM"},
+  "CH":{"country":"Switzerland","tradelane":"Europe"},
+  "RE":{"country":"Reunion","tradelane":"LATAM"},
+  "LC":{"country":"Saint Lucia","tradelane":"LATAM"},
+  "ZW":{"country":"Zimbabwe","tradelane":"Africa"},
+  "GW":{"country":"Guinea-Bissau","tradelane":"Africa"},
+  "NP":{"country":"Nepal","tradelane":"Asia"},
+  "BW":{"country":"Botswana","tradelane":"Africa"},
+  "AT":{"country":"Austria","tradelane":"Europe"},
+  "GA":{"country":"Gabon","tradelane":"Africa"},
+  "BQ":{"country":"Bonaire","tradelane":"LATAM"},
+  "ET":{"country":"Ethiopia","tradelane":"Middle East"},
+  "UG":{"country":"Uganda","tradelane":"Africa"},
+  "UZ":{"country":"Uzbekistan","tradelane":"Asia"},
+  "BY":{"country":"Belarus","tradelane":"Europe"},
+  "MW":{"country":"Malawi","tradelane":"Africa"},
+  "MK":{"country":"North Macedonia","tradelane":"Europe"},
+  "AZ":{"country":"Azerbaijan","tradelane":"Asia"},
+  "AM":{"country":"Armenia","tradelane":"Asia"},
+  "GN":{"country":"Guinea","tradelane":"Africa"},
+  "BA":{"country":"Bosnia and Herzegovina","tradelane":"Europe"},
+  "CW":{"country":"Curacao","tradelane":"LATAM"},
+  "SX":{"country":"Sint Maarten","tradelane":"LATAM"},
+  "BO":{"country":"Bolivia","tradelane":"LATAM"},
+  "AF":{"country":"Afghanistan","tradelane":"Asia"},
+  "ML":{"country":"Mali","tradelane":"Africa"},
+  "SS":{"country":"South Sudan","tradelane":"Middle East"},
+  "NE":{"country":"Niger","tradelane":"Africa"},
+  "MN":{"country":"Mongolia","tradelane":"Asia"},
+  "RS":{"country":"Serbia","tradelane":"Europe"},
+  "KG":{"country":"Kyrgyzstan","tradelane":"Asia"},
+  "AL":{"country":"Albania","tradelane":"Europe"},
+  "LA":{"country":"Laos","tradelane":"Asia"},
+  "LU":{"country":"Luxembourg","tradelane":"Europe"},
+  "TJ":{"country":"Tajikistan","tradelane":"Asia"},
+  "PG":{"country":"Papua New Guinea","tradelane":"Oceania"},
+  "GQ":{"country":"Equatorial Guinea","tradelane":"Africa"},
+  "DM":{"country":"Dominica","tradelane":"LATAM"},
+  "VU":{"country":"Vanuatu","tradelane":"Oceania"},
+  "TD":{"country":"Chad","tradelane":"Africa"},
+  "MW":{"country":"Malawi","tradelane":"Africa"},
+  "LU":{"country":"Luxembourg","tradelane":"Europe"},
+  "MO":{"country":"Macao","tradelane":"Asia"},
+  "SJ":{"country":"Svalbard","tradelane":"Europe"},
+  "FO":{"country":"Faroe Islands","tradelane":"Europe"},
+  "IS":{"country":"Iceland","tradelane":"Europe"},
+  "GL":{"country":"Greenland","tradelane":"Europe"},
 };
 
-function portToCountry(portStr) {
-  if (!portStr) return "";
+// Extract iso2 and tradelane from port string "(CCXXX) City"
+function portToInfo(portStr) {
+  if (!portStr) return { country: "", tradelane: "" };
   const s = String(portStr).trim();
-  // Format: "(CCXXX) City" — extract code between parens
   const m = s.match(/^\(([A-Z]{2,5})\)/);
-  if (!m) return "";
-  const code = m[1];
-  const iso2 = code.slice(0, 2).toUpperCase();
-  return ISO2_TO_COUNTRY[iso2] || "";
+  if (!m) return { country: "", tradelane: "" };
+  const iso2 = m[1].slice(0, 2).toUpperCase();
+  const entry = TRADELANE_MAP[iso2];
+  return entry ? { country: entry.country, tradelane: entry.tradelane } : { country: "", tradelane: "" };
 }
+
+// Legacy compat
+function portToCountry(portStr) { return portToInfo(portStr).country; }
 
 async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
   const key = cacheKey || "all";
@@ -1181,19 +1316,19 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     if (fi >= 0 && ti >= 0) activeMonthSet = new Set(FY_MONTHS_LIST.slice(fi, ti + 1));
   }
 
-  // ── Step 1: Build SRR lookup maps: shipmentNo → country ──────────────────────
-  // Sea Export: Discharge Country (direct field)
-  // Sea Import: Loading Port → portToCountry
-  // Air Export: Discharge Port → portToCountry
-  // Air Import: Loading Port → portToCountry
+  // ── Step 1: Build SRR lookup maps: shipmentNo → { country, tradelane } ───────
+  // Sea Export: Discharge Country (direct field — use TRADELANE_MAP to get tradelane)
+  // Sea Import: Loading Port → portToInfo
+  // Air Export: Discharge Port → portToInfo
+  // Air Import: Loading Port → portToInfo
   const SRR_CONFIG = [
-    { coll: "srr_sea_export",  lob: "Ocean", dir: "Export", countryField: "Discharge Country", fromPort: false },
-    { coll: "srr_sea_import",  lob: "Ocean", dir: "Import", countryField: "Loading Port",      fromPort: true  },
-    { coll: "srr_air_export",  lob: "Air",   dir: "Export", countryField: "Discharge Port",    fromPort: true  },
-    { coll: "srr_air_import",  lob: "Air",   dir: "Import", countryField: "Loading Port",      fromPort: true  },
+    { coll: "srr_sea_export",  lob: "Ocean",    dir: "Export", countryField: "Discharge Country", fromPort: false },
+    { coll: "srr_sea_import",  lob: "Ocean",    dir: "Import", countryField: "Loading Port",       fromPort: true  },
+    { coll: "srr_air_export",  lob: "Air",      dir: "Export", countryField: "Discharge Port",     fromPort: true  },
+    { coll: "srr_air_import",  lob: "Air",      dir: "Import", countryField: "Loading Port",       fromPort: true  },
   ];
 
-  // shipmentNo → { country, lob, dir }
+  // shipmentNo → { country, tradelane, lob, dir }
   const srrMap = {};
   await Promise.all(SRR_CONFIG.map(async (cfg) => {
     try {
@@ -1204,8 +1339,17 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         const sno = String(r["Shipment No"] || "").trim();
         if (!sno) continue;
         const raw = String(r[cfg.countryField] || "").trim();
-        const country = cfg.fromPort ? portToCountry(raw) : raw;
-        if (country) srrMap[sno] = { country, lob: cfg.lob, dir: cfg.dir };
+        let country = "", tradelane = "";
+        if (cfg.fromPort) {
+          const info = portToInfo(raw);
+          country = info.country; tradelane = info.tradelane;
+        } else {
+          // Direct country name — reverse-lookup tradelane from TRADELANE_MAP by country name
+          country = raw;
+          const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
+          tradelane = entry ? entry.tradelane : raw; // fallback to country name if not found
+        }
+        if (country) srrMap[sno] = { country, tradelane, lob: cfg.lob, dir: cfg.dir };
       }
     } catch (e) { /* collection may not exist yet */ }
   }));
@@ -1256,8 +1400,9 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       const srrEntry = srrMap[sno];
       if (!srrEntry) continue; // no SRR match → skip
 
-      const country = srrEntry.country;
-      if (!country) continue;
+      const tradelane = srrEntry.tradelane || srrEntry.country;
+      const country   = srrEntry.country;
+      if (!tradelane) continue;
 
       const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
       const { gp } = pickGP(job, cls);
@@ -1282,7 +1427,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           : (cfg.dir === "Import" ? "Sea Imp" : "Sea Exp");
 
       function addTo(map, key) {
-        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, salesReps:new Set(), lobs:new Set() };
+        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, salesReps:new Set(), lobs:new Set(), countries:new Set() };
         map[key].shipments++;
         map[key].revenue += revenue;
         map[key].gp += gp;
@@ -1290,15 +1435,16 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         map[key].teu += teu;
         if (dispSP) map[key].salesReps.add(dispSP);
         map[key].lobs.add(lobLabel);
+        if (country) map[key].countries.add(country);
       }
-      addTo(countryMap, country);
-      if (countryMapByLob[cfg.lob]) addTo(countryMapByLob[cfg.lob], country);
+      addTo(countryMap, tradelane);
+      if (countryMapByLob[cfg.lob]) addTo(countryMapByLob[cfg.lob], tradelane);
     }
   }));
 
   function buildStats(cmap) {
-    const countries = Object.entries(cmap).map(([name, d]) => ({
-      name,
+    const rows = Object.entries(cmap).map(([name, d]) => ({
+      name,  // = tradelane
       shipments: d.shipments,
       revenue:   Math.round(d.revenue),
       gp:        Math.round(d.gp),
@@ -1307,17 +1453,18 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       gpPct:     d.revenue > 0 ? Math.round((d.gp / d.revenue) * 1000) / 10 : 0,
       salesReps: [...d.salesReps],
       lobs:      [...d.lobs].sort(),
+      countries: [...d.countries].sort(),
     }));
     function top10(arr, key) { return [...arr].sort((a,b)=>b[key]-a[key]).slice(0,10); }
     return {
-      topByShipments: top10(countries, "shipments"),
-      topByRevenue:   top10(countries, "revenue"),
-      topByGP:        top10(countries, "gp"),
-      topByTons:      top10(countries.filter(c=>c.tons>0), "tons"),
-      topByTEU:       top10(countries.filter(c=>c.teu>0), "teu"),
-      topByGPPct:     top10(countries.filter(c=>c.shipments>=2), "gpPct"),
-      totalCountries: countries.length,
-      allCountries:   [...countries].sort((a,b)=>b.gp-a.gp),
+      topByShipments:  top10(rows, "shipments"),
+      topByRevenue:    top10(rows, "revenue"),
+      topByGP:         top10(rows, "gp"),
+      topByTons:       top10(rows.filter(r=>r.tons>0), "tons"),
+      topByTEU:        top10(rows.filter(r=>r.teu>0), "teu"),
+      topByGPPct:      top10(rows.filter(r=>r.shipments>=2), "gpPct"),
+      totalCountries:  rows.length,
+      allCountries:    [...rows].sort((a,b)=>b.gp-a.gp),
     };
   }
 

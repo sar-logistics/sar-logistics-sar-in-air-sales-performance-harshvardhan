@@ -2622,10 +2622,10 @@ function tradelanePage(){
     +'<span style="font-size:13px;font-weight:700;color:#15233B;">Tradelane Insights</span>'
     +(activeView==='table'
       ? '<span style="font-size:11px;color:#64748B;font-weight:500;">Country Pivot \u00b7 '+(state.currency||'INR')+'</span>'
-      : '<span style="font-size:11px;color:#64748B;font-weight:500;">'+LOB_SUBTITLES[activeLob]+' \u00b7 '+(lobData.totalCountries||0)+' countries</span>'
+      : '<span style="font-size:11px;color:#64748B;font-weight:500;">'+LOB_SUBTITLES[activeLob]+' \u00b7 '+(lobData.totalCountries||0)+' tradelanes</span>'
     )
     +(periodLabel ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+periodLabel+'</span>' : '')
-    +(activeView==='table' ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+(allC.length)+' countries \u00b7 '+fmtCur(totalRev)+' Rev \u00b7 '+overallGPPct+'% GP%</span>' : '')
+    +(activeView==='table' ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+(allC.length)+' tradelanes \u00b7 '+fmtCur(totalRev)+' Rev \u00b7 '+overallGPPct+'% GP%</span>' : '')
     +'<div style="display:flex;align-items:center;gap:6px;margin-left:auto;">'
       +(activeView==='chart' ? '<div style="display:flex;gap:6px;">'+tabs+'</div>' : '')
       +viewToggle
@@ -2665,7 +2665,8 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
 
   var thead = '<thead><tr style="border-bottom:2px solid #E3EAF3;background:#F8FAFD;position:sticky;top:0;z-index:2;">'
     +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;width:36px;text-align:center;">#</th>'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Country</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:120px;">Tradelane</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:160px;">Countries</th>'
     +sortBtn('shipments','Ships',true)
     +(isAir ? sortBtn('tons','Tons',true) : sortBtn('teu','TEUs',true))
     +sortBtn('revenue','Revenue',true)
@@ -2684,9 +2685,11 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
     }).join('');
     var repsText = (c.salesReps||[]).slice(0,3).join(', ') + (c.salesReps&&c.salesReps.length>3?' +'+(c.salesReps.length-3):'');
     var bg = i%2===1 ? 'background:#FAFBFD;' : '';
+    var countriesHtml = (c.countries||[]).slice(0,4).join(', ') + (c.countries&&c.countries.length>4 ? ' +' +(c.countries.length-4) : '');
     tbody += '<tr style="border-bottom:1px solid #F1F5F9;'+bg+'">'
       +'<td style="padding:7px 10px;font-size:11px;color:#9AAFC8;text-align:center;font-weight:600;">'+(i+1)+'</td>'
       +'<td style="padding:7px 10px;font-size:12px;font-weight:700;color:#15233B;">'+esc(c.name)+'</td>'
+      +'<td style="padding:7px 10px;font-size:10.5px;color:#64748B;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(c.countries||[]).join(', ')+'">'+countriesHtml+'</td>'
       +'<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+c.shipments+'</td>'
       +(isAir
         ? '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+(c.tons>=1000?(c.tons/1000).toFixed(1)+'k':c.tons.toFixed(1))+'</td>'
