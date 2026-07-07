@@ -426,7 +426,7 @@ var _dropdownPanels = ''; // panels collected by topbar(), written to portal by 
 var BRAND_A2 = '#2C4E82'; // lightened navy — was too dark before
 var SIDEBAR_BG = '#173E76'; // lightened sidebar navy — was #0D2B5E (too dark)
 
-var months26 = ['Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26'];
+var months26 = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
 var repsRawOriginal = []; // unfiltered data straight from backend
 var repsRaw  = [];         // filtered view — recomputed every render() based on active filters
 
@@ -1039,32 +1039,58 @@ function yearGroups(){
 }
 
 // Display label for a column
-// quarterGroups() — returns [{label, range, idxs}, ...] for the 2 year-on-year quarter columns
+// quarterGroups() — returns [{label, range, idxs}, ...] for year-on-year quarter columns
+// Builds both years independently from months26, not from filteredMonthIndices
 function quarterGroups(){
-  var idxs = filteredMonthIndices();
   var qMap = { 'Q1':['Apr','May','Jun'], 'Q2':['Jul','Aug','Sep'], 'Q3':['Oct','Nov','Dec'], 'Q4':['Jan','Feb','Mar'] };
   var qMos = qMap[state.selectedQuarter] || [];
-  var MONTH_FULL = { Jan:'Jan',Feb:'Feb',Mar:'Mar',Apr:'Apr',May:'May',Jun:'Jun',Jul:'Jul',Aug:'Aug',Sep:'Sep',Oct:'Oct',Nov:'Nov',Dec:'Dec' };
 
-  // Group indices by calendar year suffix (e.g. '25', '26')
-  var groups = {}, order = [];
-  idxs.forEach(function(i){
-    var parts = months26[i].split('-');
-    var mon = parts[0], y2 = parts[1];
-    if (qMos.indexOf(mon) < 0) return;
-    if (!groups[y2]) { groups[y2] = { key: y2, idxs: [] }; order.push(y2); }
-    groups[y2].idxs.push(i);
-  });
+  // FY year suffix mapping:
+  // FY26 (Apr-25→Mar-26): Q1=25, Q2=25, Q3=25, Q4=26
+  // FY27 (Apr-26→Mar-27): Q1=26, Q2=26, Q3=26, Q4=27
+  var fyYrMap = { 'FY26': { normal:'25', q4:'26' }, 'FY27': { normal:'26', q4:'27' } };
+  var fyYr    = fyYrMap[state.quarterYear] || fyYrMap['FY26'];
+  var curY2   = (state.selectedQuarter === 'Q4') ? fyYr.q4 : fyYr.normal;
+  var prevY2  = String(parseInt(curY2, 10) - 1); // e.g. '26' → '25'
 
-  // Build labels: "JAN – MAR 2025" style
-  return order.map(function(y2){
-    var g = groups[y2];
-    var fullYear = '20' + y2;
-    var first = qMos[0], last = qMos[qMos.length-1];
-    g.label = first.toUpperCase() + ' – ' + last.toUpperCase() + ' ' + fullYear;
-    g.range = fullYear; // used for topbar label
-    return g;
-  });
+  // Build index arrays for each year by scanning months26
+  function idxsForYear(y2){
+    var result = [];
+    months26.forEach(function(m, i){
+      var parts = m.split('-');
+      if (qMos.indexOf(parts[0]) >= 0 && parts[1] === y2) result.push(i);
+    });
+    return result;
+  }
+
+  var groups = [];
+
+  // Previous year column (only if data exists)
+  var prevIdxs = idxsForYear(prevY2);
+  if (prevIdxs.length > 0) {
+    groups.push({
+      key:   prevY2,
+      idxs:  prevIdxs,
+      label: qMos[0].toUpperCase() + ' – ' + qMos[qMos.length-1].toUpperCase() + ' 20' + prevY2,
+    });
+  }
+
+  // Current year column (only if data exists)
+  var curIdxs = idxsForYear(curY2);
+  if (curIdxs.length > 0) {
+    groups.push({
+      key:   curY2,
+      idxs:  curIdxs,
+      label: qMos[0].toUpperCase() + ' – ' + qMos[qMos.length-1].toUpperCase() + ' 20' + curY2,
+    });
+  }
+
+  // Fallback: if neither year has data in months26, return current-only placeholder
+  if (groups.length === 0) {
+    groups.push({ key: curY2, idxs: [], label: qMos[0].toUpperCase() + ' – ' + qMos[qMos.length-1].toUpperCase() + ' 20' + curY2 });
+  }
+
+  return groups;
 }
 
 // Display label for a column: ISO week keys show as "Week N" + date range
