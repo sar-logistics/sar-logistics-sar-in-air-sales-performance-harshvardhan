@@ -1356,9 +1356,9 @@ function topbar(){
         +'</div>'
         +(state.viewDropOpen
           ? '<div id="view-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
-            +['Monthly','Weekly','Quarterly','Yearly','Custom'].map(function(v){
+            +['Monthly','Yearly','Custom'].map(function(v){
               var active = state.reportView===v;
-              var desc = v==='Monthly'?'Month by month':v==='Weekly'?'Week by week':v==='Quarterly'?'Quarter view':v==='Yearly'?'Full year':'Custom range';
+              var desc = v==='Monthly'?'Month by month':v==='Yearly'?'Full year':'Custom range';
               return '<div data-act="setView" data-val="'+v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;transition:background 0.1s;">'
                 +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';">'+v+' View</div>'
                 +'<div style="font-size:10px;color:#9AAFC8;margin-top:1px;">'+desc+'</div>'
@@ -1389,6 +1389,24 @@ function topbar(){
               return '<option value="'+o.val+'"'+(o.val===val?' selected':'')+'>'+o.label+'</option>';
             }).join('')
           +'</select>'+chevron;
+        }
+
+        if (v === 'Monthly') {
+          var fOpen = state.fromDropOpen, tOpen = state.toDropOpen;
+          function monthPill(act, toggleAct, val, dropId, isOpen){
+            var opts = months26.map(function(m){
+              var active = m===val;
+              return '<div data-act="'+act+'" data-val="'+m+'" style="padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:'+(active?'700':'500')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';background:'+(active?'#EEF4FF':'transparent')+';">'+m+'</div>';
+            }).join('');
+            var drop = isOpen ? '<div id="'+dropId+'" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;max-height:240px;overflow-y:auto;padding:4px;min-width:110px;">'+opts+'</div>' : '';
+            return '<div style="position:relative;display:inline-block;flex-shrink:0;"><div data-act="'+toggleAct+'" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(isOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+              +calIcon+'<span style="pointer-events:none;">'+val+'</span>'
+              +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;transition:transform 0.2s;'+(isOpen?'transform:rotate(180deg);':'')+'pointer-events:none;"><path d="M6 9l6 6 6-6"/></svg>'
+              +'</div>'+drop+'</div>';
+          }
+          return monthPill('setFrom','toggleFromDrop',state.dateFrom,'from-drop',fOpen)
+            +'<span style="color:#B7C4D9;font-weight:700;font-size:13px;flex-shrink:0;padding:0 2px;">→</span>'
+            +monthPill('setTo','toggleToDrop',state.dateTo,'to-drop',tOpen);
         }
 
         if (v === 'Custom') {
@@ -1444,63 +1462,20 @@ function topbar(){
             +'</div>';
           }
 
-          return '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleCustomCal" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(calOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+
+          return '<div style="position:relative;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">'
+            +'<div data-act="toggleCustomCal" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:'+(cf?'#0D2B5E':'#9AAFC8')+';cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(calOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
               +calIcon
-              +'<span style="pointer-events:none;">'+rangeLabel+'</span>'
-              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;"><path d="M6 9l6 6 6-6"/></svg>'
+              +'<span style="pointer-events:none;">'+displayFrom+'</span>'
+              +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;"><path d="M6 9l6 6 6-6"/></svg>'
+            +'</div>'
+            +'<span style="color:#B7C4D9;font-weight:700;font-size:13px;flex-shrink:0;">→</span>'
+            +'<div data-act="toggleCustomCal" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:'+(ct?'#0D2B5E':'#9AAFC8')+';cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(calOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+              +'<span style="pointer-events:none;">'+displayTo+'</span>'
+              +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;"><path d="M6 9l6 6 6-6"/></svg>'
             +'</div>'
             +calHtml
           +'</div>';
-        }
-
-        if (v === 'Weekly') {
-          var wCurrent = state.weeklyMonth||months26[months26.length-1];
-          var wOpen = state.weeklyDropOpen;
-          return '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleWeeklyDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(wOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
-              +calIcon
-              +'<span style="pointer-events:none;">'+wCurrent+'</span>'
-              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(wOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
-            +'</div>'
-            +(wOpen
-              ? '<div id="weekly-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:150px;max-height:280px;overflow-y:auto;overscroll-behavior:contain;padding:4px;">'
-                +months26.map(function(m){
-                  var active=m===wCurrent;
-                  var idx=months26.indexOf(m);
-                  var hasData=hasDataForIndices([idx]);
-                  return '<div data-act="setWeeklyMonth" data-val="'+m+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;">'
-                    +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';pointer-events:none;">'+m+'</div>'
-                    +'<span style="width:6px;height:6px;border-radius:50%;background:'+(hasData?'#22C574':'#E2E8F0')+';flex-shrink:0;pointer-events:none;"></span>'
-                  +'</div>';
-                }).join('')
-              +'</div>'
-              :'')
-          +'</div>';
-        }
-
-        if (v === 'Quarterly') {
-          var qyrPill = ''; // FY year filter removed — all years shown side by side
-          // Quarter pill
-          var qOpen = state.quarterDropOpen;
-          var qLabels = {'Q1':'Q1  Apr–Jun','Q2':'Q2  Jul–Sep','Q3':'Q3  Oct–Dec','Q4':'Q4  Jan–Mar'};
-          var qPill = '<div style="position:relative;display:inline-block;flex-shrink:0;">'
-            +'<div data-act="toggleQuarterDrop" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(qOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
-              +'<span style="pointer-events:none;">'+qLabels[state.selectedQuarter]+'</span>'
-              +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.4" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;transition:transform 0.2s;'+(qOpen?'transform:rotate(180deg);':'')+'"><path d="M6 9l6 6 6-6"/></svg>'
-            +'</div>'
-            +(qOpen
-              ? '<div id="quarter-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;padding:4px;">'
-                +['Q1','Q2','Q3','Q4'].map(function(q){
-                  var active=q===state.selectedQuarter;
-                  return '<div data-act="setQuarter" data-val="'+q+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;">'
-                    +'<div style="font-size:12px;font-weight:'+(active?'700':'600')+';color:'+(active?'#1D5FCC':'#0D2B5E')+';pointer-events:none;">'+qLabels[q]+'</div>'
-                  +'</div>';
-                }).join('')
-              +'</div>'
-              :'')
-          +'</div>';
-          return qPill;
         }
 
         if (v === 'Yearly') {
@@ -1512,7 +1487,9 @@ function topbar(){
 
         return ''; // fallback
       })()
-      // Currency toggle — sliding thumb, not an instant colour swap
+
+      +'</div>'
+      // Currency toggle — sliding thumb
       +'<div style="position:relative;display:flex;align-items:center;background:#FFFFFF;border-radius:999px;padding:4px;flex-shrink:0;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';width:104px;">'
         +'<div style="position:absolute;top:4px;left:'+(state.currency==='USD'?'50%':'4px')+';width:calc(50% - 4px);height:calc(100% - 8px);background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border-radius:999px;transition:left 0.28s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 2px 6px '+BRAND_A2+'45;"></div>'
         +'<button data-act="cur" data-cur="INR" style="position:relative;z-index:1;flex:1;border:none;background:transparent;cursor:pointer;font-size:11.5px;padding:6px 0;border-radius:999px;white-space:nowrap;font-weight:700;color:'+(state.currency==='INR'?'#FFFFFF':'#9AAFC8')+';transition:color 0.2s;">INR</button>'
@@ -4106,9 +4083,10 @@ document.addEventListener('click', function(ev){
     var len   = allM.length;
 
     // Each view ALWAYS sets a specific window — never silently keeps the old range.
-    if (v === 'Weekly') {
-      state.weeklyMonth = allM[len - 1];
-    } else if (v === 'Monthly') {
+    if (v === 'Weekly' || v === 'Quarterly') {
+      v = 'Monthly'; state.reportView = 'Monthly';
+    }
+    if (v === 'Monthly') {
       state.dateFrom = allM[Math.max(0, len - 6)];
       state.dateTo   = last;
     } else if (v === 'Quarterly') {
