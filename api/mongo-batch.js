@@ -1526,14 +1526,21 @@ module.exports = async function handler(req, res) {
       const cols = await db.listCollections().toArray();
       const allNames = cols.map(c => c.name);
       const srrNames = allNames.filter(n => n.toLowerCase().includes('srr'));
-      const result = { allCollections: allNames, srrCollections: srrNames, samples: {} };
+      const result = { allCollections: allNames, srrCollections: srrNames, samples: {}, allPortCodes: {} };
       for (const name of srrNames) {
-        const rows = await db.collection(name).find({}).limit(3).toArray();
+        const rows = await db.collection(name).find({}).toArray();
         result.samples[name] = {
-          count: await db.collection(name).countDocuments(),
+          count: rows.length,
           fields: rows[0] ? Object.keys(rows[0]).filter(k => k !== '_id') : [],
           row0: rows[0] ? Object.fromEntries(Object.entries(rows[0]).filter(([k]) => k !== '_id')) : null,
         };
+        // Extract all unique port strings from Loading Port + Discharge Port
+        const portSet = new Set();
+        for (const r of rows) {
+          if (r["Loading Port"])   portSet.add(String(r["Loading Port"]).trim());
+          if (r["Discharge Port"]) portSet.add(String(r["Discharge Port"]).trim());
+        }
+        result.allPortCodes[name] = [...portSet].sort();
       }
       return res.status(200).json(result);
     }
