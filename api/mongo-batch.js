@@ -918,7 +918,7 @@ async function computeSalesAggregate(db) {
 
 // In-memory cache for customer aggregate
 let customerCache = null;
-let customerCacheTime = 0;
+let customerCacheTime = 0; // v3: per-LOB
 
 // Used by Customer Insights (separate from the LOB-based sales aggregation above) —
 // Customer Insights is intentionally scoped to Air Export + Air Import only.
@@ -935,67 +935,101 @@ async function getCustomerAggregate(db, force) {
 }
 
 async function computeCustomerAggregate(db) {
-  // Scoped to Air Export + Air Import only (current business scope)
-  const custMap = {}; // customer name → { shipments, revenue, gp }
+  // LOB groups for customer insights
+  const LOB_GROUPS = {
+    "Air":      ["jobs_air_export",      "jobs_air_import"],
+    "Ocean":    ["jobs_sea_export",      "jobs_sea_import"],
+    "ISO Tank": ["jobs_isotank_export",  "jobs_isotank_import"],
+  };
+  const ALL_COLLS = Object.values(LOB_GROUPS).flat();
 
-  for (const collName of CUSTOMER_INSIGHTS_COLLECTIONS) {
-    const jobs = await db.collection(collName).find(
-      {},
-      { projection: {
-          "Customer": 1,
-          "Billed Revenue (C)": 1,
-          "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1, "Financial Lock": 1, "Operation Lock": 1,
-          "Chargeable Weight": 1, "Gross Weight": 1, "Weight Unit": 1, "Chargeable Weight Unit": 1,
-        }
-      }
-    ).toArray();
+  // custMapByLob: lob → customer → { shipments, revenue, gp, tons }
+  const custMapByLob = { "Air": {}, "Ocean": {}, "ISO Tank": {} };
+  const custMapAll   = {};
+
+  const projection = {
+    "Customer": 1, "Billed Revenue (C)": 1,
+    "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
+    "Financial Lock": 1, "Operation Lock": 1,
+    "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
+    "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
+  };
+
+  await Promise.all(ALL_COLLS.map(async (collName) => {
+    const lob = collName.includes("air") ? "Air"
+              : collName.includes("isotank") ? "ISO Tank"
+              : "Ocean";
+    const isAir = lob === "Air";
+    const cls = {
+      kind: isAir ? "AIR" : collName.includes("isotank") ? "ISOTANK" : "SEA",
+      direction: collName.includes("import") ? "IMPORT" : "EXPORT"
+    };
+
+    const jobs = await db.collection(collName).find({}, { projection }).toArray();
 
     for (const job of jobs) {
       const customer = String(job["Customer"] || "").trim();
       if (!customer) continue;
-
       const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      // cls must be derived per-row — Customer Insights only scans Air collections
-      // so we can safely hard-code kind:"AIR" here rather than calling classifyRow()
-      const _cls = { kind: "AIR", direction: collName.includes("import") ? "IMPORT" : "EXPORT" };
-      const { gp }  = pickGP(job, _cls);
+      const { gp } = pickGP(job, cls);
 
-      const rawWeight = parseFloat(job["Chargeable Weight"] || 0) || 0;
-      const wUnit = String(job["Chargeable Weight Unit"] || "").toLowerCase().trim();
+      // Tons for Air only
       let tons = 0;
-      if (wUnit === "ton" || wUnit === "tons" || wUnit === "mt") { tons = rawWeight; }
-      else if (wUnit === "lb" || wUnit === "lbs") { tons = rawWeight * 0.000453592; }
-      else { tons = rawWeight / 1000; } // default: kg → tons
+      if (isAir) {
+        const rawW = parseFloat(job["Chargeable Weight"] || 0) || 0;
+        const wUnit = String(job["Chargeable Weight Unit"] || "").toLowerCase().trim();
+        if (wUnit === "ton" || wUnit === "tons" || wUnit === "mt") tons = rawW;
+        else if (wUnit === "lb" || wUnit === "lbs") tons = rawW * 0.000453592;
+        else tons = rawW / 1000;
+      }
 
-      if (!custMap[customer]) custMap[customer] = { shipments: 0, revenue: 0, gp: 0, tons: 0 };
-      custMap[customer].shipments += 1;
-      custMap[customer].revenue   += revenue;
-      custMap[customer].gp        += gp;
-      custMap[customer].tons      += tons;
+      // TEU for Ocean/ISO Tank
+      let teu = 0;
+      if (!isAir) {
+        teu = parseFloat(job["Container TEU"] || 0) || 0;
+      }
+
+      function addTo(map, key) {
+        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
+        map[key].shipments++; map[key].revenue += revenue; map[key].gp += gp;
+        map[key].tons += tons; map[key].teu += teu;
+      }
+      addTo(custMapByLob[lob], customer);
+      addTo(custMapAll, customer);
     }
-  }
-
-  const customers = Object.entries(custMap).map(([name, d]) => ({
-    name,
-    shipments: d.shipments,
-    revenue:   Math.round(d.revenue),
-    gp:        Math.round(d.gp),
-    tons:      Math.round(d.tons * 100) / 100,
-    gpPct:     d.revenue > 0 ? Math.round((d.gp / d.revenue) * 1000) / 10 : 0,
   }));
 
-  function top10(arr, key) {
-    return [...arr].sort((a, b) => b[key] - a[key]).slice(0, 10);
+  function buildStats(custMap) {
+    const customers = Object.entries(custMap).map(([name, d]) => ({
+      name,
+      shipments: d.shipments,
+      revenue:   Math.round(d.revenue),
+      gp:        Math.round(d.gp),
+      tons:      Math.round(d.tons * 100) / 100,
+      teu:       Math.round(d.teu * 100) / 100,
+      gpPct:     d.revenue > 0 ? Math.round((d.gp / d.revenue) * 1000) / 10 : 0,
+    }));
+    function top10(arr, key) { return [...arr].sort((a,b)=>b[key]-a[key]).slice(0,10); }
+    return {
+      topByShipments: top10(customers, "shipments"),
+      topByRevenue:   top10(customers, "revenue"),
+      topByGP:        top10(customers, "gp"),
+      topByTons:      top10(customers.filter(c=>c.tons>0), "tons"),
+      topByTEU:       top10(customers.filter(c=>c.teu>0), "teu"),
+      topByGPPct:     top10(customers.filter(c=>c.shipments>=2), "gpPct"),
+      totalCustomers: customers.length,
+    };
   }
 
   return {
     success: true,
-    topByShipments: top10(customers, "shipments"),
-    topByRevenue:   top10(customers, "revenue"),
-    topByGP:        top10(customers, "gp"),
-    topByTons:      top10(customers.filter(c => c.tons > 0), "tons"),
-    topByGPPct:     top10(customers.filter(c => c.shipments >= 2), "gpPct"), // filter noise from 1-off jobs
-    totalCustomers: customers.length,
+    lobs: {
+      "Air":      buildStats(custMapByLob["Air"]),
+      "Ocean":    buildStats(custMapByLob["Ocean"]),
+      "ISO Tank": buildStats(custMapByLob["ISO Tank"]),
+    },
+    // "All" = combined across all LOBs
+    ...buildStats(custMapAll),
     pushedAt: new Date().toISOString(),
   };
 }

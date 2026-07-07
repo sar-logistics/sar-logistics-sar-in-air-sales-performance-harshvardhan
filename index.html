@@ -746,7 +746,7 @@ function updateUserField(email, fields, callback){
     });
 }
 
-var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{},
+var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air',
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
   addUserOpen: false, addUserError: '', addUserDefaultRole: '',
   weeklyMonth: null,
@@ -1520,8 +1520,8 @@ function topbar(){
       +'</div>'
       // Rate — small chip
       +'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#FFFFFF;border-radius:999px;padding:7px 13px;box-shadow:'+pillShadow+';">Rate '+rateEl+'</div>'
-      // Filters — functional button + panel
-      +(function(){
+      // Filters — hidden on customer page
+      +(state.page==='customers' ? '' : (function(){
         var activeCount = state.filterLobs.length + state.filterReps.length;
         var isFOpen = state.filtersOpen;
         var btnHtml = '<button data-act="toggleFiltersDrop" style="display:flex;align-items:center;gap:6px;background:'+(activeCount>0?'#EEF3FC':'#FFFFFF')+';border:1.5px solid '+(isFOpen?BRAND_A1:(activeCount>0?'#B7C8EA':'#D8E1F0'))+';border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:'+(activeCount>0?'#1E3A66':'#3C5275')+';cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
@@ -1605,7 +1605,7 @@ function topbar(){
           return btnHtml + panelHtml;
         }
         return btnHtml;
-      })()
+      })())
       +'<div style="flex:1;min-width:8px;"></div>'
       // Refresh — pushed to the far right, filled accent style with stronger shadow
       +'<button data-act="refreshData" id="refresh-btn" class="btnq" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:8px 16px;font-size:11.5px;font-weight:700;color:#FFFFFF;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:0 2px 6px '+BRAND_A2+'45,0 1px 2px '+BRAND_A2+'30;"><svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s ease;flex-shrink:0;"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>'
@@ -1853,21 +1853,48 @@ function customerPage(){
   }
 
   var d = customerData;
+  var activeLob = state.customerLob || 'Air';
+  var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
   var fmtInt  = function(v){ return v.toLocaleString('en-US'); };
   var fmtPct  = function(v){ return v+'%'; };
   var fmtTons = function(v){ return v >= 1000 ? (v/1000).toFixed(1)+'k T' : v.toFixed(1)+' T'; };
+  var fmtTEU  = function(v){ return v.toFixed(2)+' TEU'; };
 
-  return '<div style="margin-bottom:12px;">'
-    +'<span style="font-size:12.5px;font-weight:700;color:#15233B;">Customer Insights</span>'
-    +'<span style="font-size:11px;color:#64748B;font-weight:500;margin-left:8px;">Air Export + Air Import · '+d.totalCustomers+' customers</span>'
-  +'</div>'
-  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
-    + horizontalBarPanel('Top 10 Customers by Shipments', d.topByShipments, 'shipments', fmtInt, '#1D5FCC')
-    + horizontalBarPanel('Top 10 Customers by Volume (Tons)', d.topByTons||[],  'tons',      fmtTons,'#2E7CF6')
-    + horizontalBarPanel('Top 10 Customers by Revenue',   d.topByRevenue,   'revenue',   fmtCur, '#1A4FA0')
-    + horizontalBarPanel('Top 10 Customers by GP',        d.topByGP,        'gp',        fmtCur, '#0D2B5E')
-    + horizontalBarPanel('Top 10 Customers by GP%',       d.topByGPPct,     'gpPct',     fmtPct, '#4B8CF5')
+  var LOBS = ['Air','Ocean','ISO Tank'];
+  var LOB_COLORS = {'Air':'#1D5FCC','Ocean':'#0891B2','ISO Tank':'#7C3AED'};
+  var LOB_SUBTITLES = {'Air':'Air Export + Air Import','Ocean':'Sea Export + Sea Import','ISO Tank':'ISO Tank Export + Import'};
+
+  var tabs = LOBS.map(function(lob){
+    var active = lob === activeLob;
+    var c = LOB_COLORS[lob];
+    return '<button data-act="setCustomerLob" data-val="'+esc(lob)+'" style="padding:6px 16px;border-radius:999px;border:1.5px solid '+(active?c:'#D8E1F0')+';background:'+(active?c:'#F4F7FC')+';color:'+(active?'#fff':'#5B7298')+';font-size:12px;font-weight:700;cursor:pointer;">'+esc(lob)+'</button>';
+  }).join('');
+
+  var header = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">'
+    +'<span style="font-size:13px;font-weight:700;color:#15233B;">Customer Insights</span>'
+    +'<span style="font-size:11px;color:#64748B;font-weight:500;">'+LOB_SUBTITLES[activeLob]+' · '+(lobData.totalCustomers||0)+' customers</span>'
+    +'<div style="display:flex;gap:6px;margin-left:auto;">'+tabs+'</div>'
   +'</div>';
+
+  var c1 = LOB_COLORS[activeLob];
+  var shades = {
+    'Air':      ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'],
+    'Ocean':    ['#0891B2','#0E7490','#155E75','#083344','#22D3EE'],
+    'ISO Tank': ['#7C3AED','#6D28D9','#5B21B6','#4C1D95','#A78BFA'],
+  };
+  var sc = shades[activeLob] || shades['Air'];
+
+  var charts = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
+    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0])
+    + (activeLob === 'Air'
+        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1])
+        : horizontalBarPanel('Top 10 by TEUs',          lobData.topByTEU||[],  'teu',  fmtTEU,  sc[1]))
+    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2])
+    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3])
+    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4])
+  +'</div>';
+
+  return header + charts;
 }
 
 
@@ -3971,6 +3998,7 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; render(); }
   else if(act==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; state.fromDropOpen=false; state.toDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='setCustomerLob'){ ev.stopPropagation(); state.customerLob=el.getAttribute('data-val'); render(); }
   else if(act==='setQuarter'){ ev.stopPropagation(); state.selectedQuarter=el.getAttribute('data-val'); state.quarterDropOpen=false; render(); }
   else if(act==='toggleQuarterDrop'){ ev.stopPropagation(); state.quarterDropOpen=!state.quarterDropOpen; state.qyrDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setQuarterYear'){ ev.stopPropagation(); state.quarterYear=el.getAttribute('data-val'); state.qyrDropOpen=false; render(); }
