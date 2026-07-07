@@ -2493,6 +2493,13 @@ function tableRows(){
   } else {
     colLabels = ['FY Total'].concat(filteredMonths().map(colDisplayLabel));
   }
+
+  // Quarterly: if no groups have data, show a no-data message
+  if (isQuarterly && qGroups && qGroups.every(function(g){ return g.idxs.length === 0; })) {
+    var qNames = {'Q1':'Apr–Jun','Q2':'Jul–Sep','Q3':'Oct–Dec','Q4':'Jan–Mar'};
+    return [{ noData: true, msg: 'No data available for ' + state.selectedQuarter + ' (' + (qNames[state.selectedQuarter]||'') + ') in any year. Data only exists for: ' + months26.join(', ') }];
+  }
+
   var ents = entities();
   var rows = [];
 
@@ -2692,6 +2699,14 @@ function salesTable(M){
   +'</tr>';
 
   var allRows = tableRows();
+  // Check for no-data sentinel from quarterly with empty groups
+  if (allRows.length === 1 && allRows[0].noData) {
+    return '<div style="background:#fff;border-radius:12px;border:1px solid #E3EAF3;padding:48px 24px;text-align:center;color:#64748B;font-size:13px;font-weight:500;">'
+      +'<div style="font-size:32px;margin-bottom:12px;">📭</div>'
+      +'<div style="font-weight:700;color:#0D2B5E;font-size:15px;margin-bottom:8px;">No data for this quarter</div>'
+      +'<div style="color:#94A3B8;font-size:12px;">'+esc(allRows[0].msg)+'</div>'
+    +'</div>';
+  }
 
   // Pre-compute block boundaries: for each row, find which row index within
   // its block is the "middle" row — that's where we render the name label
