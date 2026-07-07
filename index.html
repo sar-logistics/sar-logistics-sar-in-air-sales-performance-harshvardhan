@@ -879,7 +879,7 @@ function updateUserField(email, fields, callback){
     });
 }
 
-var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air',
+var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:-1,
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
   addUserOpen: false, addUserError: '', addUserDefaultRole: '',
   weeklyMonth: null,
@@ -2026,7 +2026,8 @@ function customerPage(){
     +'</div>';
   }
 
-  var activeLob = state.customerLob || 'Air';
+  var activeLob  = state.customerLob  || 'Air';
+  var activeView = state.customerView || 'chart';
   var fmtInt  = function(v){ return Math.round(v).toLocaleString('en-US'); };
   var fmtPct  = function(v){ return v+'%'; };
   var fmtTons = function(v){ return v >= 1000 ? (v/1000).toFixed(1)+'k T' : v.toFixed(1)+' T'; };
@@ -2034,15 +2035,10 @@ function customerPage(){
   var LOBS = ['Air','Ocean','ISO Tank'];
   var LOB_COLORS = {'Air':'#1D5FCC','Ocean':'#0891B2','ISO Tank':'#7C3AED'};
   var LOB_SUBTITLES = {'Air':'Air Export + Air Import','Ocean':'Sea Export + Sea Import','ISO Tank':'ISO Tank Export + Import'};
-  var LOB_CLS = {'Air':'air','Ocean':'sea','ISO Tank':'isotank'};
 
-
-  // Use server-filtered customer data
   var d = customerData || {};
   var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
 
-
-  // ── Period label ──
   var periodLabel = (function(){
     var v = state.reportView;
     if (v === 'Yearly') return 'Full Year';
@@ -2055,18 +2051,43 @@ function customerPage(){
     return ms.length ? ms[0] + (ms.length>1 ? ' \u2013 ' + ms[ms.length-1] : '') : '';
   })();
 
+  var brandC = LOB_COLORS[activeLob];
+
   var tabs = LOBS.map(function(lob){
     var active = lob === activeLob;
     var c = LOB_COLORS[lob];
     return '<button data-act="setCustomerLob" data-val="'+esc(lob)+'" style="padding:6px 16px;border-radius:999px;border:1.5px solid '+(active?c:'#D8E1F0')+';background:'+(active?c:'#F4F7FC')+';color:'+(active?'#fff':'#5B7298')+';font-size:12px;font-weight:700;cursor:pointer;">'+esc(lob)+'</button>';
   }).join('');
 
-  var header = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">'
-    +'<span style="font-size:13px;font-weight:700;color:#15233B;">Customer Insights</span>'
-    +'<span style="font-size:11px;color:#64748B;font-weight:500;">'+LOB_SUBTITLES[activeLob]+' \u00b7 '+(lobData.totalCustomers||0)+' customers</span>'
-    +(periodLabel ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+periodLabel+'</span>' : '')
-    +'<div style="display:flex;gap:6px;margin-left:auto;">'+tabs+'</div>'
+  var viewToggle = '<div style="display:flex;border:1.5px solid #D8E1F0;border-radius:8px;overflow:hidden;margin-left:12px;">'
+    + '<button data-act="setCustView" data-val="chart" style="padding:5px 13px;border:none;background:'+(activeView==='chart'?brandC:'#F4F7FC')+';color:'+(activeView==='chart'?'#fff':'#5B7298')+';font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">'
+      +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" pointer-events="none"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg>Chart</button>'
+    + '<button data-act="setCustView" data-val="table" style="padding:5px 13px;border:none;border-left:1.5px solid #D8E1F0;background:'+(activeView==='table'?brandC:'#F4F7FC')+';color:'+(activeView==='table'?'#fff':'#5B7298')+';font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">'
+      +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" pointer-events="none"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>Table</button>'
   +'</div>';
+
+  var allCusts = lobData.allCustomers || [];
+  var totalRev = allCusts.reduce(function(s,c){ return s+c.revenue; }, 0);
+  var totalGP  = allCusts.reduce(function(s,c){ return s+c.gp; }, 0);
+  var overallGPPct = totalRev > 0 ? (totalGP/totalRev*100).toFixed(1) : '0.0';
+
+  var header = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">'
+    +'<span style="font-size:13px;font-weight:700;color:#15233B;">Customer Insights</span>'
+    +(activeView==='table'
+      ? '<span style="font-size:11px;color:#64748B;font-weight:500;">Customer Pivot \u00b7 '+(state.currency||'INR')+'</span>'
+      : '<span style="font-size:11px;color:#64748B;font-weight:500;">'+LOB_SUBTITLES[activeLob]+' \u00b7 '+(lobData.totalCustomers||0)+' customers</span>'
+    )
+    +(periodLabel ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+periodLabel+'</span>' : '')
+    +(activeView==='table' ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+(allCusts.length)+' customers \u00b7 '+fmtCur(totalRev)+' Rev \u00b7 '+overallGPPct+'% GP%</span>' : '')
+    +'<div style="display:flex;align-items:center;gap:6px;margin-left:auto;">'
+      +(activeView==='chart' ? '<div style="display:flex;gap:6px;">'+tabs+'</div>' : '')
+      +viewToggle
+    +'</div>'
+  +'</div>';
+
+  if (activeView === 'table') {
+    return header + customerPivotTable(lobData, activeLob, brandC);
+  }
 
   var sc = {'Air':['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'],
             'Ocean':['#0891B2','#0E7490','#155E75','#083344','#22D3EE'],
@@ -2083,6 +2104,66 @@ function customerPage(){
   +'</div>';
 
   return header + charts;
+}
+
+function customerPivotTable(lobData, activeLob, brandC) {
+  var rows = (lobData.allCustomers || []).slice();
+  var sortCol = state.custSortCol || 'gp';
+  var sortDir = (state.custSortDir === undefined) ? -1 : state.custSortDir;
+  var isAir = activeLob === 'Air';
+
+  rows.sort(function(a,b){ return sortDir * (b[sortCol] - a[sortCol]); });
+
+  function sortBtn(col, label, alignRight) {
+    var active = sortCol === col;
+    var arrow = active ? (sortDir === -1 ? ' \u25bc' : ' \u25b2') : '';
+    var align = alignRight ? 'right' : 'left';
+    return '<th data-act="custSort" data-col="'+col+'" style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:'+(active?brandC:'#9AAFC8')+';text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;text-align:'+align+';">'+label+arrow+'</th>';
+  }
+
+  var thead = '<thead><tr style="border-bottom:2px solid #E3EAF3;background:#F8FAFD;position:sticky;top:0;z-index:2;">'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;width:36px;text-align:center;">#</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:180px;">Customer</th>'
+    +sortBtn('shipments','Ships',true)
+    +(isAir ? sortBtn('tons','Tons',true) : sortBtn('teu','TEUs',true))
+    +sortBtn('revenue','Revenue',true)
+    +sortBtn('gp','GP',true)
+    +sortBtn('gpPct','GP%',true)
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;">LOB(s)</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Sales</th>'
+    +'</tr></thead>';
+
+  var tbody = '<tbody>';
+  rows.forEach(function(c, i) {
+    var gpColor  = c.gp >= 0 ? '#059669' : '#DC2626';
+    var gpPctColor = c.gpPct >= 15 ? '#059669' : c.gpPct >= 5 ? '#D97706' : '#DC2626';
+    var lobsHtml = (c.lobs||[]).map(function(l){
+      return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:9.5px;font-weight:700;background:#EEF2FF;color:#4B5FCC;margin:1px;">'+esc(l)+'</span>';
+    }).join('');
+    var repsText = (c.salesReps||[]).slice(0,3).join(', ') + (c.salesReps && c.salesReps.length > 3 ? ' +' + (c.salesReps.length-3) : '');
+    var bg = i%2===1 ? 'background:#FAFBFD;' : '';
+    tbody += '<tr style="border-bottom:1px solid #F1F5F9;'+bg+'">'
+      +'<td style="padding:7px 10px;font-size:11px;color:#9AAFC8;text-align:center;font-weight:600;">'+(i+1)+'</td>'
+      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:#15233B;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(c.name)+'">'+esc(c.name)+'</td>'
+      +'<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+c.shipments+'</td>'
+      +(isAir
+        ? '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+(c.tons>=1000?(c.tons/1000).toFixed(1)+'k':c.tons.toFixed(1))+'</td>'
+        : '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+c.teu.toFixed(1)+'</td>'
+      )
+      +'<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(c.revenue)+'</td>'
+      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(c.gp)+'</td>'
+      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpPctColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+c.gpPct+'%</td>'
+      +'<td style="padding:7px 10px;">'+lobsHtml+'</td>'
+      +'<td style="padding:7px 10px;font-size:10.5px;color:#64748B;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(c.salesReps||[]).join(', ')+'">'+repsText+'</td>'
+      +'</tr>';
+  });
+  tbody += '</tbody>';
+
+  return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 220px);overflow-y:auto;">'
+    +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
+    +'</div>'
+  +'</div>';
 }
 
 
@@ -4198,6 +4279,14 @@ document.addEventListener('click', function(ev){
   else if(act==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; render(); }
   else if(act==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; state.fromDropOpen=false; state.toDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setCustomerLob'){ ev.stopPropagation(); state.customerLob=el.getAttribute('data-val'); render(); }
+  else if(act==='setCustView'){ ev.stopPropagation(); state.customerView=el.getAttribute('data-val'); render(); }
+  else if(act==='custSort'){
+    ev.stopPropagation();
+    var col = el.getAttribute('data-col');
+    if(state.custSortCol === col){ state.custSortDir = (state.custSortDir||(-1)) * -1; }
+    else { state.custSortCol = col; state.custSortDir = -1; }
+    render();
+  }
   else if(act==='setQuarter'){
     ev.stopPropagation(); state.selectedQuarter=el.getAttribute('data-val'); state.quarterDropOpen=false;
     if(state.page==='customers'){ var _k=getCustomerCacheKey(); if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); } else { customerDataReady=false; fetchCustomerData(function(){ render(); }); } }

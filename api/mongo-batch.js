@@ -959,10 +959,15 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
   // custMapByLob: lob → customer → { shipments, revenue, gp, tons }
   const custMapByLob = { "Air": {}, "Ocean": {}, "ISO Tank": {} };
   const custMapAll   = {};
+  // salesRepMap: customer → Set of sales rep display names
+  const custSalesReps = {};
+  // lobsMap: customer → Set of lob sub-labels (e.g. "Air Exp", "Sea Imp")
+  const custLobLabels = {};
 
   const projection = {
     "Customer": 1, "Billed Revenue (C)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
+    "Sales Person": 1,
     "Financial Lock": 1, "Operation Lock": 1,
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
@@ -1024,6 +1029,22 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
       }
       addTo(custMapByLob[lob], customer);
       addTo(custMapAll, customer);
+
+      // Track sales reps (first pipe segment = display name)
+      const rawSP = String(job["Sales Person"] || "").trim();
+      const dispSP = rawSP ? rawSP.split("|")[0].trim() : "";
+      if (dispSP) {
+        if (!custSalesReps[customer]) custSalesReps[customer] = new Set();
+        custSalesReps[customer].add(dispSP);
+      }
+      // Track LOB sub-labels
+      const lobLabel = lob === "Air"
+        ? (collName.includes("import") ? "Air Imp" : "Air Exp")
+        : lob === "ISO Tank"
+          ? (collName.includes("import") ? "ISO Imp" : "ISO Exp")
+          : (collName.includes("import") ? "Sea Imp" : "Sea Exp");
+      if (!custLobLabels[customer]) custLobLabels[customer] = new Set();
+      custLobLabels[customer].add(lobLabel);
     }
   }));
 
@@ -1036,6 +1057,8 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
       tons:      Math.round(d.tons * 100) / 100,
       teu:       Math.round(d.teu * 100) / 100,
       gpPct:     d.revenue > 0 ? Math.round((d.gp / d.revenue) * 1000) / 10 : 0,
+      salesReps: custSalesReps[name] ? [...custSalesReps[name]] : [],
+      lobs:      custLobLabels[name] ? [...custLobLabels[name]].sort() : [],
     }));
     function top10(arr, key) { return [...arr].sort((a,b)=>b[key]-a[key]).slice(0,10); }
     return {
@@ -1046,6 +1069,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
       topByTEU:       top10(customers.filter(c=>c.teu>0), "teu"),
       topByGPPct:     top10(customers.filter(c=>c.shipments>=2), "gpPct"),
       totalCustomers: customers.length,
+      allCustomers:   [...customers].sort((a,b)=>b.gp-a.gp), // full list sorted by GP for pivot
     };
   }
 
