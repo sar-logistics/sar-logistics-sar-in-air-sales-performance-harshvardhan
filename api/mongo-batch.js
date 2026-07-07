@@ -918,24 +918,36 @@ async function computeSalesAggregate(db) {
 }
 
 // In-memory cache for customer aggregate
-let customerCache = null;
-let customerCacheTime = 0; // v3: per-LOB
+const customerCacheMap = {}; // key → { data, time }
 
-// Used by Customer Insights (separate from the LOB-based sales aggregation above) —
-// Customer Insights is intentionally scoped to Air Export + Air Import only.
+// Used by Customer Insights
 const CUSTOMER_INSIGHTS_COLLECTIONS = ["jobs_air_export", "jobs_air_import"];
 
-async function getCustomerAggregate(db, force) {
-  if (!force && customerCache && (Date.now() - customerCacheTime) < SALES_CACHE_TTL_MS) {
-    return { ...customerCache, cached: true };
+async function getCustomerAggregate(db, force, dateFrom, dateTo, cacheKey) {
+  const key = cacheKey || 'all';
+  const entry = customerCacheMap[key];
+  if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
+    return { ...entry.data, cached: true };
   }
-  const result = await computeCustomerAggregate(db);
-  customerCache = result;
-  customerCacheTime = Date.now();
+  const result = await computeCustomerAggregate(db, dateFrom, dateTo);
+  customerCacheMap[key] = { data: result, time: Date.now() };
   return result;
 }
 
-async function computeCustomerAggregate(db) {
+async function computeCustomerAggregate(db, dateFrom, dateTo) {
+  // Parse active month labels from dateFrom/dateTo (e.g. "Jan-26" to "Jun-26")
+  const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
+    "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
+    "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
+    "Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27"];
+  let activeMonthSet = null;
+  if (dateFrom && dateTo) {
+    const fi = FY_MONTHS_LIST.indexOf(dateFrom);
+    const ti = FY_MONTHS_LIST.indexOf(dateTo);
+    if (fi >= 0 && ti >= 0) {
+      activeMonthSet = new Set(FY_MONTHS_LIST.slice(fi, ti + 1));
+    }
+  }
   // LOB groups for customer insights
   const LOB_GROUPS = {
     "Air":      ["jobs_air_export",      "jobs_air_import"],
@@ -954,6 +966,7 @@ async function computeCustomerAggregate(db) {
     "Financial Lock": 1, "Operation Lock": 1,
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
+    "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
   };
 
   await Promise.all(ALL_COLLS.map(async (collName) => {
@@ -968,7 +981,21 @@ async function computeCustomerAggregate(db) {
 
     const jobs = await db.collection(collName).find({}, { projection }).toArray();
 
+    const isExportColl = collName.includes("export");
+    const isImportColl = collName.includes("import");
+    const dateCol = isExportColl ? "ETD Loading Port" : isImportColl ? "ETA Discharge" : "Job Date";
+
     for (const job of jobs) {
+      // Date filter — only include jobs within the selected month range
+      if (activeMonthSet) {
+        const rawDate = job[dateCol] || job["Job Date"];
+        if (!rawDate) continue;
+        const dObj = new Date(rawDate);
+        if (isNaN(dObj.getTime())) continue;
+        const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
+        if (!activeMonthSet.has(ml)) continue;
+      }
+
       const customer = String(job["Customer"] || "").trim();
       if (!customer) continue;
       const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
@@ -1360,7 +1387,10 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "customers") {
-      const result = await getCustomerAggregate(db, forceRefresh);
+      const dateFrom = req.query.dateFrom || null; // e.g. "Jan-26"
+      const dateTo   = req.query.dateTo   || null; // e.g. "Jun-26"
+      const cacheKey = `${dateFrom}|${dateTo}`;
+      const result = await getCustomerAggregate(db, forceRefresh, dateFrom, dateTo, cacheKey);
       return res.status(200).json(result);
     }
 
