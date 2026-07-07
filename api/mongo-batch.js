@@ -298,7 +298,7 @@ function normalizeName(name) {
 
 // In-memory cache — survives across warm Lambda invocations (same container)
 let salesCache = null;
-let salesCacheTime = 0; // v2: FY fallback fix
+let salesCacheTime = 0; // v3: Customer field added
 const SALES_CACHE_TTL_MS = 120 * 60 * 1000; // 2 hours — data pushed from sheets periodically
 
 // ── DRILL-DOWN: real job rows behind a clicked table cell ──────────
@@ -648,7 +648,7 @@ async function computeSalesAggregate(db) {
   // biggest single performance lever for initial load time.
   const allJobResults = await Promise.all(JOB_COLLECTIONS.map(cn =>
     db.collection(cn).find({}, { projection: {
-      "Sales Person":1, "Job Date":1, "LOB":1, "Location":1,
+      "Sales Person":1, "Job Date":1, "LOB":1, "Location":1, "Customer":1,
       "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
       "Financial Lock":1, "Operation Lock":1,
       "ETD Loading Port":1, "ETA Discharge":1,
