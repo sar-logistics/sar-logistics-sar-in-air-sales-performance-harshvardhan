@@ -298,7 +298,7 @@ function normalizeName(name) {
 
 // In-memory cache — survives across warm Lambda invocations (same container)
 let salesCache = null;
-let salesCacheTime = 0;
+let salesCacheTime = 0; // v2: FY fallback fix
 const SALES_CACHE_TTL_MS = 120 * 60 * 1000; // 2 hours — data pushed from sheets periodically
 
 // ── DRILL-DOWN: real job rows behind a clicked table cell ──────────
@@ -683,12 +683,11 @@ async function computeSalesAggregate(db) {
       }
       if (!monthLabel || !FY_MONTHS.includes(monthLabel)) continue;
 
-      // Pick the mapping lookup matching THIS row's own fiscal year — a rep's
-      // zone/target can differ between FY26 and FY27, so the right lookup
-      // table depends on which year this specific job row's date falls in.
+      // Pick the mapping for this row's FY — fall back to the other FY if not found
+      // Many reps only have FY26 mapping even if they have FY27 job data
       const rowFY = fyForMonthLabel(monthLabel);
-      const repLookup = repLookupByFY[rowFY] || {};
-      const mapped = repLookup[salesPerson];
+      const mapped = repLookupByFY[rowFY]?.[salesPerson]
+                  || repLookupByFY[rowFY === 'FY27' ? 'FY26' : 'FY27']?.[salesPerson];
 
       const { gp, isProvisional } = pickGP(job, cls);
       const gpProv   = isProvisional ? gp : 0;
