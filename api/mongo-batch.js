@@ -1509,6 +1509,13 @@ module.exports = async function handler(req, res) {
       const sample = {};
       sample.mapping_sales_targets = await db.collection("mapping_sales_targets").find({}).toArray();
       sample.mapping_zone_targets  = await db.collection("mapping_zone_targets").find({}).toArray();
+      // Sample SRR collections
+      for (const srr of ["srr_sea_export","srr_sea_import","srr_air_export","srr_air_import","SRR - Sea Export","SRR - Sea Import","SRR - Air Export","SRR - Air Import"]) {
+        try { sample["srr_"+srr] = await db.collection(srr).find({}).limit(2).toArray(); } catch(e) { sample["srr_"+srr] = "ERR: "+e.message; }
+      }
+      // List all collection names
+      const cols = await db.listCollections().toArray();
+      sample._collections = cols.map(c=>c.name);
       return res.status(200).json(sample);
     }
 
