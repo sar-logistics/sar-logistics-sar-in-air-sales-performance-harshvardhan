@@ -1497,7 +1497,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "agents", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -1517,6 +1517,22 @@ module.exports = async function handler(req, res) {
       const cols = await db.listCollections().toArray();
       sample._collections = cols.map(c=>c.name);
       return res.status(200).json(sample);
+    }
+
+    if (action === "srrProbe") {
+      const cols = await db.listCollections().toArray();
+      const allNames = cols.map(c => c.name);
+      const srrNames = allNames.filter(n => n.toLowerCase().includes('srr'));
+      const result = { allCollections: allNames, srrCollections: srrNames, samples: {} };
+      for (const name of srrNames) {
+        const rows = await db.collection(name).find({}).limit(3).toArray();
+        result.samples[name] = {
+          count: await db.collection(name).countDocuments(),
+          fields: rows[0] ? Object.keys(rows[0]).filter(k => k !== '_id') : [],
+          row0: rows[0] ? Object.fromEntries(Object.entries(rows[0]).filter(([k]) => k !== '_id')) : null,
+        };
+      }
+      return res.status(200).json(result);
     }
 
     if (action === "lobCheck") {
