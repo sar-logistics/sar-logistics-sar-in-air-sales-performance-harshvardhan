@@ -1691,7 +1691,7 @@ function topbar(){
       // Rate — small chip
       +'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#FFFFFF;border-radius:999px;padding:7px 13px;box-shadow:'+pillShadow+';">Rate '+rateEl+'</div>'
       // Filters — hidden on customer page
-      +(state.page==='customers' ? '' : (function(){
+      +(false ? '' : (function(){
         var activeCount = state.filterLobs.length + state.filterReps.length;
         var isFOpen = state.filtersOpen;
         var btnHtml = '<button data-act="toggleFiltersDrop" style="display:flex;align-items:center;gap:6px;background:'+(activeCount>0?'#EEF3FC':'#FFFFFF')+';border:1.5px solid '+(isFOpen?BRAND_A1:(activeCount>0?'#B7C8EA':'#D8E1F0'))+';border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:'+(activeCount>0?'#1E3A66':'#3C5275')+';cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
@@ -2038,6 +2038,40 @@ function customerPage(){
 
   var d = customerData || {};
   var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
+
+  // Apply filterReps / filterLobs to customer data
+  var filterReps = state.filterReps || [];
+  var filterLobs = state.filterLobs || [];
+  // Map sales LOB filter keys to customer LOB label substrings
+  var LOB_KEY_TO_CUST = {
+    'AIR EXPORT':      'Air Exp',  'AIR IMPORT':      'Air Imp',
+    'SEA EXPORT':      'Sea Exp',  'SEA IMPORT':      'Sea Imp',
+    'ISOTANK EXPORT':  'ISO Exp',  'ISOTANK IMPORT':  'ISO Imp'
+  };
+  var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
+  if (hasFilters && lobData.allCustomers) {
+    var filteredCusts = lobData.allCustomers.filter(function(c) {
+      var repOk = filterReps.length === 0 || (c.salesReps || []).some(function(r){
+        return filterReps.indexOf(r) > -1;
+      });
+      var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
+        var needle = LOB_KEY_TO_CUST[fk] || '';
+        return needle && (c.lobs || []).indexOf(needle) > -1;
+      });
+      return repOk && lobOk;
+    });
+    function top10f(arr, key) { return arr.slice().sort(function(a,b){ return b[key]-a[key]; }).slice(0,10); }
+    lobData = {
+      allCustomers:   filteredCusts,
+      totalCustomers: filteredCusts.length,
+      topByShipments: top10f(filteredCusts, 'shipments'),
+      topByRevenue:   top10f(filteredCusts, 'revenue'),
+      topByGP:        top10f(filteredCusts, 'gp'),
+      topByTons:      top10f(filteredCusts.filter(function(c){ return c.tons > 0; }), 'tons'),
+      topByTEU:       top10f(filteredCusts.filter(function(c){ return c.teu > 0; }), 'teu'),
+      topByGPPct:     top10f(filteredCusts.filter(function(c){ return c.shipments >= 2; }), 'gpPct'),
+    };
+  }
 
   var periodLabel = (function(){
     var v = state.reportView;
