@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v17'; // v17: Customer field in drill rows // v16: quarterly fix — fresh months26
+var CACHE_VERSION = 'v18'; // v18: Customer Insights — proper date range for all views, accurate caching
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -718,23 +718,33 @@ function makeFetcher(action, lsKey, setReady) {
 // In-memory cache for customer data per date range key — instant switching
 var _customerCache = {}; // key → data
 
-function getCustomerCacheKey() {
+// Derive the actual dateFrom/dateTo for the current view (works for all view types)
+function getCustomerDateRange() {
   var v = state.reportView;
   var dateFrom = '', dateTo = '';
-  if (v === 'Monthly') { dateFrom = state.dateFrom; dateTo = state.dateTo; }
-  else if (v === 'Custom' && state.customDateFrom && state.customDateTo) {
+  if (v === 'Monthly') {
+    dateFrom = state.dateFrom; dateTo = state.dateTo;
+  } else if (v === 'Custom' && state.customDateFrom && state.customDateTo) {
     dateFrom = state.customDateFrom; dateTo = state.customDateTo;
+  } else {
+    // Yearly / Quarterly / Weekly — compute from filteredMonthIndices
+    var idxs = filteredMonthIndices();
+    if (idxs && idxs.length > 0) {
+      dateFrom = months26[idxs[0]];
+      dateTo   = months26[idxs[idxs.length - 1]];
+    }
   }
-  return (dateFrom||'all') + '_' + (dateTo||'all');
+  return { dateFrom: dateFrom, dateTo: dateTo };
+}
+
+function getCustomerCacheKey() {
+  var r = getCustomerDateRange();
+  return (r.dateFrom||'all') + '_' + (r.dateTo||'all');
 }
 
 function fetchCustomerData(callback, force) {
-  var v = state.reportView;
-  var dateFrom = '', dateTo = '';
-  if (v === 'Monthly') { dateFrom = state.dateFrom; dateTo = state.dateTo; }
-  else if (v === 'Custom' && state.customDateFrom && state.customDateTo) {
-    dateFrom = state.customDateFrom; dateTo = state.customDateTo;
-  }
+  var r = getCustomerDateRange();
+  var dateFrom = r.dateFrom, dateTo = r.dateTo;
   var key    = (dateFrom||'all') + '_' + (dateTo||'all');
   var lsKey  = 'customers_' + key;
   var qs = '/api/mongo-batch?action=customers'
@@ -1941,7 +1951,7 @@ function adminPage(){
 
 
 function customerPage(){
-  if (!customerDataReady && !allDrillRows) {
+  if (!customerDataReady) {
     if (!customerDataLoading) {
       customerDataLoading = true;
       fetchCustomerData(function(){ customerDataLoading = false; render(); });
@@ -4119,11 +4129,19 @@ document.addEventListener('click', function(ev){
   else if(act==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; render(); }
   else if(act==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; state.fromDropOpen=false; state.toDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setCustomerLob'){ ev.stopPropagation(); state.customerLob=el.getAttribute('data-val'); render(); }
-  else if(act==='setQuarter'){ ev.stopPropagation(); state.selectedQuarter=el.getAttribute('data-val'); state.quarterDropOpen=false; render(); }
+  else if(act==='setQuarter'){
+    ev.stopPropagation(); state.selectedQuarter=el.getAttribute('data-val'); state.quarterDropOpen=false;
+    if(state.page==='customers'){ var _k=getCustomerCacheKey(); if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); } else { customerDataReady=false; fetchCustomerData(function(){ render(); }); } }
+    else render();
+  }
   else if(act==='toggleQuarterDrop'){ ev.stopPropagation(); state.quarterDropOpen=!state.quarterDropOpen; state.qyrDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setQuarterYear'){ ev.stopPropagation(); state.quarterYear=el.getAttribute('data-val'); state.qyrDropOpen=false; render(); }
   else if(act==='toggleQyrDrop'){ ev.stopPropagation(); state.qyrDropOpen=!state.qyrDropOpen; state.quarterDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='setYearType'){ ev.stopPropagation(); state.yearType=el.getAttribute('data-val'); state.yearTypeDropOpen=false; render(); }
+  else if(act==='setYearType'){
+    ev.stopPropagation(); state.yearType=el.getAttribute('data-val'); state.yearTypeDropOpen=false;
+    if(state.page==='customers'){ var _k=getCustomerCacheKey(); if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); } else { customerDataReady=false; fetchCustomerData(function(){ render(); }); } }
+    else render();
+  }
   else if(act==='toggleYearTypeDrop'){ ev.stopPropagation(); state.yearTypeDropOpen=!state.yearTypeDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleCustomCal'){
     ev.stopPropagation();
@@ -4221,7 +4239,6 @@ document.addEventListener('click', function(ev){
     var v = el.getAttribute('data-val');
     state.reportView = v;
     state.viewDropOpen = false;
-    if(state.page==='customers'){ var _k=getCustomerCacheKey(); if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; } else { customerDataReady=false; } }
     var allM = months26;
     var last  = allM[allM.length - 1];
     var first = allM[0];
@@ -4240,6 +4257,15 @@ document.addEventListener('click', function(ev){
     } else if (v === 'Custom') {
       syncDateRangeToData();
     }
+
+    // Customer page: check cache AFTER state is set (so getCustomerCacheKey uses new view/dates)
+    if(state.page==='customers'){
+      var _k=getCustomerCacheKey();
+      if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); }
+      else { customerDataReady=false; fetchCustomerData(function(){ render(); }); }
+      return;
+    }
+
     render();
     if (v === 'Weekly') {
       fetchWeekDataIfNeeded(function(){ if(state.reportView==='Weekly') render(); });
