@@ -519,6 +519,9 @@ var customerDataReady = false;
 var agentData = null;
 var agentDataLoading = false;
 var agentDataReady = false;
+var tradelaneData = null;
+var tradelaneDataLoading = false;
+var tradelaneDataReady = false;
 var usageDataReady = false;
 var orgData = null; // { hierarchy, directReports, support, totalUsers }
 var orgDataReady = false;
@@ -933,7 +936,65 @@ function prefetchAgentRanges() {
   }
   setTimeout(next, 4000); // start 4s after page load (after customer prefetch)
 }
-var fetchOrgData      = makeFetcher('org',       'org',       function(d){ orgData      = d; orgDataReady      = true; });
+
+// ── Tradelane Insights fetch ──────────────────────────────────────────────────
+var _tradelaneCache = {};
+var _tradelaneFetchTimer = null;
+var _tradelanePrefetchDone = false;
+
+function getTradelaneDateRange() { return getCustomerDateRange(); }
+function getTradelaneCacheKey() { var r = getTradelaneDateRange(); return (r.dateFrom||'all')+'_'+(r.dateTo||'all'); }
+
+function fetchTradelaneData(callback, force) {
+  var r = getTradelaneDateRange();
+  var dateFrom = r.dateFrom, dateTo = r.dateTo;
+  var key   = (dateFrom||'all') + '_' + (dateTo||'all');
+  var lsKey = 'tradelane_' + key;
+  var qs = '/api/mongo-batch?action=tradelane'
+    + (force ? '&force=1' : '')
+    + (dateFrom ? '&dateFrom=' + encodeURIComponent(dateFrom) : '')
+    + (dateTo   ? '&dateTo='   + encodeURIComponent(dateTo)   : '');
+  if (!force) {
+    if (_tradelaneCache[key]) { tradelaneData = _tradelaneCache[key]; tradelaneDataReady = true; if (callback) callback(); return; }
+    var lsCached = lsGet(lsKey);
+    if (lsCached && lsCached.success) {
+      _tradelaneCache[key] = lsCached; tradelaneData = lsCached; tradelaneDataReady = true;
+      if (callback) callback();
+      if (lsCached._isStale) fetch(qs+'&force=1').then(function(r){return r.json();}).then(function(d){ if(d.success){_tradelaneCache[key]=d;tradelaneData=d;lsSet(lsKey,d);render();} }).catch(function(){});
+      return;
+    }
+  }
+  fetch(qs).then(function(r){ return r.json(); })
+    .then(function(data){ if(data.success){_tradelaneCache[key]=data;tradelaneData=data;tradelaneDataReady=true;lsSet(lsKey,data);} if(callback) callback(); })
+    .catch(function(e){ console.warn('Tradelane failed:',e.message); if(callback) callback(); });
+}
+
+function _debouncedTradelaneFetch() {
+  var _k = getTradelaneCacheKey();
+  if (_tradelaneCache[_k]) { tradelaneData=_tradelaneCache[_k]; tradelaneDataReady=true; render(); return; }
+  render(); clearTimeout(_tradelaneFetchTimer);
+  _tradelaneFetchTimer = setTimeout(function(){ tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); }, 300);
+}
+
+function prefetchTradelaneRanges() {
+  if (_tradelanePrefetchDone) return;
+  _tradelanePrefetchDone = true;
+  var allM = months26; if (!allM || !allM.length) return;
+  var queue = [];
+  for (var i=0;i<allM.length;i++) queue.push({dateFrom:allM[i],dateTo:allM[i]});
+  [3,6,9,12].forEach(function(n){ if(allM.length>=n) queue.push({dateFrom:allM[allM.length-n],dateTo:allM[allM.length-1]}); });
+  var idx=0;
+  function next(){
+    if(idx>=queue.length) return;
+    var r=queue[idx++]; var key=r.dateFrom+'_'+r.dateTo, lsKey='tradelane_'+key;
+    if(_tradelaneCache[key]){setTimeout(next,10);return;}
+    var lsCached=lsGet(lsKey); if(lsCached&&lsCached.success){_tradelaneCache[key]=lsCached;setTimeout(next,10);return;}
+    fetch('/api/mongo-batch?action=tradelane&dateFrom='+encodeURIComponent(r.dateFrom)+'&dateTo='+encodeURIComponent(r.dateTo))
+      .then(function(res){return res.json();}).then(function(data){if(data.success){_tradelaneCache[key]=data;lsSet(lsKey,data);}setTimeout(next,200);}).catch(function(){setTimeout(next,400);});
+  }
+  setTimeout(next, 7000);
+}
+var fetchOrgData = makeFetcher('org', 'org', function(d){ orgData = d; orgDataReady = true; });
 
 function fetchUsageData(callback, force){
   // Usage always fetches live (login counts must be real-time)
@@ -962,7 +1023,7 @@ function updateUserField(email, fields, callback){
     });
 }
 
-var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:-1, agentLob:'Air', agentView:'chart', agentSortCol:'gp', agentSortDir:-1,
+var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:-1, agentLob:'Air', agentView:'chart', agentSortCol:'gp', agentSortDir:-1, tradelaneLob:'Air', tradelaneView:'chart', tradelaneSortCol:'gp', tradelaneSortDir:-1,
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
   addUserOpen: false, addUserError: '', addUserDefaultRole: '',
   weeklyMonth: null,
@@ -1495,7 +1556,7 @@ function sidebarNav(){
   return '<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:6px 8px 5px;text-transform:uppercase;">Reports</div>'
     +'<div style="display:flex;flex-direction:column;gap:1px;">'
       +navItem('Sales Performance',state.page==='sales',IC.bar,'page','sales')
-      +navItem('Tradelane Insights',false,IC.route,'','',true)
+      +navItem('Tradelane Insights',state.page==='tradelane',IC.route,'page','tradelane')
       +navItem('Customer Insights',state.page==='customers',IC.person,'page','customers')
       +navItem('Agent Insights',state.page==='agents',IC.headset,'page','agents')
       +'<div style="height:1px;background:rgba(255,255,255,0.07);margin:7px 6px;"></div>'
@@ -1572,7 +1633,7 @@ function topbar(){
         +'</div>'
         +(state.viewDropOpen
           ? '<div id="view-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
-            +((state.page==='customers'||state.page==='agents') ? ['Monthly','Yearly','Custom'] : ['Monthly','Weekly','Quarterly','Yearly','Custom']).map(function(v){
+            +((state.page==='customers'||state.page==='agents'||state.page==='tradelane') ? ['Monthly','Yearly','Custom'] : ['Monthly','Weekly','Quarterly','Yearly','Custom']).map(function(v){
               var active = state.reportView===v;
               var desc = v==='Monthly'?'Month by month':v==='Weekly'?'Week by week':v==='Quarterly'?'Quarter view':v==='Yearly'?'Full year':'Custom range';
               return '<div data-act="setView" data-val="'+v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;transition:background 0.1s;">'
@@ -1660,8 +1721,8 @@ function topbar(){
             +'</div>';
           }
 
-          // Customer/Agent Insights: two separate FROM/TO pills
-          if (state.page === 'customers' || state.page === 'agents') {
+          // Customer/Agent/Tradelane Insights: two separate FROM/TO pills
+          if (state.page === 'customers' || state.page === 'agents' || state.page === 'tradelane') {
             return '<div style="position:relative;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">'
               +'<div data-act="toggleCustomCal" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:'+(cf?'#0D2B5E':'#9AAFC8')+';cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(calOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
                 +calIcon
@@ -1735,8 +1796,8 @@ function topbar(){
           return qPill;
         }
 
-        // Customer/Agent Insights only: Monthly → pill FROM/TO dropdowns
-        if ((state.page==='customers' || state.page==='agents') && v === 'Monthly') {
+        // Customer/Agent/Tradelane Insights only: Monthly → pill FROM/TO dropdowns
+        if ((state.page==='customers' || state.page==='agents' || state.page==='tradelane') && v === 'Monthly') {
           var fOpen = state.fromDropOpen, tOpen = state.toDropOpen;
           function custMonthPill(act, toggleAct, val, dropId, isOpen){
             var opts = months26.map(function(m){
@@ -2459,6 +2520,183 @@ function agentPivotTable(lobData, activeLob, brandC) {
       +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpPctColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+a.gpPct+'%</td>'
       +'<td style="padding:7px 10px;">'+lobsHtml+'</td>'
       +'<td style="padding:7px 10px;font-size:10.5px;color:#64748B;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(a.salesReps||[]).join(', ')+'">'+repsText+'</td>'
+      +'</tr>';
+  });
+  tbody += '</tbody>';
+
+  return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 220px);overflow-y:auto;">'
+    +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
+    +'</div>'
+  +'</div>';
+}
+
+
+/* ====================== TRADELANE INSIGHTS ====================== */
+function tradelanePage(){
+  if (!tradelaneDataReady) {
+    if (!tradelaneDataLoading) {
+      tradelaneDataLoading = true;
+      fetchTradelaneData(function(){ tradelaneDataLoading = false; render(); prefetchTradelaneRanges(); });
+    }
+    return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'
+      +'<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">'
+        +'<div class="login-spinner" style="width:24px;height:24px;border-width:3px;"></div>'
+        +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading tradelane insights\u2026</div>'
+      +'</div>'
+    +'</div>';
+  }
+
+  var activeLob  = state.tradelaneLob  || 'Air';
+  var activeView = state.tradelaneView || 'chart';
+  var fmtInt  = function(v){ return Math.round(v).toLocaleString('en-US'); };
+  var fmtPct  = function(v){ return v+'%'; };
+  var fmtTons = function(v){ return v >= 1000 ? (v/1000).toFixed(1)+'k T' : v.toFixed(1)+' T'; };
+  var fmtTEU  = function(v){ return v.toFixed(2)+' TEU'; };
+  var LOBS = ['Air','Ocean','ISO Tank'];
+  var LOB_COLORS = {'Air':'#1D5FCC','Ocean':'#0891B2','ISO Tank':'#7C3AED'};
+  var LOB_SUBTITLES = {'Air':'Air Export + Air Import','Ocean':'Sea Export + Sea Import','ISO Tank':'ISO Tank Export + Import'};
+
+  var d = tradelaneData || {};
+  var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
+
+  // Apply filterReps / filterLobs
+  var filterReps = state.filterReps || [];
+  var filterLobs = state.filterLobs || [];
+  var LOB_KEY_TO_LABEL = {
+    'AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp',
+    'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
+    'ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp'
+  };
+  var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
+  if (hasFilters && lobData.allCountries) {
+    var filtered = lobData.allCountries.filter(function(c) {
+      var repOk = filterReps.length === 0 || (c.salesReps||[]).some(function(r){ return filterReps.indexOf(r)>-1; });
+      var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
+        var needle = LOB_KEY_TO_LABEL[fk]||'';
+        return needle && (c.lobs||[]).indexOf(needle)>-1;
+      });
+      return repOk && lobOk;
+    });
+    function top10tl(arr,key){ return arr.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,10); }
+    lobData = {
+      allCountries:   filtered,
+      totalCountries: filtered.length,
+      topByShipments: top10tl(filtered,'shipments'),
+      topByRevenue:   top10tl(filtered,'revenue'),
+      topByGP:        top10tl(filtered,'gp'),
+      topByTons:      top10tl(filtered.filter(function(c){return c.tons>0;}),'tons'),
+      topByTEU:       top10tl(filtered.filter(function(c){return c.teu>0;}),'teu'),
+      topByGPPct:     top10tl(filtered.filter(function(c){return c.shipments>=2;}),'gpPct'),
+    };
+  }
+
+  var periodLabel = (function(){
+    var v = state.reportView;
+    if (v==='Yearly') return 'Full Year';
+    if (v==='Custom'){ var cf=state.customDateFrom,ct=state.customDateTo; return (cf&&ct)?cf+' \u2013 '+ct:'Custom Range'; }
+    var idxs=filteredMonthIndices(); var ms=idxs.map(function(i){return months26[i];});
+    return ms.length ? ms[0]+(ms.length>1?' \u2013 '+ms[ms.length-1]:'') : '';
+  })();
+
+  var brandC = LOB_COLORS[activeLob];
+
+  var tabs = LOBS.map(function(lob){
+    var active = lob===activeLob; var c=LOB_COLORS[lob];
+    return '<button data-act="setTradelaneLob" data-val="'+esc(lob)+'" style="padding:6px 16px;border-radius:999px;border:1.5px solid '+(active?c:'#D8E1F0')+';background:'+(active?c:'#F4F7FC')+';color:'+(active?'#fff':'#5B7298')+';font-size:12px;font-weight:700;cursor:pointer;">'+esc(lob)+'</button>';
+  }).join('');
+
+  var viewToggle = '<div style="display:flex;border:1.5px solid #D8E1F0;border-radius:8px;overflow:hidden;margin-left:12px;">'
+    +'<button data-act="setTradelaneView" data-val="chart" style="padding:5px 13px;border:none;background:'+(activeView==='chart'?brandC:'#F4F7FC')+';color:'+(activeView==='chart'?'#fff':'#5B7298')+';font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">'
+      +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" pointer-events="none"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="3" width="4" height="18"/></svg>Chart</button>'
+    +'<button data-act="setTradelaneView" data-val="table" style="padding:5px 13px;border:none;border-left:1.5px solid #D8E1F0;background:'+(activeView==='table'?brandC:'#F4F7FC')+';color:'+(activeView==='table'?'#fff':'#5B7298')+';font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">'
+      +'<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" pointer-events="none"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>Table</button>'
+  +'</div>';
+
+  var allC = lobData.allCountries || [];
+  var totalRev = allC.reduce(function(s,c){return s+c.revenue;},0);
+  var totalGP  = allC.reduce(function(s,c){return s+c.gp;},0);
+  var overallGPPct = totalRev>0 ? (totalGP/totalRev*100).toFixed(1) : '0.0';
+
+  var header = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">'
+    +'<span style="font-size:13px;font-weight:700;color:#15233B;">Tradelane Insights</span>'
+    +(activeView==='table'
+      ? '<span style="font-size:11px;color:#64748B;font-weight:500;">Country Pivot \u00b7 '+(state.currency||'INR')+'</span>'
+      : '<span style="font-size:11px;color:#64748B;font-weight:500;">'+LOB_SUBTITLES[activeLob]+' \u00b7 '+(lobData.totalCountries||0)+' countries</span>'
+    )
+    +(periodLabel ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+periodLabel+'</span>' : '')
+    +(activeView==='table' ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+(allC.length)+' countries \u00b7 '+fmtCur(totalRev)+' Rev \u00b7 '+overallGPPct+'% GP%</span>' : '')
+    +'<div style="display:flex;align-items:center;gap:6px;margin-left:auto;">'
+      +(activeView==='chart' ? '<div style="display:flex;gap:6px;">'+tabs+'</div>' : '')
+      +viewToggle
+    +'</div>'
+  +'</div>';
+
+  if (activeView === 'table') return header + tradelanePivotTable(lobData, activeLob, brandC);
+
+  var sc = {'Air':['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'],
+            'Ocean':['#0891B2','#0E7490','#155E75','#083344','#22D3EE'],
+            'ISO Tank':['#7C3AED','#6D28D9','#5B21B6','#4C1D95','#A78BFA']}[activeLob]||['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
+
+  return header + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
+    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0])
+    + (activeLob==='Air'
+        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1])
+        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1]))
+    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2])
+    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3])
+    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4])
+  +'</div>';
+}
+
+function tradelanePivotTable(lobData, activeLob, brandC) {
+  var rows = (lobData.allCountries || []).slice();
+  var sortCol = state.tradelaneSortCol || 'gp';
+  var sortDir = state.tradelaneSortDir === undefined ? -1 : state.tradelaneSortDir;
+  var isAir = activeLob === 'Air';
+
+  rows.sort(function(a,b){ return sortDir*(b[sortCol]-a[sortCol]); });
+
+  function sortBtn(col, label, alignRight) {
+    var active = sortCol===col;
+    var arrow = active ? (sortDir===-1 ? ' \u25bc' : ' \u25b2') : '';
+    return '<th data-act="tradelaneSort" data-col="'+col+'" style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:'+(active?brandC:'#9AAFC8')+';text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;text-align:'+(alignRight?'right':'left')+';">'+label+arrow+'</th>';
+  }
+
+  var thead = '<thead><tr style="border-bottom:2px solid #E3EAF3;background:#F8FAFD;position:sticky;top:0;z-index:2;">'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;width:36px;text-align:center;">#</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Country</th>'
+    +sortBtn('shipments','Ships',true)
+    +(isAir ? sortBtn('tons','Tons',true) : sortBtn('teu','TEUs',true))
+    +sortBtn('revenue','Revenue',true)
+    +sortBtn('gp','GP',true)
+    +sortBtn('gpPct','GP%',true)
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;">LOB(s)</th>'
+    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Sales</th>'
+    +'</tr></thead>';
+
+  var tbody = '<tbody>';
+  rows.forEach(function(c,i){
+    var gpColor    = c.gp>=0 ? '#059669' : '#DC2626';
+    var gpPctColor = c.gpPct>=15 ? '#059669' : c.gpPct>=5 ? '#D97706' : '#DC2626';
+    var lobsHtml   = (c.lobs||[]).map(function(l){
+      return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:9.5px;font-weight:700;background:#EEF2FF;color:#4B5FCC;margin:1px;">'+esc(l)+'</span>';
+    }).join('');
+    var repsText = (c.salesReps||[]).slice(0,3).join(', ') + (c.salesReps&&c.salesReps.length>3?' +'+(c.salesReps.length-3):'');
+    var bg = i%2===1 ? 'background:#FAFBFD;' : '';
+    tbody += '<tr style="border-bottom:1px solid #F1F5F9;'+bg+'">'
+      +'<td style="padding:7px 10px;font-size:11px;color:#9AAFC8;text-align:center;font-weight:600;">'+(i+1)+'</td>'
+      +'<td style="padding:7px 10px;font-size:12px;font-weight:700;color:#15233B;">'+esc(c.name)+'</td>'
+      +'<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+c.shipments+'</td>'
+      +(isAir
+        ? '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+(c.tons>=1000?(c.tons/1000).toFixed(1)+'k':c.tons.toFixed(1))+'</td>'
+        : '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+c.teu.toFixed(1)+'</td>'
+      )
+      +'<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(c.revenue)+'</td>'
+      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(c.gp)+'</td>'
+      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpPctColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+c.gpPct+'%</td>'
+      +'<td style="padding:7px 10px;">'+lobsHtml+'</td>'
+      +'<td style="padding:7px 10px;font-size:10.5px;color:#64748B;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(c.salesReps||[]).join(', ')+'">'+repsText+'</td>'
       +'</tr>';
   });
   tbody += '</tbody>';
@@ -4128,6 +4366,7 @@ function render(){
   document.getElementById('topbar-slot').innerHTML=topbar();
   mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='agents' ? agentPage()
+    : state.page==='tradelane' ? tradelanePage()
     : state.page==='usage' ? usagePage()
     : state.page==='teams' ? teamsPage()
     : state.page==='admin' ? adminPage()
@@ -4146,6 +4385,7 @@ function renderKeepTopbar(){
   var scrollTop=mainEl?mainEl.scrollTop:0;
   if(mainEl) mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='agents' ? agentPage()
+    : state.page==='tradelane' ? tradelanePage()
     : state.page==='usage' ? usagePage()
     : state.page==='teams' ? teamsPage()
     : state.page==='finance' ? financePage()
@@ -4427,6 +4667,11 @@ document.addEventListener('click', function(ev){
       if(_agentCache[_ak]){ agentData=_agentCache[_ak]; agentDataReady=true; render(); }
       else { agentDataReady=false; fetchAgentData(function(){ render(); }); }
     }
+    if(state.page==='tradelane'){
+      var _tk=getTradelaneCacheKey();
+      if(_tradelaneCache[_tk]){ tradelaneData=_tradelaneCache[_tk]; tradelaneDataReady=true; render(); }
+      else { tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); }
+    }
     if(state.page==='usage'){
       // Always force-fetch on every visit so login counts are real-time
       fetchUsageData(function(){ render(); }, true);
@@ -4472,14 +4717,15 @@ document.addEventListener('click', function(ev){
     customerDataReady = false; financeDataReady = false; financeDataLoading = false;
     opDataReady = false; opDataLoading = false; usageDataReady = false; orgDataReady = false;
     agentDataReady = false;
-    _customerCache = {}; // clear all per-range customer caches
-    _customerPrefetchDone = false; // allow re-prefetch after refresh
-    _agentCache = {};
-    _agentPrefetchDone = false;
+    tradelaneDataReady = false;
+    _customerCache = {}; _customerPrefetchDone = false;
+    _agentCache = {}; _agentPrefetchDone = false;
+    _tradelaneCache = {}; _tradelanePrefetchDone = false;
 
     fetchLiveData(done, true);
     pending++; fetchCustomerData(done, true);
     pending++; fetchAgentData(done, true);
+    pending++; fetchTradelaneData(done, true);
     pending++; fetchFinanceData(done, true);
     pending++; fetchOpData(done, true);
     pending++; fetchOrgData(done, true);
@@ -4585,12 +4831,14 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation(); state.dateFrom=el.getAttribute('data-val'); state.fromDropOpen=false;
     if(state.page==='customers'){ _debouncedCustomerFetch(); }
     else if(state.page==='agents'){ _debouncedAgentFetch(); }
+    else if(state.page==='tradelane'){ _debouncedTradelaneFetch(); }
     else { render(); }
   }
   else if(act==='setTo'){
     ev.stopPropagation(); state.dateTo=el.getAttribute('data-val'); state.toDropOpen=false;
     if(state.page==='customers'){ _debouncedCustomerFetch(); }
     else if(state.page==='agents'){ _debouncedAgentFetch(); }
+    else if(state.page==='tradelane'){ _debouncedTradelaneFetch(); }
     else { render(); }
   }
   else if(act==='toggleFromDrop'){ ev.stopPropagation(); state.fromDropOpen=!state.fromDropOpen; state.toDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
@@ -4609,16 +4857,20 @@ document.addEventListener('click', function(ev){
   else if(act==='setAgentLob'){ ev.stopPropagation(); state.agentLob=el.getAttribute('data-val'); render(); }
   else if(act==='setAgentView'){ ev.stopPropagation(); state.agentView=el.getAttribute('data-val'); render(); }
   else if(act==='agentSort'){
-    ev.stopPropagation();
-    var col = el.getAttribute('data-col');
-    if(state.agentSortCol === col){ state.agentSortDir = (state.agentSortDir||(-1)) * -1; }
-    else { state.agentSortCol = col; state.agentSortDir = -1; }
-    render();
+    ev.stopPropagation(); var col=el.getAttribute('data-col');
+    if(state.agentSortCol===col){ state.agentSortDir=(state.agentSortDir||(-1))*-1; } else { state.agentSortCol=col; state.agentSortDir=-1; } render();
+  }
+  else if(act==='setTradelaneLob'){ ev.stopPropagation(); state.tradelaneLob=el.getAttribute('data-val'); render(); }
+  else if(act==='setTradelaneView'){ ev.stopPropagation(); state.tradelaneView=el.getAttribute('data-val'); render(); }
+  else if(act==='tradelaneSort'){
+    ev.stopPropagation(); var col=el.getAttribute('data-col');
+    if(state.tradelaneSortCol===col){ state.tradelaneSortDir=(state.tradelaneSortDir||(-1))*-1; } else { state.tradelaneSortCol=col; state.tradelaneSortDir=-1; } render();
   }
   else if(act==='setQuarter'){
     ev.stopPropagation(); state.selectedQuarter=el.getAttribute('data-val'); state.quarterDropOpen=false;
     if(state.page==='customers'){ var _k=getCustomerCacheKey(); if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); } else { customerDataReady=false; fetchCustomerData(function(){ render(); }); } }
     else if(state.page==='agents'){ var _ak=getAgentCacheKey(); if(_agentCache[_ak]){ agentData=_agentCache[_ak]; agentDataReady=true; render(); } else { agentDataReady=false; fetchAgentData(function(){ render(); }); } }
+    else if(state.page==='tradelane'){ var _tk=getTradelaneCacheKey(); if(_tradelaneCache[_tk]){ tradelaneData=_tradelaneCache[_tk]; tradelaneDataReady=true; render(); } else { tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); } }
     else render();
   }
   else if(act==='toggleQuarterDrop'){ ev.stopPropagation(); state.quarterDropOpen=!state.quarterDropOpen; state.qyrDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
@@ -4628,6 +4880,7 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation(); state.yearType=el.getAttribute('data-val'); state.yearTypeDropOpen=false;
     if(state.page==='customers'){ var _k=getCustomerCacheKey(); if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); } else { customerDataReady=false; fetchCustomerData(function(){ render(); }); } }
     else if(state.page==='agents'){ var _ak=getAgentCacheKey(); if(_agentCache[_ak]){ agentData=_agentCache[_ak]; agentDataReady=true; render(); } else { agentDataReady=false; fetchAgentData(function(){ render(); }); } }
+    else if(state.page==='tradelane'){ var _tk=getTradelaneCacheKey(); if(_tradelaneCache[_tk]){ tradelaneData=_tradelaneCache[_tk]; tradelaneDataReady=true; render(); } else { tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); } }
     else render();
   }
   else if(act==='toggleYearTypeDrop'){ ev.stopPropagation(); state.yearTypeDropOpen=!state.yearTypeDropOpen; render(); requestAnimationFrame(positionAllDrops); }
@@ -4757,6 +5010,12 @@ document.addEventListener('click', function(ev){
       var _ak=getAgentCacheKey();
       if(_agentCache[_ak]){ agentData=_agentCache[_ak]; agentDataReady=true; render(); }
       else { agentDataReady=false; fetchAgentData(function(){ render(); }); }
+      return;
+    }
+    if(state.page==='tradelane'){
+      var _tk=getTradelaneCacheKey();
+      if(_tradelaneCache[_tk]){ tradelaneData=_tradelaneCache[_tk]; tradelaneDataReady=true; render(); }
+      else { tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); }
       return;
     }
 

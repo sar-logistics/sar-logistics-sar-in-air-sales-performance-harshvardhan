@@ -1092,6 +1092,247 @@ const agentCacheMap = {}; // key → { data, time }
 // ─── Tradelane Insights ───────────────────────────────────────────────────────
 const tradelaneCacheMap = {}; // key → { data, time }
 
+// ── Port code → Country lookup ────────────────────────────────────────────────
+// Port format: "(CCXXX) City" — first 2 chars of code = ISO2 country code
+const ISO2_TO_COUNTRY = {
+  "AF":"Afghanistan","AL":"Albania","DZ":"Algeria","AD":"Andorra","AO":"Angola",
+  "AG":"Antigua and Barbuda","AR":"Argentina","AM":"Armenia","AU":"Australia",
+  "AT":"Austria","AZ":"Azerbaijan","BS":"Bahamas","BH":"Bahrain","BD":"Bangladesh",
+  "BB":"Barbados","BY":"Belarus","BE":"Belgium","BZ":"Belize","BJ":"Benin",
+  "BT":"Bhutan","BO":"Bolivia","BA":"Bosnia and Herzegovina","BW":"Botswana",
+  "BR":"Brazil","BN":"Brunei","BG":"Bulgaria","BF":"Burkina Faso","BI":"Burundi",
+  "CV":"Cape Verde","KH":"Cambodia","CM":"Cameroon","CA":"Canada",
+  "CF":"Central African Republic","TD":"Chad","CL":"Chile","CN":"China",
+  "CO":"Colombia","KM":"Comoros","CG":"Congo","CD":"DR Congo","CR":"Costa Rica",
+  "HR":"Croatia","CU":"Cuba","CY":"Cyprus","CZ":"Czech Republic",
+  "DK":"Denmark","DJ":"Djibouti","DM":"Dominica","DO":"Dominican Republic",
+  "EC":"Ecuador","EG":"Egypt","SV":"El Salvador","GQ":"Equatorial Guinea",
+  "ER":"Eritrea","EE":"Estonia","SZ":"Eswatini","ET":"Ethiopia",
+  "FJ":"Fiji","FI":"Finland","FR":"France","GA":"Gabon","GM":"Gambia",
+  "GE":"Georgia","DE":"Germany","GH":"Ghana","GR":"Greece","GD":"Grenada",
+  "GT":"Guatemala","GN":"Guinea","GW":"Guinea-Bissau","GY":"Guyana",
+  "HT":"Haiti","HN":"Honduras","HK":"Hong Kong","HU":"Hungary",
+  "IS":"Iceland","IN":"India","ID":"Indonesia","IR":"Iran","IQ":"Iraq",
+  "IE":"Ireland","IL":"Israel","IT":"Italy","JM":"Jamaica","JP":"Japan",
+  "JO":"Jordan","KZ":"Kazakhstan","KE":"Kenya","KI":"Kiribati",
+  "KW":"Kuwait","KG":"Kyrgyzstan","LA":"Laos","LV":"Latvia","LB":"Lebanon",
+  "LS":"Lesotho","LR":"Liberia","LY":"Libya","LI":"Liechtenstein",
+  "LT":"Lithuania","LU":"Luxembourg","MO":"Macao","MG":"Madagascar",
+  "MW":"Malawi","MY":"Malaysia","MV":"Maldives","ML":"Mali","MT":"Malta",
+  "MH":"Marshall Islands","MR":"Mauritania","MU":"Mauritius","MX":"Mexico",
+  "FM":"Micronesia","MD":"Moldova","MC":"Monaco","MN":"Mongolia",
+  "ME":"Montenegro","MA":"Morocco","MZ":"Mozambique","MM":"Myanmar",
+  "NA":"Namibia","NR":"Nauru","NP":"Nepal","NL":"Netherlands",
+  "NZ":"New Zealand","NI":"Nicaragua","NE":"Niger","NG":"Nigeria",
+  "NO":"Norway","OM":"Oman","PK":"Pakistan","PW":"Palau","PA":"Panama",
+  "PG":"Papua New Guinea","PY":"Paraguay","PE":"Peru","PH":"Philippines",
+  "PL":"Poland","PT":"Portugal","QA":"Qatar","RO":"Romania","RU":"Russia",
+  "RW":"Rwanda","KN":"Saint Kitts and Nevis","LC":"Saint Lucia",
+  "VC":"Saint Vincent and the Grenadines","WS":"Samoa","SM":"San Marino",
+  "ST":"Sao Tome and Principe","SA":"Saudi Arabia","SN":"Senegal","RS":"Serbia",
+  "SC":"Seychelles","SL":"Sierra Leone","SG":"Singapore","SK":"Slovakia",
+  "SI":"Slovenia","SB":"Solomon Islands","SO":"Somalia","ZA":"South Africa",
+  "SS":"South Sudan","ES":"Spain","LK":"Sri Lanka","SD":"Sudan",
+  "SR":"Suriname","SE":"Sweden","CH":"Switzerland","SY":"Syria",
+  "TW":"Taiwan","TJ":"Tajikistan","TZ":"Tanzania","TH":"Thailand",
+  "TL":"Timor-Leste","TG":"Togo","TO":"Tonga","TT":"Trinidad and Tobago",
+  "TN":"Tunisia","TR":"Turkey","TM":"Turkmenistan","TV":"Tuvalu",
+  "UG":"Uganda","UA":"Ukraine","AE":"UAE","GB":"United Kingdom",
+  "US":"USA","UY":"Uruguay","UZ":"Uzbekistan","VU":"Vanuatu",
+  "VE":"Venezuela","VN":"Vietnam","YE":"Yemen","ZM":"Zambia","ZW":"Zimbabwe",
+  "KR":"South Korea","KP":"North Korea","MK":"North Macedonia",
+  "PS":"Palestine","XK":"Kosovo","PR":"Puerto Rico","HK":"Hong Kong",
+  "MO":"Macao","TW":"Taiwan","AW":"Aruba","CW":"Curacao","SX":"Sint Maarten",
+  "RE":"Reunion","GP":"Guadeloupe","MQ":"Martinique","GF":"French Guiana",
+  "NC":"New Caledonia","PF":"French Polynesia","YT":"Mayotte",
+};
+
+function portToCountry(portStr) {
+  if (!portStr) return "";
+  const s = String(portStr).trim();
+  // Format: "(CCXXX) City" — extract code between parens
+  const m = s.match(/^\(([A-Z]{2,5})\)/);
+  if (!m) return "";
+  const code = m[1];
+  const iso2 = code.slice(0, 2).toUpperCase();
+  return ISO2_TO_COUNTRY[iso2] || "";
+}
+
+async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
+  const key = cacheKey || "all";
+  const entry = tradelaneCacheMap[key];
+  if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
+    return { ...entry.data, cached: true };
+  }
+  const result = await computeTradelaneAggregate(db, dateFrom, dateTo);
+  tradelaneCacheMap[key] = { data: result, time: Date.now() };
+  return result;
+}
+
+async function computeTradelaneAggregate(db, dateFrom, dateTo) {
+  const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
+    "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
+    "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
+    "Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27"];
+  let activeMonthSet = null;
+  if (dateFrom && dateTo) {
+    const fi = FY_MONTHS_LIST.indexOf(dateFrom);
+    const ti = FY_MONTHS_LIST.indexOf(dateTo);
+    if (fi >= 0 && ti >= 0) activeMonthSet = new Set(FY_MONTHS_LIST.slice(fi, ti + 1));
+  }
+
+  // ── Step 1: Build SRR lookup maps: shipmentNo → country ──────────────────────
+  // Sea Export: Discharge Country (direct field)
+  // Sea Import: Loading Port → portToCountry
+  // Air Export: Discharge Port → portToCountry
+  // Air Import: Loading Port → portToCountry
+  const SRR_CONFIG = [
+    { coll: "srr_sea_export",  lob: "Ocean", dir: "Export", countryField: "Discharge Country", fromPort: false },
+    { coll: "srr_sea_import",  lob: "Ocean", dir: "Import", countryField: "Loading Port",      fromPort: true  },
+    { coll: "srr_air_export",  lob: "Air",   dir: "Export", countryField: "Discharge Port",    fromPort: true  },
+    { coll: "srr_air_import",  lob: "Air",   dir: "Import", countryField: "Loading Port",      fromPort: true  },
+  ];
+
+  // shipmentNo → { country, lob, dir }
+  const srrMap = {};
+  await Promise.all(SRR_CONFIG.map(async (cfg) => {
+    try {
+      const rows = await db.collection(cfg.coll).find({}, {
+        projection: { "Shipment No": 1, [cfg.countryField]: 1 }
+      }).toArray();
+      for (const r of rows) {
+        const sno = String(r["Shipment No"] || "").trim();
+        if (!sno) continue;
+        const raw = String(r[cfg.countryField] || "").trim();
+        const country = cfg.fromPort ? portToCountry(raw) : raw;
+        if (country) srrMap[sno] = { country, lob: cfg.lob, dir: cfg.dir };
+      }
+    } catch (e) { /* collection may not exist yet */ }
+  }));
+
+  // ── Step 2: Scan job collections, join with SRR map ──────────────────────────
+  const JOB_COLL_MAP = [
+    { coll: "jobs_sea_export",     lob: "Ocean", dir: "Export", dateCol: "ETD Loading Port" },
+    { coll: "jobs_sea_import",     lob: "Ocean", dir: "Import", dateCol: "ETA Discharge"    },
+    { coll: "jobs_air_export",     lob: "Air",   dir: "Export", dateCol: "ETD Loading Port" },
+    { coll: "jobs_air_import",     lob: "Air",   dir: "Import", dateCol: "ETA Discharge"    },
+    { coll: "jobs_isotank_export", lob: "ISO Tank", dir: "Export", dateCol: "ETD Loading Port" },
+    { coll: "jobs_isotank_import", lob: "ISO Tank", dir: "Import", dateCol: "ETA Discharge"    },
+  ];
+
+  const projection = {
+    "Shipment No": 1, "Billed Revenue (C)": 1,
+    "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
+    "Financial Lock": 1, "Operation Lock": 1,
+    "Sales Person": 1, "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
+    "Container TEU": 1, "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+  };
+
+  // countryMap: country → { shipments, revenue, gp, tons, teu, salesReps, lobs }
+  const countryMap = {};
+  // countryMapByLob: lob → country → same
+  const countryMapByLob = { "Air": {}, "Ocean": {}, "ISO Tank": {} };
+
+  await Promise.all(JOB_COLL_MAP.map(async (cfg) => {
+    const cls = {
+      kind: cfg.lob === "Air" ? "AIR" : cfg.lob === "ISO Tank" ? "ISOTANK" : "SEA",
+      direction: cfg.dir === "Import" ? "IMPORT" : "EXPORT",
+    };
+    const isAir = cfg.lob === "Air";
+    const jobs = await db.collection(cfg.coll).find({}, { projection }).toArray();
+
+    for (const job of jobs) {
+      // Date filter
+      if (activeMonthSet) {
+        const rawDate = job[cfg.dateCol] || job["Job Date"];
+        if (!rawDate) continue;
+        const dObj = new Date(rawDate);
+        if (isNaN(dObj.getTime())) continue;
+        const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
+        if (!activeMonthSet.has(ml)) continue;
+      }
+
+      const sno = String(job["Shipment No"] || "").trim();
+      const srrEntry = srrMap[sno];
+      if (!srrEntry) continue; // no SRR match → skip
+
+      const country = srrEntry.country;
+      if (!country) continue;
+
+      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const { gp } = pickGP(job, cls);
+
+      let tons = 0;
+      if (isAir) {
+        const rawW = parseFloat(job["Chargeable Weight"] || 0) || 0;
+        const wUnit = String(job["Chargeable Weight Unit"] || "").toLowerCase().trim();
+        if (wUnit === "ton" || wUnit === "tons" || wUnit === "mt") tons = rawW;
+        else if (wUnit === "lb" || wUnit === "lbs") tons = rawW * 0.000453592;
+        else tons = rawW / 1000;
+      }
+      const teu = !isAir ? (parseFloat(job["Container TEU"] || 0) || 0) : 0;
+
+      const rawSP = String(job["Sales Person"] || "").trim();
+      const dispSP = rawSP ? rawSP.split("|")[0].trim() : "";
+
+      const lobLabel = cfg.lob === "Air"
+        ? (cfg.dir === "Import" ? "Air Imp" : "Air Exp")
+        : cfg.lob === "ISO Tank"
+          ? (cfg.dir === "Import" ? "ISO Imp" : "ISO Exp")
+          : (cfg.dir === "Import" ? "Sea Imp" : "Sea Exp");
+
+      function addTo(map, key) {
+        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, salesReps:new Set(), lobs:new Set() };
+        map[key].shipments++;
+        map[key].revenue += revenue;
+        map[key].gp += gp;
+        map[key].tons += tons;
+        map[key].teu += teu;
+        if (dispSP) map[key].salesReps.add(dispSP);
+        map[key].lobs.add(lobLabel);
+      }
+      addTo(countryMap, country);
+      if (countryMapByLob[cfg.lob]) addTo(countryMapByLob[cfg.lob], country);
+    }
+  }));
+
+  function buildStats(cmap) {
+    const countries = Object.entries(cmap).map(([name, d]) => ({
+      name,
+      shipments: d.shipments,
+      revenue:   Math.round(d.revenue),
+      gp:        Math.round(d.gp),
+      tons:      Math.round(d.tons * 100) / 100,
+      teu:       Math.round(d.teu * 100) / 100,
+      gpPct:     d.revenue > 0 ? Math.round((d.gp / d.revenue) * 1000) / 10 : 0,
+      salesReps: [...d.salesReps],
+      lobs:      [...d.lobs].sort(),
+    }));
+    function top10(arr, key) { return [...arr].sort((a,b)=>b[key]-a[key]).slice(0,10); }
+    return {
+      topByShipments: top10(countries, "shipments"),
+      topByRevenue:   top10(countries, "revenue"),
+      topByGP:        top10(countries, "gp"),
+      topByTons:      top10(countries.filter(c=>c.tons>0), "tons"),
+      topByTEU:       top10(countries.filter(c=>c.teu>0), "teu"),
+      topByGPPct:     top10(countries.filter(c=>c.shipments>=2), "gpPct"),
+      totalCountries: countries.length,
+      allCountries:   [...countries].sort((a,b)=>b.gp-a.gp),
+    };
+  }
+
+  return {
+    success: true,
+    lobs: {
+      "Air":      buildStats(countryMapByLob["Air"]),
+      "Ocean":    buildStats(countryMapByLob["Ocean"]),
+      "ISO Tank": buildStats(countryMapByLob["ISO Tank"]),
+    },
+    ...buildStats(countryMap),
+    pushedAt: new Date().toISOString(),
+  };
+}
+
 async function getAgentAggregate(db, force, dateFrom, dateTo, cacheKey) {
   const key = cacheKey || 'all';
   const entry = agentCacheMap[key];
@@ -1500,7 +1741,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -1614,6 +1855,14 @@ module.exports = async function handler(req, res) {
       const dateTo   = req.query.dateTo   || null;
       const cacheKey = `${dateFrom}|${dateTo}`;
       const result = await getAgentAggregate(db, forceRefresh, dateFrom, dateTo, cacheKey);
+      return res.status(200).json(result);
+    }
+
+    if (action === "tradelane") {
+      const dateFrom = req.query.dateFrom || null;
+      const dateTo   = req.query.dateTo   || null;
+      const cacheKey = `${dateFrom}|${dateTo}`;
+      const result = await getTradelaneAggregate(db, forceRefresh, dateFrom, dateTo, cacheKey);
       return res.status(200).json(result);
     }
 
