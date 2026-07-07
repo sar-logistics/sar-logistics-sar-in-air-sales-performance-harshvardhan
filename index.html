@@ -717,6 +717,24 @@ function makeFetcher(action, lsKey, setReady) {
 
 // In-memory cache for customer data per date range key — instant switching
 var _customerCache = {}; // key → data
+var _customerFetchTimer = null;
+
+// Debounced fetch — waits 300ms after last FROM/TO change before fetching
+// If the range is already cached, updates instantly with no delay
+function _debouncedCustomerFetch() {
+  var _k = getCustomerCacheKey();
+  // Cache hit → instant, no debounce needed
+  if (_customerCache[_k]) {
+    customerData = _customerCache[_k]; customerDataReady = true; render(); return;
+  }
+  // Not cached → show current data (don't blank the page), then debounce the fetch
+  render(); // re-render with stale data so UI stays responsive while user picks
+  clearTimeout(_customerFetchTimer);
+  _customerFetchTimer = setTimeout(function() {
+    customerDataReady = false;
+    fetchCustomerData(function(){ render(); });
+  }, 300);
+}
 
 // Derive the actual dateFrom/dateTo for the current view (works for all view types)
 function getCustomerDateRange() {
@@ -4167,8 +4185,14 @@ document.addEventListener('click', function(ev){
       fetchOrgData(function(){ render(); }, true);
     });
   }
-  else if(act==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.getAttribute('data-val'); state.fromDropOpen=false; if(state.page==='customers'){ var _k=getCustomerCacheKey(); if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); } else { customerDataReady=false; fetchCustomerData(function(){ render(); }); } } else { render(); } }
-  else if(act==='setTo'){ ev.stopPropagation(); state.dateTo=el.getAttribute('data-val'); state.toDropOpen=false; if(state.page==='customers'){ var _k=getCustomerCacheKey(); if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); } else { customerDataReady=false; fetchCustomerData(function(){ render(); }); } } else { render(); } }
+  else if(act==='setFrom'){
+    ev.stopPropagation(); state.dateFrom=el.getAttribute('data-val'); state.fromDropOpen=false;
+    if(state.page==='customers'){ _debouncedCustomerFetch(); } else { render(); }
+  }
+  else if(act==='setTo'){
+    ev.stopPropagation(); state.dateTo=el.getAttribute('data-val'); state.toDropOpen=false;
+    if(state.page==='customers'){ _debouncedCustomerFetch(); } else { render(); }
+  }
   else if(act==='toggleFromDrop'){ ev.stopPropagation(); state.fromDropOpen=!state.fromDropOpen; state.toDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; render(); }
