@@ -1369,7 +1369,8 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
     "Financial Lock": 1, "Operation Lock": 1,
     "Sales Person": 1, "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
-    "Container TEU": 1, "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+    "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
+    "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
   };
 
   // countryMap: country → { shipments, revenue, gp, tons, teu, salesReps, lobs }
@@ -1416,6 +1417,12 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         else tons = rawW / 1000;
       }
       const teu = !isAir ? (parseFloat(job["Container TEU"] || 0) || 0) : 0;
+      // FCL TEU vs Tank TEU vs LCL
+      const cargoType = String(job["Cargo Type"] || "").toUpperCase().trim();
+      const isIsoTank = cfg.lob === "ISO Tank";
+      const fclTeu  = (!isAir && !isIsoTank && (cargoType === "FCL" || cargoType === "LIQUID (CONT)")) ? teu : 0;
+      const tankTeu = (!isAir && isIsoTank) ? teu : 0;
+      const lclVol  = (!isAir && cargoType === "LCL") ? (parseFloat(job["Volume"] || 0) || 0) : 0;
 
       const rawSP = String(job["Sales Person"] || "").trim();
       const dispSP = rawSP ? rawSP.split("|")[0].trim() : "";
@@ -1435,20 +1442,28 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       }
 
       function addTo(map, key) {
-        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, salesReps:new Set(), lobs:new Set(), countries:new Set(), monthData:{} };
+        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0, salesReps:new Set(), lobs:new Set(), countries:new Set(), monthData:{} };
         map[key].shipments++;
         map[key].revenue += revenue;
         map[key].gp += gp;
         map[key].tons += tons;
         map[key].teu += teu;
+        map[key].fclTeu  += fclTeu;
+        map[key].tankTeu += tankTeu;
+        map[key].lcl     += lclVol;
         if (dispSP) map[key].salesReps.add(dispSP);
         map[key].lobs.add(lobLabel);
         if (country) map[key].countries.add(country);
         if (monthLabel) {
-          if (!map[key].monthData[monthLabel]) map[key].monthData[monthLabel] = { shipments:0, revenue:0, gp:0 };
+          if (!map[key].monthData[monthLabel]) map[key].monthData[monthLabel] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
           map[key].monthData[monthLabel].shipments++;
           map[key].monthData[monthLabel].revenue += revenue;
           map[key].monthData[monthLabel].gp += gp;
+          map[key].monthData[monthLabel].tons += tons;
+          map[key].monthData[monthLabel].teu  += teu;
+          map[key].monthData[monthLabel].fclTeu  += fclTeu;
+          map[key].monthData[monthLabel].tankTeu += tankTeu;
+          map[key].monthData[monthLabel].lcl     += lclVol;
         }
       }
       addTo(countryMap, tradelane);
@@ -1458,12 +1473,15 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
 
   function buildStats(cmap) {
     const rows = Object.entries(cmap).map(([name, d]) => ({
-      name,  // = tradelane
+      name,
       shipments: d.shipments,
       revenue:   Math.round(d.revenue),
       gp:        Math.round(d.gp),
       tons:      Math.round(d.tons * 100) / 100,
       teu:       Math.round(d.teu * 100) / 100,
+      fclTeu:    Math.round(d.fclTeu * 100) / 100,
+      tankTeu:   Math.round(d.tankTeu * 100) / 100,
+      lcl:       Math.round(d.lcl * 100) / 100,
       gpPct:     d.revenue > 0 ? Math.round((d.gp / d.revenue) * 1000) / 10 : 0,
       salesReps: [...d.salesReps],
       lobs:      [...d.lobs].sort(),
@@ -1474,6 +1492,11 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           revenue:   Math.round(md.revenue),
           gp:        Math.round(md.gp),
           gpPct:     md.revenue > 0 ? Math.round((md.gp / md.revenue) * 1000) / 10 : 0,
+          tons:      Math.round((md.tons||0) * 100) / 100,
+          teu:       Math.round((md.teu||0) * 100) / 100,
+          fclTeu:    Math.round((md.fclTeu||0) * 100) / 100,
+          tankTeu:   Math.round((md.tankTeu||0) * 100) / 100,
+          lcl:       Math.round((md.lcl||0) * 100) / 100,
         }])
       ),
     }));
