@@ -1905,44 +1905,54 @@ function customerPage(){
   var LOB_CLS = {'Air':'air','Ocean':'sea','ISO Tank':'isotank'};
 
   // ── Compute stats from allDrillRows filtered by active period ──
-  // This makes all 3 view modes (Monthly, Yearly, Custom) functional
   function computeFromDrillRows() {
     if (!allDrillRows) return null;
 
-    var idxs = filteredMonthIndices();
-    var activeMonths = idxs.map(function(i){ return months26[i]; });
-    var isYearly = state.reportView === 'Yearly';
-    var isCustom = state.reportView === 'Custom';
-    var customFrom = state.customDateFrom ? new Date(state.customDateFrom + 'T00:00:00Z') : null;
-    var customTo   = state.customDateTo   ? new Date(state.customDateTo   + 'T23:59:59Z') : null;
+    var v = state.reportView;
+    var isYearly = v === 'Yearly';
+    var isCustom = v === 'Custom';
 
-    var lKey = LOB_CLS[activeLob];
+    // Active month labels for Monthly view
+    var idxs = filteredMonthIndices();
+    var activeMonths = {};
+    idxs.forEach(function(i){ activeMonths[months26[i]] = true; });
+
+    // Custom date range
+    var customFrom = null, customTo = null;
+    if (isCustom && state.customDateFrom && state.customDateTo) {
+      customFrom = new Date(state.customDateFrom + 'T00:00:00Z');
+      customTo   = new Date(state.customDateTo   + 'T23:59:59Z');
+    }
+
+    var lKey = LOB_CLS[activeLob]; // 'air', 'sea', 'isotank'
     var custMap = {};
 
     for (var i = 0; i < allDrillRows.length; i++) {
       var row = allDrillRows[i];
       if (!row.customer) continue;
 
-      // LOB filter
-      var cl = row._cl || '';
-      if (!cl.includes(lKey)) continue;
+      // LOB filter — match collection name substring
+      var cl = (row._cl || '').toLowerCase();
+      if (cl.indexOf(lKey) < 0) continue;
 
       // Date filter
       if (isCustom) {
         if (!customFrom || !customTo) continue;
-        var rd = new Date(row._dt);
-        if (rd < customFrom || rd > customTo) continue;
+        var rd = row._d ? (row._d instanceof Date ? row._d : new Date(row._d)) : null;
+        if (!rd || rd < customFrom || rd > customTo) continue;
       } else if (!isYearly) {
-        if (activeMonths.indexOf(row._ml) < 0) continue;
+        // Monthly: filter by month label
+        if (!activeMonths[row._ml]) continue;
       }
-      // Yearly: no month filter — show all
+      // Yearly: no filter
 
       var cust = row.customer;
       if (!custMap[cust]) custMap[cust] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
       custMap[cust].shipments++;
       custMap[cust].revenue += row.r || 0;
       custMap[cust].gp      += row.g || 0;
-      custMap[cust].tons    += (cl.includes('air') ? (row.vol||0)/1000 : 0);
+      // Tons: chargeable weight stored as kg in vol field for air rows
+      if (cl.indexOf('air') >= 0) custMap[cust].tons += (row.vol||0) / 1000;
       custMap[cust].teu     += row.t || 0;
     }
 
