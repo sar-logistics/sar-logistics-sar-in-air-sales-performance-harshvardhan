@@ -1740,14 +1740,14 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "srr") {
-      const { collectionName, records } = req.body || {};
+      const { collectionName, records, clearFirst = true } = req.body || {};
       const ALLOWED_SRR = new Set(["srr_sea_export","srr_sea_import","srr_air_export","srr_air_import"]);
       if (!collectionName || !ALLOWED_SRR.has(collectionName)) {
         return res.status(400).json({ error: "collectionName must be one of: " + [...ALLOWED_SRR].join(", ") });
       }
       if (!records || !Array.isArray(records)) return res.status(400).json({ error: "records array required" });
       const col = db.collection(collectionName);
-      await col.deleteMany({});
+      if (clearFirst) await col.deleteMany({});
       let inserted = 0;
       const CHUNK = 500;
       for (let i = 0; i < records.length; i += CHUNK) {
