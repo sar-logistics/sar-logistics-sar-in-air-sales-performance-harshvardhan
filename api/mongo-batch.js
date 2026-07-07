@@ -1426,8 +1426,16 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           ? (cfg.dir === "Import" ? "ISO Imp" : "ISO Exp")
           : (cfg.dir === "Import" ? "Sea Imp" : "Sea Exp");
 
+      // Derive month label for this job
+      const rawDateM = job[cfg.dateCol] || job["Job Date"];
+      let monthLabel = "";
+      if (rawDateM) {
+        const dM = new Date(rawDateM);
+        if (!isNaN(dM.getTime())) monthLabel = MONTH_NAMES[dM.getMonth()] + "-" + String(dM.getFullYear()).slice(2);
+      }
+
       function addTo(map, key) {
-        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, salesReps:new Set(), lobs:new Set(), countries:new Set() };
+        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, salesReps:new Set(), lobs:new Set(), countries:new Set(), monthData:{} };
         map[key].shipments++;
         map[key].revenue += revenue;
         map[key].gp += gp;
@@ -1436,6 +1444,12 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         if (dispSP) map[key].salesReps.add(dispSP);
         map[key].lobs.add(lobLabel);
         if (country) map[key].countries.add(country);
+        if (monthLabel) {
+          if (!map[key].monthData[monthLabel]) map[key].monthData[monthLabel] = { shipments:0, revenue:0, gp:0 };
+          map[key].monthData[monthLabel].shipments++;
+          map[key].monthData[monthLabel].revenue += revenue;
+          map[key].monthData[monthLabel].gp += gp;
+        }
       }
       addTo(countryMap, tradelane);
       if (countryMapByLob[cfg.lob]) addTo(countryMapByLob[cfg.lob], tradelane);
@@ -1454,6 +1468,14 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       salesReps: [...d.salesReps],
       lobs:      [...d.lobs].sort(),
       countries: [...d.countries].sort(),
+      monthData: Object.fromEntries(
+        Object.entries(d.monthData||{}).map(([m, md]) => [m, {
+          shipments: md.shipments,
+          revenue:   Math.round(md.revenue),
+          gp:        Math.round(md.gp),
+          gpPct:     md.revenue > 0 ? Math.round((md.gp / md.revenue) * 1000) / 10 : 0,
+        }])
+      ),
     }));
     function top10(arr, key) { return [...arr].sort((a,b)=>b[key]-a[key]).slice(0,10); }
     return {

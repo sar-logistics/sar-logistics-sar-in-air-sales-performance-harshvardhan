@@ -2650,66 +2650,135 @@ function tradelanePage(){
 }
 
 function tradelanePivotTable(lobData, activeLob, brandC) {
-  var rows = (lobData.allCountries || []).slice();
-  var sortCol = state.tradelaneSortCol || 'gp';
-  var sortDir = state.tradelaneSortDir === undefined ? -1 : state.tradelaneSortDir;
-  var isAir = activeLob === 'Air';
+  var rows = (lobData.allCountries || []).slice().sort(function(a,b){ return b.gp - a.gp; });
+  var BORDER = '#D5DCE6';
+  var BORDER_STRONG = '#B0BAC8';
+  var MONO = 'font-family:\'DM Mono\',monospace;';
 
-  rows.sort(function(a,b){ return sortDir*(b[sortCol]-a[sortCol]); });
+  // Get active months from current view
+  var idxs = filteredMonthIndices();
+  var activeMons = idxs.map(function(i){ return months26[i]; });
 
-  function sortBtn(col, label, alignRight) {
-    var active = sortCol===col;
-    var arrow = active ? (sortDir===-1 ? ' \u25bc' : ' \u25b2') : '';
-    return '<th data-act="tradelaneSort" data-col="'+col+'" style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:'+(active?brandC:'#9AAFC8')+';text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;text-align:'+(alignRight?'right':'left')+';">'+label+arrow+'</th>';
-  }
+  // Build Grand Total across all tradelanes
+  var grandTotal = { shipments:0, revenue:0, gp:0 };
+  var grandMonthData = {};
+  rows.forEach(function(r){
+    grandTotal.shipments += r.shipments;
+    grandTotal.revenue   += r.revenue;
+    grandTotal.gp        += r.gp;
+    activeMons.forEach(function(m){
+      var md = (r.monthData||{})[m];
+      if (!md) return;
+      if (!grandMonthData[m]) grandMonthData[m] = { shipments:0, revenue:0, gp:0 };
+      grandMonthData[m].shipments += md.shipments;
+      grandMonthData[m].revenue   += md.revenue;
+      grandMonthData[m].gp        += md.gp;
+    });
+  });
+  grandTotal.gpPct = grandTotal.revenue > 0 ? (grandTotal.gp / grandTotal.revenue * 100) : 0;
 
-  var thead = '<thead><tr style="border-bottom:2px solid #E3EAF3;background:#F8FAFD;position:sticky;top:0;z-index:2;">'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;width:36px;text-align:center;">#</th>'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:120px;">Tradelane</th>'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:160px;">Countries</th>'
-    +sortBtn('shipments','Ships',true)
-    +(isAir ? sortBtn('tons','Tons',true) : sortBtn('teu','TEUs',true))
-    +sortBtn('revenue','Revenue',true)
-    +sortBtn('gp','GP',true)
-    +sortBtn('gpPct','GP%',true)
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;">LOB(s)</th>'
-    +'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Sales</th>'
+  // Color hashing for avatar
+  function tlHue(name){ var h=0; for(var i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))&0xffff; return h%360; }
+  function tlIni(name){ return name.split(/[\s\-]+/).map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase(); }
+
+  // Format helpers
+  var fmtMon = function(v){ return fmtCur(v); };
+  var fmtPct = function(v){ return v > 0 ? v.toFixed(1)+'%' : '--'; };
+  var fmtShip = function(v){ return v > 0 ? String(v) : '--'; };
+
+  // Header
+  var thStyle = 'padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#F0F4FA;white-space:nowrap;text-align:right;border-right:1px solid '+BORDER+';';
+  var thead = '<thead><tr>'
+    +'<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';min-width:160px;">Tradelane</th>'
+    +'<th style="position:sticky;left:160px;z-index:3;background:#F0F4FA;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';min-width:120px;">Metric</th>'
+    +'<th style="position:sticky;left:280px;z-index:3;text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#FCF3DA;white-space:nowrap;box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;min-width:110px;">Grand Total</th>'
+    + activeMons.map(function(m){
+        return '<th style="'+thStyle+'min-width:90px;">'+m+'</th>';
+      }).join('')
     +'</tr></thead>';
 
-  var tbody = '<tbody>';
-  rows.forEach(function(c,i){
-    var gpColor    = c.gp>=0 ? '#059669' : '#DC2626';
-    var gpPctColor = c.gpPct>=15 ? '#059669' : c.gpPct>=5 ? '#D97706' : '#DC2626';
-    var lobsHtml   = (c.lobs||[]).map(function(l){
-      return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:9.5px;font-weight:700;background:#EEF2FF;color:#4B5FCC;margin:1px;">'+esc(l)+'</span>';
-    }).join('');
-    var repsText = (c.salesReps||[]).slice(0,3).join(', ') + (c.salesReps&&c.salesReps.length>3?' +'+(c.salesReps.length-3):'');
-    var bg = i%2===1 ? 'background:#FAFBFD;' : '';
-    var countriesHtml = (c.countries||[]).slice(0,4).join(', ') + (c.countries&&c.countries.length>4 ? ' +' +(c.countries.length-4) : '');
-    tbody += '<tr style="border-bottom:1px solid #F1F5F9;'+bg+'">'
-      +'<td style="padding:7px 10px;font-size:11px;color:#9AAFC8;text-align:center;font-weight:600;">'+(i+1)+'</td>'
-      +'<td style="padding:7px 10px;font-size:12px;font-weight:700;color:#15233B;">'+esc(c.name)+'</td>'
-      +'<td style="padding:7px 10px;font-size:10.5px;color:#64748B;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(c.countries||[]).join(', ')+'">'+countriesHtml+'</td>'
-      +'<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+c.shipments+'</td>'
-      +(isAir
-        ? '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+(c.tons>=1000?(c.tons/1000).toFixed(1)+'k':c.tons.toFixed(1))+'</td>'
-        : '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+c.teu.toFixed(1)+'</td>'
-      )
-      +'<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(c.revenue)+'</td>'
-      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(c.gp)+'</td>'
-      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpPctColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+c.gpPct+'%</td>'
-      +'<td style="padding:7px 10px;">'+lobsHtml+'</td>'
-      +'<td style="padding:7px 10px;font-size:10.5px;color:#64748B;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(c.salesReps||[]).join(', ')+'">'+repsText+'</td>'
+  // Build a block of 4 rows for one entity (Grand Total or a tradelane)
+  function buildBlock(label, ini, hueVal, data, monthData, isGrand) {
+    var gpPct = data.revenue > 0 ? (data.gp / data.revenue * 100) : 0;
+    var gpColor = data.gp >= 0 ? '#059669' : '#DC2626';
+    var bgRow = isGrand ? '#FFFBF0' : '#FFFFFF';
+    var avatarBg = isGrand ? '#6B7280' : 'hsl('+hueVal+',60%,45%)';
+
+    var avatar = '<div style="width:28px;height:28px;border-radius:8px;background:'+avatarBg+';display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0;margin-right:8px;letter-spacing:0.02em;">'+ini+'</div>';
+
+    var stickyTd = '<td rowspan="4" style="position:sticky;left:0;z-index:1;background:'+bgRow+';padding:10px 12px;border-bottom:2px solid '+BORDER_STRONG+';vertical-align:middle;box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';min-width:160px;">'
+      +'<div style="display:flex;align-items:center;">'+avatar+'<span style="font-size:12px;font-weight:700;color:#15233B;">'+esc(label)+'</span></div>'
+    +'</td>';
+
+    function metricTd(label, isBold) {
+      return '<td style="position:sticky;left:160px;z-index:1;background:'+bgRow+';padding:7px 10px;font-size:11.5px;font-weight:'+(isBold?'700':'500')+';color:#334155;border-right:1px solid '+BORDER+';min-width:120px;">'+label+'</td>';
+    }
+    function gtTd(val, color, bold) {
+      return '<td style="position:sticky;left:280px;z-index:1;background:#FEF9EC;text-align:right;padding:7px 10px;font-size:12px;font-weight:'+(bold?'800':'600')+';color:'+(color||'#334155')+';'+MONO+'box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;min-width:110px;">'+val+'</td>';
+    }
+    function monTd(val, color) {
+      return '<td style="text-align:right;padding:7px 10px;font-size:11.5px;color:'+(color||'#334155')+';'+MONO+'border-right:1px solid '+BORDER+';background:'+bgRow+';">'+val+'</td>';
+    }
+
+    var trStyle = 'background:'+bgRow+';';
+    var sepStyle = 'border-bottom:2px solid '+BORDER_STRONG+';';
+
+    // Row 1: Shipments
+    var r1 = '<tr style="'+trStyle+'">' + stickyTd
+      + metricTd('\u25ba Shipments', true)
+      + gtTd(data.shipments > 0 ? String(data.shipments) : '--', '#15233B', true)
+      + activeMons.map(function(m){ var md=(monthData||{})[m]; return monTd(md&&md.shipments>0?md.shipments:'--'); }).join('')
       +'</tr>';
+
+    // Row 2: Revenue
+    var r2 = '<tr style="'+trStyle+'">'
+      + metricTd('Revenue', false)
+      + gtTd(fmtMon(data.revenue), '#334155', false)
+      + activeMons.map(function(m){ var md=(monthData||{})[m]; return monTd(md?fmtMon(md.revenue):'--'); }).join('')
+      +'</tr>';
+
+    // Row 3: GP
+    var r3 = '<tr style="'+trStyle+'">'
+      + metricTd('GP', false)
+      + gtTd(fmtMon(data.gp), gpColor, false)
+      + activeMons.map(function(m){ var md=(monthData||{})[m]; var gpC=md&&md.gp>=0?'#059669':'#DC2626'; return monTd(md?fmtMon(md.gp):'--', gpC); }).join('')
+      +'</tr>';
+
+    // Row 4: GP%
+    var r4 = '<tr style="'+trStyle+sepStyle+'">'
+      + metricTd('GP %', false)
+      + gtTd(gpPct>0?gpPct.toFixed(1)+'%':'--', gpPct>=10?'#059669':gpPct>=5?'#D97706':'#DC2626', false)
+      + activeMons.map(function(m){
+          var md=(monthData||{})[m];
+          var pct = md&&md.revenue>0 ? (md.gp/md.revenue*100) : null;
+          var pctC = pct===null?'#94A3B8':pct>=10?'#059669':pct>=5?'#D97706':'#DC2626';
+          return monTd(pct!==null?pct.toFixed(1)+'%':'--', pctC);
+        }).join('')
+      +'</tr>';
+
+    return r1 + r2 + r3 + r4;
+  }
+
+  var tbody = '<tbody>';
+
+  // Grand Total block
+  tbody += buildBlock('Grand Total', 'GT', 0, grandTotal, grandMonthData, true);
+
+  // Per-tradelane blocks
+  rows.forEach(function(r){
+    tbody += buildBlock(r.name, tlIni(r.name), tlHue(r.name), r, r.monthData||{}, false);
   });
+
   tbody += '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;max-height:calc(100vh - 220px);overflow-y:auto;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 200px);overflow-y:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
     +'</div>'
   +'</div>';
 }
+
+
 
 
 /* ====================== FINANCE PENDENCY ====================== */
