@@ -1086,6 +1086,164 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
   };
 }
 
+// ─── Agent Insights ───────────────────────────────────────────────────────────
+const agentCacheMap = {}; // key → { data, time }
+
+async function getAgentAggregate(db, force, dateFrom, dateTo, cacheKey) {
+  const key = cacheKey || 'all';
+  const entry = agentCacheMap[key];
+  if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
+    return { ...entry.data, cached: true };
+  }
+  const result = await computeAgentAggregate(db, dateFrom, dateTo);
+  agentCacheMap[key] = { data: result, time: Date.now() };
+  return result;
+}
+
+async function computeAgentAggregate(db, dateFrom, dateTo) {
+  const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
+    "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
+    "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
+    "Oct-26","Nov-26","Dec-26","Jan-27","Feb-27","Mar-27"];
+  let activeMonthSet = null;
+  if (dateFrom && dateTo) {
+    const fi = FY_MONTHS_LIST.indexOf(dateFrom);
+    const ti = FY_MONTHS_LIST.indexOf(dateTo);
+    if (fi >= 0 && ti >= 0) activeMonthSet = new Set(FY_MONTHS_LIST.slice(fi, ti + 1));
+  }
+
+  const LOB_GROUPS = {
+    "Air":      ["jobs_air_export",     "jobs_air_import"],
+    "Ocean":    ["jobs_sea_export",     "jobs_sea_import"],
+    "ISO Tank": ["jobs_isotank_export", "jobs_isotank_import"],
+  };
+  const ALL_COLLS = Object.values(LOB_GROUPS).flat();
+
+  const agentMapByLob = { "Air": {}, "Ocean": {}, "ISO Tank": {} };
+  const agentMapAll   = {};
+  const agentSalesReps  = {}; // agent → Set of sales rep display names
+  const agentLobLabels  = {}; // agent → Set of lob sub-labels
+
+  const projection = {
+    "Destination Agent": 1, "Origin Agent": 1,
+    "Billed Revenue (C)": 1,
+    "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
+    "Financial Lock": 1, "Operation Lock": 1,
+    "Sales Person": 1,
+    "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
+    "Container TEU": 1,
+    "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+  };
+
+  await Promise.all(ALL_COLLS.map(async (collName) => {
+    const lob = collName.includes("air") ? "Air"
+              : collName.includes("isotank") ? "ISO Tank"
+              : "Ocean";
+    const isAir    = lob === "Air";
+    const isExport = collName.includes("export");
+    const isImport = collName.includes("import");
+    const cls = {
+      kind: isAir ? "AIR" : collName.includes("isotank") ? "ISOTANK" : "SEA",
+      direction: isImport ? "IMPORT" : "EXPORT"
+    };
+    const dateCol = isExport ? "ETD Loading Port" : isImport ? "ETA Discharge" : "Job Date";
+    const lobLabel = lob === "Air"
+      ? (isImport ? "Air Imp" : "Air Exp")
+      : lob === "ISO Tank"
+        ? (isImport ? "ISO Imp" : "ISO Exp")
+        : (isImport ? "Sea Imp" : "Sea Exp");
+
+    const jobs = await db.collection(collName).find({}, { projection }).toArray();
+
+    for (const job of jobs) {
+      // Date filter
+      if (activeMonthSet) {
+        const rawDate = job[dateCol] || job["Job Date"];
+        if (!rawDate) continue;
+        const dObj = new Date(rawDate);
+        if (isNaN(dObj.getTime())) continue;
+        const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
+        if (!activeMonthSet.has(ml)) continue;
+      }
+
+      // Agent: Export → Destination Agent, Import → Origin Agent
+      const agentRaw = isExport
+        ? String(job["Destination Agent"] || "").trim()
+        : String(job["Origin Agent"] || "").trim();
+      if (!agentRaw) continue;
+
+      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
+      const { gp } = pickGP(job, cls);
+
+      let tons = 0;
+      if (isAir) {
+        const rawW = parseFloat(job["Chargeable Weight"] || 0) || 0;
+        const wUnit = String(job["Chargeable Weight Unit"] || "").toLowerCase().trim();
+        if (wUnit === "ton" || wUnit === "tons" || wUnit === "mt") tons = rawW;
+        else if (wUnit === "lb" || wUnit === "lbs") tons = rawW * 0.000453592;
+        else tons = rawW / 1000;
+      }
+      let teu = 0;
+      if (!isAir) teu = parseFloat(job["Container TEU"] || 0) || 0;
+
+      function addTo(map, key) {
+        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
+        map[key].shipments++; map[key].revenue += revenue; map[key].gp += gp;
+        map[key].tons += tons; map[key].teu += teu;
+      }
+      addTo(agentMapByLob[lob], agentRaw);
+      addTo(agentMapAll, agentRaw);
+
+      // Sales rep tracking
+      const rawSP = String(job["Sales Person"] || "").trim();
+      const dispSP = rawSP ? rawSP.split("|")[0].trim() : "";
+      if (dispSP) {
+        if (!agentSalesReps[agentRaw]) agentSalesReps[agentRaw] = new Set();
+        agentSalesReps[agentRaw].add(dispSP);
+      }
+      // LOB label tracking
+      if (!agentLobLabels[agentRaw]) agentLobLabels[agentRaw] = new Set();
+      agentLobLabels[agentRaw].add(lobLabel);
+    }
+  }));
+
+  function buildStats(agentMap) {
+    const agents = Object.entries(agentMap).map(([name, d]) => ({
+      name,
+      shipments: d.shipments,
+      revenue:   Math.round(d.revenue),
+      gp:        Math.round(d.gp),
+      tons:      Math.round(d.tons * 100) / 100,
+      teu:       Math.round(d.teu * 100) / 100,
+      gpPct:     d.revenue > 0 ? Math.round((d.gp / d.revenue) * 1000) / 10 : 0,
+      salesReps: agentSalesReps[name] ? [...agentSalesReps[name]] : [],
+      lobs:      agentLobLabels[name] ? [...agentLobLabels[name]].sort() : [],
+    }));
+    function top10(arr, key) { return [...arr].sort((a,b)=>b[key]-a[key]).slice(0,10); }
+    return {
+      topByShipments: top10(agents, "shipments"),
+      topByRevenue:   top10(agents, "revenue"),
+      topByGP:        top10(agents, "gp"),
+      topByTons:      top10(agents.filter(c=>c.tons>0), "tons"),
+      topByTEU:       top10(agents.filter(c=>c.teu>0), "teu"),
+      topByGPPct:     top10(agents.filter(c=>c.shipments>=2), "gpPct"),
+      totalAgents:    agents.length,
+      allAgents:      [...agents].sort((a,b)=>b.gp-a.gp),
+    };
+  }
+
+  return {
+    success: true,
+    lobs: {
+      "Air":      buildStats(agentMapByLob["Air"]),
+      "Ocean":    buildStats(agentMapByLob["Ocean"]),
+      "ISO Tank": buildStats(agentMapByLob["ISO Tank"]),
+    },
+    ...buildStats(agentMapAll),
+    pushedAt: new Date().toISOString(),
+  };
+}
+
 // In-memory cache for usage analytics
 let usageCache = null;
 let usageCacheTime = 0;
@@ -1339,7 +1497,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "customers", "agents", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -1415,6 +1573,14 @@ module.exports = async function handler(req, res) {
       const dateTo   = req.query.dateTo   || null; // e.g. "Jun-26"
       const cacheKey = `${dateFrom}|${dateTo}`;
       const result = await getCustomerAggregate(db, forceRefresh, dateFrom, dateTo, cacheKey);
+      return res.status(200).json(result);
+    }
+
+    if (action === "agents") {
+      const dateFrom = req.query.dateFrom || null;
+      const dateTo   = req.query.dateTo   || null;
+      const cacheKey = `${dateFrom}|${dateTo}`;
+      const result = await getAgentAggregate(db, forceRefresh, dateFrom, dateTo, cacheKey);
       return res.status(200).json(result);
     }
 
