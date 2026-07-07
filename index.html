@@ -786,6 +786,50 @@ function fetchCustomerData(callback, force) {
     })
     .catch(function(e){ console.warn('Customer data failed:', e.message); if (callback) callback(); });
 }
+
+// Prefetch all single-month and common multi-month ranges in the background
+// so tweaking FROM/TO on the customer page is instant
+var _customerPrefetchDone = false;
+function prefetchCustomerRanges() {
+  if (_customerPrefetchDone) return;
+  _customerPrefetchDone = true;
+  var allM = months26;
+  if (!allM || allM.length === 0) return;
+
+  // Build a queue of ranges to prefetch: every individual month + 3/6/12-month windows ending at latest month
+  var queue = [];
+  // Individual months
+  for (var i = 0; i < allM.length; i++) {
+    queue.push({ dateFrom: allM[i], dateTo: allM[i] });
+  }
+  // Common windows: last 3, 6, 9, 12 months
+  [3, 6, 9, 12].forEach(function(n) {
+    if (allM.length >= n) {
+      queue.push({ dateFrom: allM[allM.length - n], dateTo: allM[allM.length - 1] });
+    }
+  });
+
+  // Fetch sequentially with a small delay so we don't hammer the server
+  var idx = 0;
+  function next() {
+    if (idx >= queue.length) return;
+    var r = queue[idx++];
+    var key   = r.dateFrom + '_' + r.dateTo;
+    var lsKey = 'customers_' + key;
+    // Skip if already cached in memory or localStorage
+    if (_customerCache[key]) { setTimeout(next, 10); return; }
+    var lsCached = lsGet(lsKey);
+    if (lsCached && lsCached.success) { _customerCache[key] = lsCached; setTimeout(next, 10); return; }
+    // Fetch silently
+    var qs = '/api/mongo-batch?action=customers&dateFrom=' + encodeURIComponent(r.dateFrom) + '&dateTo=' + encodeURIComponent(r.dateTo);
+    fetch(qs).then(function(res){ return res.json(); }).then(function(data) {
+      if (data.success) { _customerCache[key] = data; lsSet(lsKey, data); }
+      setTimeout(next, 150); // 150ms gap between requests
+    }).catch(function(){ setTimeout(next, 300); });
+  }
+  // Start after a short delay so the initial page load isn't affected
+  setTimeout(next, 2000);
+}
 var fetchFinanceData  = makeFetcher('finance',   'finance',   function(d){ financeData  = d; financeDataReady  = true; });
 var fetchOpData       = makeFetcher('op',        'op',        function(d){ opData       = d; opDataReady       = true; });
 var fetchOrgData      = makeFetcher('org',       'org',       function(d){ orgData      = d; orgDataReady      = true; });
@@ -1954,7 +1998,7 @@ function customerPage(){
   if (!customerDataReady) {
     if (!customerDataLoading) {
       customerDataLoading = true;
-      fetchCustomerData(function(){ customerDataLoading = false; render(); });
+      fetchCustomerData(function(){ customerDataLoading = false; render(); prefetchCustomerRanges(); });
     }
     return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'
       +'<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">'
@@ -4018,6 +4062,7 @@ document.addEventListener('click', function(ev){
     customerDataReady = false; financeDataReady = false; financeDataLoading = false;
     opDataReady = false; opDataLoading = false; usageDataReady = false; orgDataReady = false;
     _customerCache = {}; // clear all per-range customer caches
+    _customerPrefetchDone = false; // allow re-prefetch after refresh
 
     fetchLiveData(done, true);
     pending++; fetchCustomerData(done, true);
