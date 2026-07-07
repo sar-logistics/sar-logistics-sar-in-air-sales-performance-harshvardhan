@@ -1089,6 +1089,9 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
 // ─── Agent Insights ───────────────────────────────────────────────────────────
 const agentCacheMap = {}; // key → { data, time }
 
+// ─── Tradelane Insights ───────────────────────────────────────────────────────
+const tradelaneCacheMap = {}; // key → { data, time }
+
 async function getAgentAggregate(db, force, dateFrom, dateTo, cacheKey) {
   const key = cacheKey || 'all';
   const entry = agentCacheMap[key];
@@ -1734,6 +1737,26 @@ module.exports = async function handler(req, res) {
       const result = await batchInsertMapping(db, collectionName, records, fy);
       if (result.error) return res.status(400).json({ error: result.error });
       return res.status(200).json({ success: true, action: "mapping", collection: collectionName, inserted: result.inserted });
+    }
+
+    if (action === "srr") {
+      const { collectionName, records } = req.body || {};
+      const ALLOWED_SRR = new Set(["srr_sea_export","srr_sea_import","srr_air_export","srr_air_import"]);
+      if (!collectionName || !ALLOWED_SRR.has(collectionName)) {
+        return res.status(400).json({ error: "collectionName must be one of: " + [...ALLOWED_SRR].join(", ") });
+      }
+      if (!records || !Array.isArray(records)) return res.status(400).json({ error: "records array required" });
+      const col = db.collection(collectionName);
+      await col.deleteMany({});
+      let inserted = 0;
+      const CHUNK = 500;
+      for (let i = 0; i < records.length; i += CHUNK) {
+        const chunk = records.slice(i, i + CHUNK);
+        if (chunk.length > 0) { await col.insertMany(chunk); inserted += chunk.length; }
+      }
+      // Invalidate tradelane cache
+      if (tradelaneCacheMap) Object.keys(tradelaneCacheMap).forEach(k => delete tradelaneCacheMap[k]);
+      return res.status(200).json({ success: true, collection: collectionName, inserted });
     }
 
     if (action === "users") {
