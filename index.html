@@ -1927,6 +1927,10 @@ function customerPage(){
     var lKey = LOB_CLS[activeLob]; // 'air', 'sea', 'isotank'
     var custMap = {};
 
+    // DEBUG
+    var _sample = allDrillRows[0];
+    console.log('DEBUG customer filter: rows='+allDrillRows.length+' lKey='+lKey+' v='+v+' activeMonths='+JSON.stringify(Object.keys(activeMonths))+' sampleCustomer='+((_sample&&_sample.customer)||'EMPTY')+' sampleCl='+((_sample&&_sample._cl)||'?')+' sampleMl='+((_sample&&_sample._ml)||'?'));
+
     for (var i = 0; i < allDrillRows.length; i++) {
       var row = allDrillRows[i];
       if (!row.customer) continue;
