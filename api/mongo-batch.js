@@ -1740,23 +1740,45 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "srr") {
-      const { collectionName, records, clearFirst = true } = req.body || {};
+      const { collectionName, records } = req.body || {};
       const ALLOWED_SRR = new Set(["srr_sea_export","srr_sea_import","srr_air_export","srr_air_import"]);
       if (!collectionName || !ALLOWED_SRR.has(collectionName)) {
         return res.status(400).json({ error: "collectionName must be one of: " + [...ALLOWED_SRR].join(", ") });
       }
       if (!records || !Array.isArray(records)) return res.status(400).json({ error: "records array required" });
       const col = db.collection(collectionName);
-      if (clearFirst) await col.deleteMany({});
-      let inserted = 0;
-      const CHUNK = 500;
+
+      // Upsert by shipment number so FY26 + FY27 can both push without wiping each other
+      const KEY_CANDIDATES = ["Shipment No", "Shipment No.", "Job No", "Job No.", "House No", "House No.", "Shipment Number", "Job Number"];
+      let keyField = null;
+      if (records[0]) {
+        for (const k of KEY_CANDIDATES) {
+          if (records[0][k] !== undefined) { keyField = k; break; }
+        }
+      }
+
+      let inserted = 0, updated = 0;
+      const CHUNK = 200;
       for (let i = 0; i < records.length; i += CHUNK) {
         const chunk = records.slice(i, i + CHUNK);
-        if (chunk.length > 0) { await col.insertMany(chunk); inserted += chunk.length; }
+        if (keyField) {
+          const ops = chunk.map(rec => ({
+            updateOne: {
+              filter: { [keyField]: rec[keyField] },
+              update: { $set: rec },
+              upsert: true,
+            }
+          }));
+          const r = await col.bulkWrite(ops, { ordered: false });
+          inserted += r.upsertedCount || 0;
+          updated  += r.modifiedCount || 0;
+        } else {
+          await col.insertMany(chunk, { ordered: false });
+          inserted += chunk.length;
+        }
       }
-      // Invalidate tradelane cache
-      if (tradelaneCacheMap) Object.keys(tradelaneCacheMap).forEach(k => delete tradelaneCacheMap[k]);
-      return res.status(200).json({ success: true, collection: collectionName, inserted });
+      Object.keys(tradelaneCacheMap).forEach(k => delete tradelaneCacheMap[k]);
+      return res.status(200).json({ success: true, collection: collectionName, inserted, updated, keyField });
     }
 
     if (action === "users") {
