@@ -1356,7 +1356,7 @@ function topbar(){
         +'</div>'
         +(state.viewDropOpen
           ? '<div id="view-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
-            +['Monthly','Weekly','Quarterly','Yearly','Custom'].map(function(v){
+            +(state.page==='customers' ? ['Monthly','Yearly','Custom'] : ['Monthly','Weekly','Quarterly','Yearly','Custom']).map(function(v){
               var active = state.reportView===v;
               var desc = v==='Monthly'?'Month by month':v==='Weekly'?'Week by week':v==='Quarterly'?'Quarter view':v==='Yearly'?'Full year':'Custom range';
               return '<div data-act="setView" data-val="'+v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;transition:background 0.1s;">'
@@ -1444,6 +1444,22 @@ function topbar(){
             +'</div>';
           }
 
+          // Customer Insights: two separate FROM/TO pills
+          if (state.page === 'customers') {
+            return '<div style="position:relative;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">'
+              +'<div data-act="toggleCustomCal" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:'+(cf?'#0D2B5E':'#9AAFC8')+';cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(calOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+                +calIcon
+                +'<span style="pointer-events:none;">'+(cf||'Start date')+'</span>'
+                +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;"><path d="M6 9l6 6 6-6"/></svg>'
+              +'</div>'
+              +'<span style="color:#B7C4D9;font-weight:700;font-size:13px;flex-shrink:0;">→</span>'
+              +'<div data-act="toggleCustomCal" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:'+(ct?'#0D2B5E':'#9AAFC8')+';cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(calOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+                +'<span style="pointer-events:none;">'+(ct||'End date')+'</span>'
+                +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;"><path d="M6 9l6 6 6-6"/></svg>'
+              +'</div>'
+              +calHtml
+            +'</div>';
+          }
           return '<div style="position:relative;display:inline-block;flex-shrink:0;">'
             +'<div data-act="toggleCustomCal" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 16px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(calOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
               +calIcon
@@ -1501,6 +1517,27 @@ function topbar(){
               :'')
           +'</div>';
           return qPill;
+        }
+
+        // Customer Insights only: Monthly → pill FROM/TO dropdowns
+        if (state.page==='customers' && v === 'Monthly') {
+          var fOpen = state.fromDropOpen, tOpen = state.toDropOpen;
+          function custMonthPill(act, toggleAct, val, dropId, isOpen){
+            var opts = months26.map(function(m){
+              var isActive = m===val;
+              return '<div data-act="'+act+'" data-val="'+m+'" style="padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:'+(isActive?'700':'500')+';color:'+(isActive?'#1D5FCC':'#0D2B5E')+';background:'+(isActive?'#EEF4FF':'transparent')+';">'+m+'</div>';
+            }).join('');
+            var drop = isOpen ? '<div id="'+dropId+'" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;max-height:240px;overflow-y:auto;padding:4px;min-width:110px;">'+opts+'</div>' : '';
+            return '<div style="position:relative;display:inline-block;flex-shrink:0;">'
+              +'<div data-act="'+toggleAct+'" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(isOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
+                +calIcon+'<span style="pointer-events:none;">'+val+'</span>'
+                +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;transition:transform 0.2s;'+(isOpen?'transform:rotate(180deg);':'')+';pointer-events:none;"><path d="M6 9l6 6 6-6"/></svg>'
+              +'</div>'+drop
+            +'</div>';
+          }
+          return custMonthPill('setFrom','toggleFromDrop',state.dateFrom,'from-drop',fOpen)
+            +'<span style="color:#B7C4D9;font-weight:700;font-size:13px;flex-shrink:0;padding:0 4px;">→</span>'
+            +custMonthPill('setTo','toggleToDrop',state.dateTo,'to-drop',tOpen);
         }
 
         if (v === 'Yearly') {
