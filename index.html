@@ -715,6 +715,19 @@ function makeFetcher(action, lsKey, setReady) {
   };
 }
 
+// In-memory cache for customer data per date range key — instant switching
+var _customerCache = {}; // key → data
+
+function getCustomerCacheKey() {
+  var v = state.reportView;
+  var dateFrom = '', dateTo = '';
+  if (v === 'Monthly') { dateFrom = state.dateFrom; dateTo = state.dateTo; }
+  else if (v === 'Custom' && state.customDateFrom && state.customDateTo) {
+    dateFrom = state.customDateFrom; dateTo = state.customDateTo;
+  }
+  return (dateFrom||'all') + '_' + (dateTo||'all');
+}
+
 function fetchCustomerData(callback, force) {
   var v = state.reportView;
   var dateFrom = '', dateTo = '';
@@ -722,29 +735,43 @@ function fetchCustomerData(callback, force) {
   else if (v === 'Custom' && state.customDateFrom && state.customDateTo) {
     dateFrom = state.customDateFrom; dateTo = state.customDateTo;
   }
-  // Build cache key for localStorage
-  var lsKey = 'customers_' + (dateFrom||'all') + '_' + (dateTo||'all');
+  var key    = (dateFrom||'all') + '_' + (dateTo||'all');
+  var lsKey  = 'customers_' + key;
   var qs = '/api/mongo-batch?action=customers'
     + (force ? '&force=1' : '')
     + (dateFrom ? '&dateFrom=' + encodeURIComponent(dateFrom) : '')
     + (dateTo   ? '&dateTo='   + encodeURIComponent(dateTo)   : '');
 
   if (!force) {
-    var cached = lsGet(lsKey);
-    if (cached && cached.success) {
-      customerData = cached; customerDataReady = true;
+    // 1. Check in-memory cache first (instant — no localStorage parse)
+    if (_customerCache[key]) {
+      customerData = _customerCache[key]; customerDataReady = true;
       if (callback) callback();
-      if (cached._isStale) {
+      return;
+    }
+    // 2. Check localStorage
+    var lsCached = lsGet(lsKey);
+    if (lsCached && lsCached.success) {
+      _customerCache[key] = lsCached;
+      customerData = lsCached; customerDataReady = true;
+      if (callback) callback();
+      // Background refresh if stale
+      if (lsCached._isStale) {
         fetch(qs + '&force=1').then(function(r){ return r.json(); }).then(function(d){
-          if (d.success) { customerData = d; lsSet(lsKey, d); render(); }
+          if (d.success) { _customerCache[key]=d; customerData=d; lsSet(lsKey,d); render(); }
         }).catch(function(){});
       }
       return;
     }
   }
+  // 3. Fetch from server
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){
-      if (data.success) { customerData = data; customerDataReady = true; lsSet(lsKey, data); }
+      if (data.success) {
+        _customerCache[key] = data;
+        customerData = data; customerDataReady = true;
+        lsSet(lsKey, data);
+      }
       if (callback) callback();
     })
     .catch(function(e){ console.warn('Customer data failed:', e.message); if (callback) callback(); });
@@ -3932,8 +3959,9 @@ document.addEventListener('click', function(ev){
     state.page=el.getAttribute('data-val');
     render();
     if(state.page==='customers'){
-      customerDataReady = false;
-      fetchCustomerData(function(){ render(); });
+      var _k=getCustomerCacheKey();
+      if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); }
+      else { customerDataReady=false; fetchCustomerData(function(){ render(); }); }
     }
     if(state.page==='usage'){
       // Always force-fetch on every visit so login counts are real-time
@@ -3979,6 +4007,7 @@ document.addEventListener('click', function(ev){
     // Reset all secondary data ready flags so pages show fresh data
     customerDataReady = false; financeDataReady = false; financeDataLoading = false;
     opDataReady = false; opDataLoading = false; usageDataReady = false; orgDataReady = false;
+    _customerCache = {}; // clear all per-range customer caches
 
     fetchLiveData(done, true);
     pending++; fetchCustomerData(done, true);
@@ -4083,8 +4112,8 @@ document.addEventListener('click', function(ev){
       fetchOrgData(function(){ render(); }, true);
     });
   }
-  else if(act==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.getAttribute('data-val'); state.fromDropOpen=false; if(state.page==='customers'){ customerDataReady=false; fetchCustomerData(function(){ render(); }); } else { render(); } }
-  else if(act==='setTo'){ ev.stopPropagation(); state.dateTo=el.getAttribute('data-val'); state.toDropOpen=false; if(state.page==='customers'){ customerDataReady=false; fetchCustomerData(function(){ render(); }); } else { render(); } }
+  else if(act==='setFrom'){ ev.stopPropagation(); state.dateFrom=el.getAttribute('data-val'); state.fromDropOpen=false; if(state.page==='customers'){ var _k=getCustomerCacheKey(); if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); } else { customerDataReady=false; fetchCustomerData(function(){ render(); }); } } else { render(); } }
+  else if(act==='setTo'){ ev.stopPropagation(); state.dateTo=el.getAttribute('data-val'); state.toDropOpen=false; if(state.page==='customers'){ var _k=getCustomerCacheKey(); if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); } else { customerDataReady=false; fetchCustomerData(function(){ render(); }); } } else { render(); } }
   else if(act==='toggleFromDrop'){ ev.stopPropagation(); state.fromDropOpen=!state.fromDropOpen; state.toDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; render(); }
@@ -4192,7 +4221,7 @@ document.addEventListener('click', function(ev){
     var v = el.getAttribute('data-val');
     state.reportView = v;
     state.viewDropOpen = false;
-    if(state.page==='customers'){ customerDataReady=false; }
+    if(state.page==='customers'){ var _k=getCustomerCacheKey(); if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; } else { customerDataReady=false; } }
     var allM = months26;
     var last  = allM[allM.length - 1];
     var first = allM[0];
