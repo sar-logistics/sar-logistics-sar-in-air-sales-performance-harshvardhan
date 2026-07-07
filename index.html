@@ -278,9 +278,16 @@ function showDashboard() {
         'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
         'Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
       var cachedMonths = cached.months || [];
-      // Use cached months order but ensure all FY months present in order
+      // Use FY-ordered months that exist in cache
       months26 = ALL_FY.filter(function(m){ return cachedMonths.indexOf(m) >= 0; });
       if (months26.length === 0) months26 = cachedMonths.length > 0 ? cachedMonths : ALL_FY;
+      // Validate: repsRaw gp arrays must match months26 length — if not, cache is stale, discard
+      var repCheck = cached.repsRaw && cached.repsRaw[0];
+      if (repCheck && repCheck.gp && repCheck.gp.length !== months26.length) {
+        // Mismatch — old cache, force fresh fetch
+        localStorage.removeItem('sar_sales_cache_' + CACHE_VERSION);
+        dataReady = false;
+      }
       syncDateRangeToData();
       dataReady = true;
     }
@@ -2696,7 +2703,7 @@ function salesTable(M){
     + (activeGroups2 ? activeGroups2.map(function(g, gi){
         return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#FCF3DA;white-space:nowrap;">'
           +'<div style="font-size:11px;font-weight:800;color:#A8720E;">'+g.label+'</div>'
-          +'<div style="font-size:9px;font-weight:500;color:#B8955A;margin-top:1px;">'+g.range+'</div>'
+          +(g.range ? '<div style="font-size:9px;font-weight:500;color:#B8955A;margin-top:1px;">'+g.range+'</div>' : '')
         +'</th>';
       }).join('')
     : colLabels.slice(1).map(function(l){
