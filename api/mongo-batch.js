@@ -446,6 +446,7 @@ async function getDrillRows(db, entity, metric, month) {
           t: parseFloat(job["Container TEU"] || 0) || 0,
           vol: chargeable,
           prov: isProvisional ? 1 : 0,
+          customer: String(job["Customer"] || "").trim(),
         });
       }
     }

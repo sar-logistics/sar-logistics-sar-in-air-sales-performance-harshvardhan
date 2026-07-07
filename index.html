@@ -508,6 +508,7 @@ function computeFilteredRepsRaw(){
 var zonesRaw = [];
 var dataReady = false;
 var customerData = null; // { topByShipments, topByRevenue, topByGP, topByGPPct, totalCustomers }
+var customerDataLoading = false;
 var financeData = null; // { months, reps, ... }
 var financeDataReady = false;
 var financeDataLoading = false;
@@ -1880,26 +1881,114 @@ function adminPage(){
 
 
 function customerPage(){
-  if (!customerDataReady) {
+  if (!customerDataReady && !allDrillRows) {
+    if (!customerDataLoading) {
+      customerDataLoading = true;
+      fetchCustomerData(function(){ customerDataLoading = false; render(); });
+    }
     return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'
       +'<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">'
         +'<div class="login-spinner" style="width:24px;height:24px;border-width:3px;"></div>'
-        +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading customer insights…</div>'
+        +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading customer insights\u2026</div>'
       +'</div>'
     +'</div>';
   }
 
-  var d = customerData;
   var activeLob = state.customerLob || 'Air';
-  var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
-  var fmtInt  = function(v){ return v.toLocaleString('en-US'); };
+  var fmtInt  = function(v){ return Math.round(v).toLocaleString('en-US'); };
   var fmtPct  = function(v){ return v+'%'; };
   var fmtTons = function(v){ return v >= 1000 ? (v/1000).toFixed(1)+'k T' : v.toFixed(1)+' T'; };
   var fmtTEU  = function(v){ return v.toFixed(2)+' TEU'; };
-
   var LOBS = ['Air','Ocean','ISO Tank'];
   var LOB_COLORS = {'Air':'#1D5FCC','Ocean':'#0891B2','ISO Tank':'#7C3AED'};
   var LOB_SUBTITLES = {'Air':'Air Export + Air Import','Ocean':'Sea Export + Sea Import','ISO Tank':'ISO Tank Export + Import'};
+  var LOB_CLS = {'Air':'air','Ocean':'sea','ISO Tank':'isotank'};
+
+  // ── Compute stats from allDrillRows filtered by active period ──
+  // This makes all 3 view modes (Monthly, Yearly, Custom) functional
+  function computeFromDrillRows() {
+    if (!allDrillRows) return null;
+
+    var idxs = filteredMonthIndices();
+    var activeMonths = idxs.map(function(i){ return months26[i]; });
+    var isYearly = state.reportView === 'Yearly';
+    var isCustom = state.reportView === 'Custom';
+    var customFrom = state.customDateFrom ? new Date(state.customDateFrom + 'T00:00:00Z') : null;
+    var customTo   = state.customDateTo   ? new Date(state.customDateTo   + 'T23:59:59Z') : null;
+
+    var lKey = LOB_CLS[activeLob];
+    var custMap = {};
+
+    for (var i = 0; i < allDrillRows.length; i++) {
+      var row = allDrillRows[i];
+      if (!row.customer) continue;
+
+      // LOB filter
+      var cl = row._cl || '';
+      if (!cl.includes(lKey)) continue;
+
+      // Date filter
+      if (isCustom) {
+        if (!customFrom || !customTo) continue;
+        var rd = new Date(row._dt);
+        if (rd < customFrom || rd > customTo) continue;
+      } else if (!isYearly) {
+        if (activeMonths.indexOf(row._ml) < 0) continue;
+      }
+      // Yearly: no month filter — show all
+
+      var cust = row.customer;
+      if (!custMap[cust]) custMap[cust] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
+      custMap[cust].shipments++;
+      custMap[cust].revenue += row.r || 0;
+      custMap[cust].gp      += row.g || 0;
+      custMap[cust].tons    += (cl.includes('air') ? (row.vol||0)/1000 : 0);
+      custMap[cust].teu     += row.t || 0;
+    }
+
+    var customers = Object.entries(custMap).map(function(e){
+      var name = e[0], d = e[1];
+      return { name:name, shipments:d.shipments, revenue:Math.round(d.revenue),
+               gp:Math.round(d.gp), tons:Math.round(d.tons*100)/100,
+               teu:Math.round(d.teu*100)/100,
+               gpPct: d.revenue>0 ? Math.round(d.gp/d.revenue*1000)/10 : 0 };
+    });
+
+    function top10(arr, key) {
+      return arr.filter(function(c){ return c[key]>0; })
+               .sort(function(a,b){ return b[key]-a[key]; }).slice(0,10);
+    }
+    return {
+      topByShipments: top10(customers,'shipments'),
+      topByRevenue:   top10(customers,'revenue'),
+      topByGP:        top10(customers,'gp'),
+      topByTons:      top10(customers,'tons'),
+      topByTEU:       top10(customers,'teu'),
+      topByGPPct:     top10(customers.filter(function(c){return c.shipments>=2;}), 'gpPct'),
+      totalCustomers: customers.length,
+    };
+  }
+
+  // Use drill rows if available (date-filtered), fall back to cached data
+  var lobData = computeFromDrillRows();
+  if (!lobData) {
+    // Fall back to pre-computed cache (no date filtering)
+    var d = customerData;
+    lobData = (d && d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : (d || {});
+  }
+
+  // ── Period label ──
+  var periodLabel = (function(){
+    var v = state.reportView;
+    if (v === 'Yearly') return 'Full Year';
+    if (v === 'Custom') {
+      var cf = state.customDateFrom, ct = state.customDateTo;
+      return (cf && ct) ? cf + ' \u2013 ' + ct : 'Custom Range';
+    }
+    var idxs = filteredMonthIndices();
+    var ms = idxs.map(function(i){ return months26[i]; });
+    return ms.length ? ms[0] + (ms.length>1 ? ' \u2013 ' + ms[ms.length-1] : '') : '';
+  })();
 
   var tabs = LOBS.map(function(lob){
     var active = lob === activeLob;
@@ -1909,23 +1998,20 @@ function customerPage(){
 
   var header = '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">'
     +'<span style="font-size:13px;font-weight:700;color:#15233B;">Customer Insights</span>'
-    +'<span style="font-size:11px;color:#64748B;font-weight:500;">'+LOB_SUBTITLES[activeLob]+' · '+(lobData.totalCustomers||0)+' customers</span>'
+    +'<span style="font-size:11px;color:#64748B;font-weight:500;">'+LOB_SUBTITLES[activeLob]+' \u00b7 '+(lobData.totalCustomers||0)+' customers</span>'
+    +(periodLabel ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+periodLabel+'</span>' : '')
     +'<div style="display:flex;gap:6px;margin-left:auto;">'+tabs+'</div>'
   +'</div>';
 
-  var c1 = LOB_COLORS[activeLob];
-  var shades = {
-    'Air':      ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'],
-    'Ocean':    ['#0891B2','#0E7490','#155E75','#083344','#22D3EE'],
-    'ISO Tank': ['#7C3AED','#6D28D9','#5B21B6','#4C1D95','#A78BFA'],
-  };
-  var sc = shades[activeLob] || shades['Air'];
+  var sc = {'Air':['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'],
+            'Ocean':['#0891B2','#0E7490','#155E75','#083344','#22D3EE'],
+            'ISO Tank':['#7C3AED','#6D28D9','#5B21B6','#4C1D95','#A78BFA']}[activeLob]||['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
 
   var charts = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
     + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0])
-    + (activeLob === 'Air'
+    + (activeLob==='Air'
         ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1])
-        : horizontalBarPanel('Top 10 by TEUs',          lobData.topByTEU||[],  'teu',  fmtTEU,  sc[1]))
+        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1]))
     + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2])
     + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3])
     + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4])
@@ -3640,6 +3726,7 @@ function loadDrillData(callback){
       _drillDataLoading = false;
       _drillDataCallbacks.forEach(function(cb){ cb(); });
       _drillDataCallbacks = [];
+      if (state.page === 'customers') render(); // refresh customer stats with drill data
     })
     .catch(function(){
       _drillDataLoading = false;
@@ -3878,8 +3965,10 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation(); ev.preventDefault();
     state.page=el.getAttribute('data-val');
     render();
-    if(state.page==='customers' && !customerDataReady){
-      fetchCustomerData(function(){ render(); });
+    if(state.page==='customers'){
+      if (!customerDataReady) fetchCustomerData(function(){ render(); });
+      // Also ensure drill rows are loaded for date-filtered stats
+      if (!allDrillRows) loadDrillData(function(){ render(); });
     }
     if(state.page==='usage'){
       // Always force-fetch on every visit so login counts are real-time
