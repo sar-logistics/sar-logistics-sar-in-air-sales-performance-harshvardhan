@@ -2909,9 +2909,10 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     });
     var tp = colData.reduce(function(s,c){ return s+c.pending; }, 0);
     var td = colData.reduce(function(s,c){ return s+c.done;    }, 0);
-    // If zone not in Sales Performance → Cross Sales
-    var zone = salesZoneSet[rep.zone] ? rep.zone : 'Cross Sales';
-    return { name: rep.name, zone: zone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
+    // If zone not in Sales Performance → Cross Sales; keep originalZone as branch
+    var originalZone = rep.zone || 'Unspecified';
+    var zone = salesZoneSet[originalZone] ? originalZone : 'Cross Sales';
+    return { name: rep.name, zone: zone, originalZone: originalZone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
   }).filter(function(r){ return r.total > 0; });
 
   // Grand totals
@@ -3076,26 +3077,107 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
 
     if (isCollapsed) return; // skip reps if zone collapsed
 
-    // Cross Sales: render branch-wise directly (no zone sub-grouping)
+    if (isCrossSales) {
+      // Cross Sales: 3-level hierarchy — Branch > Sales Rep > Job Owners
+      // rep.zone for cross-sales reps is the branch name
+      var branchMap = {};
+      repsFiltered.filter(function(r){ return r.zone === 'Cross Sales'; }).forEach(function(r){
+        var branch = r.originalZone || 'Unspecified';
+        if (!branchMap[branch]) branchMap[branch] = [];
+        branchMap[branch].push(r);
+      });
+      var branchNames = Object.keys(branchMap).sort();
+      branchNames.forEach(function(branch){
+        var branchKey = 'branch__Cross Sales__' + branch;
+        var branchCollapsed = state.pendencyZoneOpen[branchKey] === false;
+        var branchReps = branchMap[branch];
+        // Aggregate branch totals
+        var bPending = branchReps.reduce(function(s,r){ return s+r.totalPending; }, 0);
+        var bDone    = branchReps.reduce(function(s,r){ return s+r.totalDone;    }, 0);
+        var bTotal   = bPending + bDone;
+        var bColData = activeCols.map(function(_,ci){
+          return {
+            pending: branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
+            done:    branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
+          };
+        });
+        var bData = { colData: bColData, totalPending: bPending, totalDone: bDone, total: bTotal };
+        var bHue = hue(branch);
+        var bAvBg = 'oklch(0.52 0.10 '+bHue+')';
+        var bAvatar = '<div style="width:26px;height:26px;border-radius:7px;background:'+bAvBg+';color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 5px rgba(0,0,0,0.12);">'+ini(branch)+'</div>';
+        var bChevSvg = branchCollapsed
+          ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>'
+          : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>';
+        var bToggle = '<div data-act="pendencyZoneToggle" data-zone="'+esc(branchKey)+'" style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,#7C3AED,#4C1D95);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+bChevSvg+'</div>';
+        var bLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
+          +'<div style="display:flex;align-items:baseline;gap:6px;">'
+            +'<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#7C3AED;text-transform:uppercase;">BRANCH</span>'
+            +'<span style="font-size:12px;font-weight:800;color:#4C1D95;">'+esc(branch)+'</span>'
+          +'</div>'
+          +'<div style="font-size:9.5px;color:#7C3AED;font-weight:500;">'+branchReps.length+' rep'+(branchReps.length===1?'':'s')+'</div>'
+        +'</div>';
+        var bAccent = 'box-shadow:inset 3px 0 0 #7C3AED, inset -1.5px 0 0 '+PBORDER_STRONG+';';
+        bodyRows += metricRows(bData, null, '#F5F3FF', false, 'Cross Sales', null, false, branch, bAvatar, bLabel, bToggle, bAccent, 'border-top:1.5px solid #C4B5FD;');
+
+        if (branchCollapsed) return;
+
+        // Sales Reps under this branch
+        branchReps.forEach(function(rep){
+          var repKey = 'rep__Cross Sales__' + branch + '__' + rep.name;
+          var repCollapsed = state.pendencyZoneOpen[repKey] === false;
+          var hasOwners = showJobOwners && rep.jobOwners && rep.jobOwners.length > 0;
+          var repAvBg = 'oklch(0.6 0.12 '+hue(rep.name)+')';
+          var repAvatar = '<div style="width:22px;height:22px;border-radius:50%;background:'+repAvBg+';color:#fff;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini(rep.name)+'</div>';
+          var repLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;">'
+            +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(rep.name)+'</div>'
+          +'</div>';
+          var repChev = hasOwners
+            ? '<div data-act="pendencyZoneToggle" data-zone="'+esc(repKey)+'" style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,'+BRAND+',#0D2B5E);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'
+              +(repCollapsed ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>' : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>')
+              +'</div>'
+            : '';
+          bodyRows += metricRows(rep, null, '#FDFCFF', false, 'Cross Sales', branchKey, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #C4B5FD;');
+
+          // Job Owners under rep
+          if (hasOwners && !repCollapsed) {
+            rep.jobOwners.forEach(function(jo){
+              var joColData = activeCols.map(function(col){
+                if (isWeekly) { var m = state.weeklyMonth || months26[months26.length-1]; return jo.monthData[m] || { pending:0, done:0 }; }
+                return jo.monthData[col] || { pending:0, done:0 };
+              });
+              var joFiltered = { colData: joColData, totalPending: joColData.reduce(function(s,c){return s+c.pending;},0), totalDone: joColData.reduce(function(s,c){return s+c.done;},0), total: 0 };
+              joFiltered.total = joFiltered.totalPending + joFiltered.totalDone;
+              if (joFiltered.total === 0) return;
+              var joAvBg = 'oklch(0.55 0.09 '+hue(jo.name)+')';
+              var joAvatar = '<div style="width:18px;height:18px;border-radius:50%;background:'+joAvBg+';color:#fff;font-size:7px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:12px;">'+ini(jo.name)+'</div>';
+              var joLabel = '<div style="min-width:0;flex:1;">'
+                +'<div style="font-size:10px;font-weight:500;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(jo.name)+'</div>'
+                +'<div style="font-size:8.5px;color:#94A3B8;font-weight:500;">Job Owner</div>'
+              +'</div>';
+              bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, 'Cross Sales', repKey, false, jo.name, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';');
+            });
+          }
+        });
+      });
+      return; // done with Cross Sales zone
+    }
+
+    // Regular zones: Zone > Sales Rep > Job Owners
     repsFiltered.filter(function(r){ return r.zone===zone; }).forEach(function(rep){
       var repKey = 'rep__' + zone + '__' + rep.name;
       var repCollapsed = state.pendencyZoneOpen[repKey] === false;
       var hasOwners = showJobOwners && rep.jobOwners && rep.jobOwners.length > 0;
-      var avatarBg = isCrossSales
-        ? 'oklch(0.55 0.12 '+hue(rep.name)+')'
-        : 'oklch(0.6 0.12 '+hue(rep.name)+')';
-      var repAvatar = '<div style="width:24px;height:24px;border-radius:'+(isCrossSales?'6px':'50%')+';background:'+avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'+ini(rep.name)+'</div>';
+      var avatarBg = 'oklch(0.6 0.12 '+hue(rep.name)+')';
+      var repAvatar = '<div style="width:24px;height:24px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'+ini(rep.name)+'</div>';
       var repLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:0px;">'
-        +'<div style="font-size:11px;font-weight:600;color:'+(isCrossSales?'#4C1D95':'#1E3A66')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(rep.name)+'</div>'
-        +(isCrossSales ? '<div style="font-size:9px;color:#7C3AED;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;">Branch</div>' : '')
+        +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(rep.name)+'</div>'
       +'</div>';
       var repChev = hasOwners
         ? '<div data-act="pendencyZoneToggle" data-zone="'+esc(repKey)+'" style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,'+BRAND+',#0D2B5E);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'
           +(repCollapsed ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>' : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>')
           +'</div>'
         : '';
-      var repBg = isCrossSales ? '#FDFCFF' : '#FFFFFF';
-      bodyRows += metricRows(rep, null, repBg, false, zone, null, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #9AA6B8;');
+      bodyRows += metricRows(rep, null, '#FFFFFF', false, zone, null, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #9AA6B8;');
 
       // Job owners nested under rep (OL page only)
       if (hasOwners && !repCollapsed) {
@@ -5265,8 +5347,8 @@ document.addEventListener('click', function(ev){
     // Toggle rows without full re-render — find all rows belonging to this zone
     var tbody = el.closest('table') && el.closest('table').querySelector('tbody');
     if (tbody) {
-      // Rep keys start with 'rep__' — toggle only job owner rows for that rep
-      var isRepToggle = zn.indexOf('rep__') === 0;
+      var isBranchToggle = zn.indexOf('branch__') === 0;
+      var isRepToggle    = zn.indexOf('rep__')    === 0;
       var rows = isRepToggle
         ? tbody.querySelectorAll('tr[data-rep-group="'+zn+'"]')
         : tbody.querySelectorAll('tr[data-zone-group="'+zn+'"]');
@@ -5275,15 +5357,25 @@ document.addEventListener('click', function(ev){
           r.style.display = 'none';
         } else {
           if (isRepToggle) {
-            r.style.display = ''; // rep expand: always show job owner rows
-          } else {
-            // Zone expand: only show if parent rep is not collapsed
+            r.style.display = ''; // rep expand: show job owner rows
+          } else if (isBranchToggle) {
+            // Branch expand: show reps, but honour collapsed rep state for job owners
             var repGroup = r.getAttribute('data-rep-group');
             if (repGroup && state.pendencyZoneOpen[repGroup] === false) {
               r.style.display = 'none';
             } else {
               r.style.display = '';
             }
+          } else {
+            // Zone expand: show only if parent branch/rep not collapsed
+            var zoneGroup2 = r.getAttribute('data-zone-group');
+            var repGroup2  = r.getAttribute('data-rep-group');
+            // Check if any parent is collapsed
+            var parentCollapsed = false;
+            if (repGroup2 && state.pendencyZoneOpen[repGroup2] === false) parentCollapsed = true;
+            // For branch rows under this zone
+            if (!parentCollapsed && zoneGroup2 && zoneGroup2 !== zn && state.pendencyZoneOpen[zoneGroup2] === false) parentCollapsed = true;
+            r.style.display = parentCollapsed ? 'none' : '';
           }
         }
       });
