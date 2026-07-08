@@ -4655,6 +4655,8 @@ function render(){
   }
   var mainEl=document.getElementById('main-slot');
   var scrollTop=mainEl?mainEl.scrollTop:0;
+  var innerScrollEl=mainEl&&mainEl.querySelector('div[style*="overflow-y:auto"]');
+  var innerScrollTop=innerScrollEl?innerScrollEl.scrollTop:0;
   document.getElementById('topbar-slot').innerHTML=topbar();
   mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='agents' ? agentPage()
@@ -4667,6 +4669,7 @@ function render(){
     : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
+  if(innerScrollTop){ var newInner=mainEl.querySelector('div[style*="overflow-y:auto"]'); if(newInner) newInner.scrollTop=innerScrollTop; }
   requestAnimationFrame(positionAllDrops);
 }
 function renderKeepTopbar(){
