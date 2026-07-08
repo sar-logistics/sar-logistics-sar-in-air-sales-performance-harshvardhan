@@ -4904,6 +4904,9 @@ document.addEventListener('click', function(ev){
     if(state.page==='finance' && !financeDataReady){
       fetchFinanceData(function(){ render(); });
     }
+    if(state.page==='finance' || state.page==='op'){
+      state.pendencyZoneOpen = {}; // reset collapse state so zones are all open on re-visit
+    }
     if(state.page==='op' && !opDataReady){
       fetchOpData(function(){ render(); });
     }
