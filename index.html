@@ -1249,24 +1249,25 @@ function filteredMonthIndices(){
 }
 
 function hasDataForIndices(idxs){
+  // Use repsRawOriginal (unfiltered) so LOB/rep filters don't cause false "No data" state.
+  // The empty-state should only show when there's genuinely no data for the period.
+  var src = (repsRawOriginal && repsRawOriginal.length > 0) ? repsRawOriginal : repsRaw;
   if (state.reportView === 'Weekly') {
     var wkeys = filteredWeekKeys();
-    // Check weekData first; fall back to monthly check if weekData not loaded yet
-    var hasWeekData = repsRaw.some(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; });
+    var hasWeekData = src.some(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; });
     if (!hasWeekData) {
-      // weekData not in cache yet — fall back to monthly index check
       var mi = months26.indexOf(state.weeklyMonth || months26[months26.length-1]);
       if (mi < 0) return false;
-      return repsRaw.some(function(r){ return (r.ship[mi]||0) > 0 || (r.gp[mi]||0) !== 0; });
+      return src.some(function(r){ return (r.ship[mi]||0) > 0 || (r.gp[mi]||0) !== 0; });
     }
-    return repsRaw.some(function(r){
+    return src.some(function(r){
       return wkeys.some(function(k){
         return r.weekData && r.weekData[k] && ((r.weekData[k].ship||0) > 0 || (r.weekData[k].gp||0) !== 0);
       });
     });
   }
   if (!idxs || idxs.length === 0) return false;
-  return repsRaw.some(function(r){
+  return src.some(function(r){
     return idxs.some(function(i){
       return (r.ship[i]||0) > 0 || (r.gp[i]||0) !== 0;
     });
