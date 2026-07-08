@@ -300,9 +300,11 @@ function showDashboard() {
       var gc = lsGet('org');       if (gc && gc.success) { orgData      = gc; orgDataReady      = true; }
       // Bootstrap agent + tradelane default range cache
       var defKey = (state.dateFrom||'Jan-26') + '_' + (state.dateTo||'Jun-26');
-      // Also try the latest month key (what syncDateRangeToData will set)
-      var latestM = months26 && months26.length > 0 ? months26[months26.length-1] : '';
-      var latestKey = latestM ? latestM + '_' + latestM : defKey;
+      // Also try the Apr-26 → current month key (what syncDateRangeToData will set)
+      var nowBoot = new Date();
+      var MONBOOT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var curMonBoot = MONBOOT[nowBoot.getMonth()] + '-' + String(nowBoot.getFullYear()).slice(2);
+      var latestKey = 'Apr-26_' + curMonBoot;
       var ac = lsGet('agents_' + latestKey) || lsGet('agents_' + defKey);
       if (ac && ac.success) { agentData = ac; agentDataReady = true; _agentCache[latestKey] = ac; }
       var tc = lsGet('tradelane_' + latestKey) || lsGet('tradelane_' + defKey);
@@ -334,8 +336,11 @@ function showDashboard() {
       // WITHOUT touching state (which would blank the current view).
       function bgPrefetchSecondary() {
         var m26 = months26 && months26.length > 0 ? months26 : [];
-        var from = m26.indexOf('Jan-26') >= 0 ? 'Jan-26' : (m26[0] || '');
-        var to   = m26.indexOf('Dec-26') >= 0 ? 'Dec-26' : (m26[m26.length-1] || '');
+        var nowBg = new Date();
+        var MONBG = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        var curMonBg = MONBG[nowBg.getMonth()] + '-' + String(nowBg.getFullYear()).slice(2);
+        var from = m26.indexOf('Apr-26') >= 0 ? 'Apr-26' : (m26[0] || '');
+        var to   = m26.indexOf(curMonBg) >= 0 ? curMonBg : (m26[m26.length-1] || '');
         if (!from || !to) return;
         var key = from + '_' + to;
         // Fetch each secondary data source with the explicit range
@@ -1445,9 +1450,13 @@ function entityWeekArrays(r, metric){
 // Call this whenever months26 changes (API load, cache load).
 function syncDateRangeToData(){
   if (!months26 || months26.length === 0) return;
-  // Default range: Jan-26 → Dec-26 (current FY). Fall back to first/last available.
-  var defaultFrom = months26.indexOf('Jan-26') >= 0 ? 'Jan-26' : months26[0];
-  var defaultTo   = months26.indexOf('Dec-26') >= 0 ? 'Dec-26' : months26[months26.length - 1];
+  // FROM: April of current FY (Apr-26). TO: current month based on today's date.
+  var now = new Date();
+  var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var curMonLabel = MON[now.getMonth()] + '-' + String(now.getFullYear()).slice(2); // e.g. "Jul-26"
+  var defaultFrom = months26.indexOf('Apr-26') >= 0 ? 'Apr-26' : months26[0];
+  // TO = current month if available, else last available month
+  var defaultTo = months26.indexOf(curMonLabel) >= 0 ? curMonLabel : months26[months26.length - 1];
   state.dateFrom = defaultFrom;
   state.dateTo   = defaultTo;
   if (!state.weeklyMonth || months26.indexOf(state.weeklyMonth) < 0) {
