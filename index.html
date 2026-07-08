@@ -2933,12 +2933,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // Sticky name cell
       var nameAccent = leftAccent || 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';';
       var nameTd = isMiddle
-        ? '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:190px;min-width:190px;max-width:190px;'+nameAccent+'"><div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatarEl+nameLabel+(toggleEl||'')+'</div></td>'
-        : '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';width:190px;min-width:190px;'+nameAccent+'"></td>';
+        ? '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:190px;min-width:190px;max-width:190px;'+nameAccent+rowTopBorder+'"><div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatarEl+nameLabel+(toggleEl||'')+'</div></td>'
+        : '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';width:190px;min-width:190px;'+nameAccent+rowTopBorder+'"></td>';
       var gtTd = (function(){ var v=total; var color=v>0?'#0D2B5E':'#C5D0E0'; var fw=v>0?'700':'400'; return '<td style="padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+fw+';color:'+color+';white-space:nowrap;background:#FCF3DA;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+v+'</td>'; })();
-      return '<tr'+zgAttr+rgAttr+' style="background:'+rowBg+';border-bottom:1px solid #EEF1F6;'+rowTopBorder+hidden+'">'
+      return '<tr'+zgAttr+rgAttr+' style="background:'+rowBg+';'+rowTopBorder+hidden+'">'
         + nameTd
-        +'<td style="position:sticky;left:190px;z-index:2;background:'+rowBg+';padding:9px 12px;font-size:12px;font-weight:500;color:#374151;white-space:nowrap;border-right:2px solid '+PBORDER_STRONG+';min-width:150px;">'+icon+' '+label+'</td>'
+        +'<td style="position:sticky;left:190px;z-index:2;background:'+rowBg+';padding:9px 12px;font-size:12px;font-weight:500;color:#374151;white-space:nowrap;border-right:2px solid '+PBORDER_STRONG+';min-width:150px;'+rowTopBorder+'">'+icon+' '+label+'</td>'
         + gtTd
         + colCells
         +'</tr>';
