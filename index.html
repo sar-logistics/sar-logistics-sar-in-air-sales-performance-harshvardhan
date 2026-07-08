@@ -300,8 +300,15 @@ function showDashboard() {
       var gc = lsGet('org');       if (gc && gc.success) { orgData      = gc; orgDataReady      = true; }
       // Bootstrap agent + tradelane default range cache
       var defKey = (state.dateFrom||'Jan-26') + '_' + (state.dateTo||'Jun-26');
-      var ac = lsGet('agents_' + defKey);    if (ac && ac.success) { agentData     = ac; agentDataReady     = true; _agentCache[defKey]     = ac; }
-      var tc = lsGet('tradelane_' + defKey); if (tc && tc.success) { tradelaneData = tc; tradelaneDataReady = true; _tradelaneCache[defKey] = tc; }
+      // Also try the latest month key (what syncDateRangeToData will set)
+      var latestM = months26 && months26.length > 0 ? months26[months26.length-1] : '';
+      var latestKey = latestM ? latestM + '_' + latestM : defKey;
+      var ac = lsGet('agents_' + latestKey) || lsGet('agents_' + defKey);
+      if (ac && ac.success) { agentData = ac; agentDataReady = true; _agentCache[latestKey] = ac; }
+      var tc = lsGet('tradelane_' + latestKey) || lsGet('tradelane_' + defKey);
+      if (tc && tc.success) { tradelaneData = tc; tradelaneDataReady = true; _tradelaneCache[latestKey] = tc; }
+      var cusc = lsGet('customers_' + latestKey) || lsGet('customers_' + defKey);
+      if (cusc && cusc.success) { customerData = cusc; customerDataReady = true; _customerCache[latestKey] = cusc; }
       // Load drill rows from localStorage — avoids re-fetch on every session
       var dc = lsGet('drillrows');
       if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
@@ -323,13 +330,22 @@ function showDashboard() {
     // Cheap check: has MongoDB data changed since our cache was built?
     checkForFreshData(cached, function(needsRefresh) {
       // Always background-prefetch secondary pages so navigation is instant.
-      // Each fetcher checks its own cache staleness internally — no redundant fetches.
-      setTimeout(function(){ fetchCustomerData(null);   },  300);
-      setTimeout(function(){ fetchAgentData(null);      },  600);
-      setTimeout(function(){ fetchTradelaneData(null);  },  900);
-      setTimeout(function(){ fetchFinanceData(null);    }, 1200);
-      setTimeout(function(){ fetchOpData(null);         }, 1500);
-      setTimeout(function(){ fetchOrgData(null);        }, 1800);
+      // Use a small helper that computes the current date range from months26
+      // (same logic as syncDateRangeToData) so keys always match what the UI shows.
+      function bgPrefetchSecondary() {
+        var latest = months26 && months26.length > 0 ? months26[months26.length - 1] : '';
+        var from = latest, to = latest;
+        // Override state temporarily so getCustomerDateRange() returns the right key
+        var prevFrom = state.dateFrom, prevTo = state.dateTo;
+        if (latest) { state.dateFrom = from; state.dateTo = to; }
+        setTimeout(function(){ fetchCustomerData(null);   },  300);
+        setTimeout(function(){ fetchAgentData(null);      },  700);
+        setTimeout(function(){ fetchTradelaneData(null);  }, 1100);
+        setTimeout(function(){ fetchFinanceData(null);    }, 1500);
+        setTimeout(function(){ fetchOpData(null);         }, 1900);
+        setTimeout(function(){ fetchOrgData(null);        }, 2300);
+      }
+      bgPrefetchSecondary();
 
       if (!needsRefresh) return; // sales data is fresh — nothing more to do
       // Small delay: the meta check already woke the container — give it
@@ -341,6 +357,8 @@ function showDashboard() {
             var p = window._pendingUserPatch;
             patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
           }
+          // Re-prefetch with correct months after fresh sales data arrives
+          bgPrefetchSecondary();
         });
       }, 500);
     });
