@@ -506,7 +506,6 @@ var repsRaw  = [];         // filtered view — recomputed every render() based 
 // sees filtered data without needing any changes themselves.
 function computeFilteredRepsRaw(){
   var filterReps = state.filterReps || [];
-  var filterLobs = state.filterLobs || [];
 
   var base = repsRawOriginal;
 
@@ -517,49 +516,23 @@ function computeFilteredRepsRaw(){
   if (currentUser) {
     var role = (currentUser.role || '').toLowerCase().trim();
     if (role === 'sales rep') {
-      // Show only the rep whose display name matches current user
       base = base.filter(function(r){
         return r.name && currentUser.name && r.name.toLowerCase() === currentUser.name.toLowerCase();
       });
     } else if (role === 'zonal manager') {
-      // Show only reps in this user's zone (zone stored in user or matched from mapping)
       var userZone = currentUser.zone || '';
       if (userZone) {
         base = base.filter(function(r){ return r.zone === userZone; });
       }
     }
-    // Regional Manager, Admin, HR → see all
   }
 
-  // Manual rep/LOB filters on top of RLS
+  // Rep filter only — LOB filter is applied per-page in insights pages, not here
   if (filterReps.length > 0) {
     base = base.filter(function(r){ return filterReps.indexOf(r.name) > -1; });
   }
 
-  if (filterLobs.length === 0) {
-    repsRaw = base;
-    return;
-  }
-
-  repsRaw = base.map(function(r){
-    var n = r.gp.length;
-    var lobData = r.lobData || {};
-    var gp = [], gpProv = [], gpActual = [], ship = [], tons = [], teu = [], lcl = [];
-    for (var i = 0; i < n; i++) {
-      var m = months26[i];
-      var g=0, gpv=0, gac=0, sh=0, tn=0, tu=0, lc=0;
-      filterLobs.forEach(function(lobKey){
-        var bucket = lobData[lobKey] && lobData[lobKey][m];
-        if (bucket) {
-          g += bucket.gp || 0; gpv += bucket.gpProv || 0; gac += bucket.gpActual || 0;
-          sh += bucket.ship || 0; tn += bucket.tons || 0; tu += bucket.teu || 0; lc += bucket.lcl || 0;
-        }
-      });
-      gp.push(g); gpProv.push(gpv); gpActual.push(gac);
-      ship.push(sh); tons.push(tn); teu.push(tu); lcl.push(lc);
-    }
-    return Object.assign({}, r, { gp:gp, gpProv:gpProv, gpActual:gpActual, ship:ship, tons:tons, teu:teu, lcl:lcl, weekData: {} });
-  });
+  repsRaw = base;
 }
 var zonesRaw = [];
 var dataReady = false;
