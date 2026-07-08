@@ -2919,7 +2919,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     return '<td style="'+s+'">'+v+'</td>';
   }
 
-  function metricRows(data, nameEl, rowBg, isZone, zoneGroup, repGroup, isGrand, entityName, avatarEl, nameLabel, toggleEl, leftAccent, topBorderStyle){
+  function metricRows(data, nameEl, rowBg, isZone, zoneGroup, repGroup, isGrand, entityName, avatarEl, nameLabel, toggleEl, leftAccent, topBorderStyle, bottomBorderStyle){
     var isZoneCollapsed = zoneGroup && state.pendencyZoneOpen[zoneGroup] === false;
     var isRepCollapsed  = repGroup  && state.pendencyZoneOpen[repGroup]  === false;
     var hidden = (isZoneCollapsed||isRepCollapsed) ? 'display:none;' : '';
@@ -2928,17 +2928,19 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
 
     function mRow(label, icon, getV, total, idx){
       var isMiddle = idx === 1; // middle row of 3 — show name content
+      var isLast   = idx === 2;
       var rowTopBorder = idx === 0 ? topBorderStyle : 'border-top:1px solid #EEF1F6;';
+      var rowBottomBorder = (isLast && bottomBorderStyle) ? bottomBorderStyle : '';
       var colCells = data.colData.map(function(cd){ return numCell(getV(cd)); }).join('');
       // Sticky name cell
       var nameAccent = leftAccent || 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';';
       var nameTd = isMiddle
-        ? '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:190px;min-width:190px;max-width:190px;'+nameAccent+rowTopBorder+'"><div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatarEl+nameLabel+(toggleEl||'')+'</div></td>'
-        : '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';width:190px;min-width:190px;'+nameAccent+rowTopBorder+'"></td>';
-      var gtTd = (function(){ var v=total; var color=v>0?'#0D2B5E':'#C5D0E0'; var fw=v>0?'700':'400'; return '<td style="padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+fw+';color:'+color+';white-space:nowrap;background:#FCF3DA;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+v+'</td>'; })();
-      return '<tr'+zgAttr+rgAttr+' style="background:'+rowBg+';'+rowTopBorder+hidden+'">'
+        ? '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:190px;min-width:190px;max-width:190px;'+nameAccent+rowTopBorder+rowBottomBorder+'"><div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatarEl+nameLabel+(toggleEl||'')+'</div></td>'
+        : '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';width:190px;min-width:190px;'+nameAccent+rowTopBorder+rowBottomBorder+'"></td>';
+      var gtTd = (function(){ var v=total; var color=v>0?'#0D2B5E':'#C5D0E0'; var fw=v>0?'700':'400'; return '<td style="padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+fw+';color:'+color+';white-space:nowrap;background:#FCF3DA;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;'+(isLast&&bottomBorderStyle?bottomBorderStyle:'')+'">'+v+'</td>'; })();
+      return '<tr'+zgAttr+rgAttr+' style="background:'+rowBg+';'+rowTopBorder+(isLast&&bottomBorderStyle?rowBottomBorder:'')+hidden+'">'
         + nameTd
-        +'<td style="position:sticky;left:190px;z-index:2;background:'+rowBg+';padding:9px 12px;font-size:12px;font-weight:500;color:#374151;white-space:nowrap;border-right:2px solid '+PBORDER_STRONG+';min-width:150px;'+rowTopBorder+'">'+icon+' '+label+'</td>'
+        +'<td style="position:sticky;left:190px;z-index:2;background:'+rowBg+';padding:9px 12px;font-size:12px;font-weight:500;color:#374151;white-space:nowrap;border-right:2px solid '+PBORDER_STRONG+';min-width:150px;'+rowTopBorder+rowBottomBorder+'">'+icon+' '+label+'</td>'
         + gtTd
         + colCells
         +'</tr>';
@@ -3022,7 +3024,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
             +'<div style="font-size:10.5px;font-weight:500;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(jo.name)+'</div>'
             +'<div style="font-size:9px;color:#94A3B8;font-weight:500;">Job Owner</div>'
           +'</div>';
-          bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, zone, repKey, false, jo.name, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;');
+          bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, zone, repKey, false, jo.name, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';');
         });
       }
     });
