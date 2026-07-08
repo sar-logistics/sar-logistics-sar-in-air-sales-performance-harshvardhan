@@ -298,6 +298,10 @@ function showDashboard() {
       var fc = lsGet('finance');   if (fc && fc.success) { financeData  = fc; financeDataReady  = true; }
       var oc = lsGet('op');        if (oc && oc.success) { opData       = oc; opDataReady       = true; }
       var gc = lsGet('org');       if (gc && gc.success) { orgData      = gc; orgDataReady      = true; }
+      // Bootstrap agent + tradelane default range cache
+      var defKey = (state.dateFrom||'Jan-26') + '_' + (state.dateTo||'Jun-26');
+      var ac = lsGet('agents_' + defKey);    if (ac && ac.success) { agentData     = ac; agentDataReady     = true; _agentCache[defKey]     = ac; }
+      var tc = lsGet('tradelane_' + defKey); if (tc && tc.success) { tradelaneData = tc; tradelaneDataReady = true; _tradelaneCache[defKey] = tc; }
       // Load drill rows from localStorage — avoids re-fetch on every session
       var dc = lsGet('drillrows');
       if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
@@ -318,7 +322,16 @@ function showDashboard() {
 
     // Cheap check: has MongoDB data changed since our cache was built?
     checkForFreshData(cached, function(needsRefresh) {
-      if (!needsRefresh) return;
+      // Always background-prefetch secondary pages so navigation is instant.
+      // Each fetcher checks its own cache staleness internally — no redundant fetches.
+      setTimeout(function(){ fetchCustomerData(null);   },  300);
+      setTimeout(function(){ fetchAgentData(null);      },  600);
+      setTimeout(function(){ fetchTradelaneData(null);  },  900);
+      setTimeout(function(){ fetchFinanceData(null);    }, 1200);
+      setTimeout(function(){ fetchOpData(null);         }, 1500);
+      setTimeout(function(){ fetchOrgData(null);        }, 1800);
+
+      if (!needsRefresh) return; // sales data is fresh — nothing more to do
       // Small delay: the meta check already woke the container — give it
       // 500ms to finish initializing before hitting it with the heavy fetch.
       setTimeout(function() {
@@ -328,13 +341,6 @@ function showDashboard() {
             var p = window._pendingUserPatch;
             patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
           }
-          // Background-prefetch all secondary data after sales loads
-          // so navigation to any page is instant. Staggered to avoid
-          // hammering the server simultaneously.
-          setTimeout(function(){ fetchCustomerData(null); },  200);
-          setTimeout(function(){ fetchFinanceData(null);  },  600);
-          setTimeout(function(){ fetchOpData(null);       }, 1000);
-          setTimeout(function(){ fetchOrgData(null);      }, 1400);
         });
       }, 500);
     });
