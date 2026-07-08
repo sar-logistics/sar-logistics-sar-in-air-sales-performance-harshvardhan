@@ -1721,17 +1721,17 @@ function topbar(){
             +'</div>';
           }
 
-          // Customer/Agent/Tradelane Insights: two separate FROM/TO pills
-          if (state.page === 'customers' || state.page === 'agents' || state.page === 'tradelane') {
+          // Sales + Customer/Agent/Tradelane Insights: two separate FROM/TO pills
+          if (state.page === 'sales' || state.page === 'customers' || state.page === 'agents' || state.page === 'tradelane') {
             return '<div style="position:relative;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">'
               +'<div data-act="toggleCustomCal" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:'+(cf?'#0D2B5E':'#9AAFC8')+';cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(calOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
                 +calIcon
-                +'<span style="pointer-events:none;">'+(cf||'Start date')+'</span>'
+                +('<span style="pointer-events:none;">'+(!cf?'From':(function(iso){var p=iso.split('-');var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return p[2]+' '+MN[parseInt(p[1],10)-1]+' '+p[0].slice(2);})(cf))+'</span>')
                 +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;"><path d="M6 9l6 6 6-6"/></svg>'
               +'</div>'
               +'<span style="color:#B7C4D9;font-weight:700;font-size:13px;flex-shrink:0;">→</span>'
               +'<div data-act="toggleCustomCal" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:'+(ct?'#0D2B5E':'#9AAFC8')+';cursor:pointer;user-select:none;white-space:nowrap;border:'+pillBorder+';box-shadow:'+ps+';'+(calOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+ps+';':'')+'">'
-                +'<span style="pointer-events:none;">'+(ct||'End date')+'</span>'
+                +('<span style="pointer-events:none;">'+(!ct?'To':(function(iso){var p=iso.split('-');var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];return p[2]+' '+MN[parseInt(p[1],10)-1]+' '+p[0].slice(2);})(ct))+'</span>')
                 +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.5" stroke-linecap="round" style="flex-shrink:0;pointer-events:none;"><path d="M6 9l6 6 6-6"/></svg>'
               +'</div>'
               +calHtml
