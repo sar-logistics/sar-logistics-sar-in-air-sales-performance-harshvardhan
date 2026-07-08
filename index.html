@@ -1042,7 +1042,7 @@ function updateUserField(email, fields, callback){
     });
 }
 
-var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'Jan-26', dateTo:'Jun-26', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:-1, agentLob:'Air', agentView:'chart', agentSortCol:'gp', agentSortDir:-1, tradelaneLob:'Air', tradelaneView:'chart', tradelaneSortCol:'gp', tradelaneSortDir:-1, tradelaneShipOpen:{},
+var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'', dateTo:'', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:-1, agentLob:'Air', agentView:'chart', agentSortCol:'gp', agentSortDir:-1, tradelaneLob:'Air', tradelaneView:'chart', tradelaneSortCol:'gp', tradelaneSortDir:-1, tradelaneShipOpen:{},
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
   addUserOpen: false, addUserError: '', addUserDefaultRole: '',
   weeklyMonth: null,
@@ -1404,15 +1404,12 @@ function entityWeekArrays(r, metric){
 // Call this whenever months26 changes (API load, cache load).
 function syncDateRangeToData(){
   if (!months26 || months26.length === 0) return;
-  var fiOk = months26.indexOf(state.dateFrom) >= 0;
-  var tiOk = months26.indexOf(state.dateTo)   >= 0;
-  if (!fiOk) state.dateFrom = months26[0];
-  if (!tiOk) state.dateTo   = months26[months26.length - 1];
-  var fi = months26.indexOf(state.dateFrom);
-  var ti = months26.indexOf(state.dateTo);
-  if (fi > ti) { state.dateTo = months26[months26.length - 1]; }
+  var latest = months26[months26.length - 1];
+  // Always default both FROM and TO to the latest available month
+  state.dateFrom = latest;
+  state.dateTo   = latest;
   if (!state.weeklyMonth || months26.indexOf(state.weeklyMonth) < 0) {
-    state.weeklyMonth = months26[months26.length - 1];
+    state.weeklyMonth = latest;
   }
 }
 
