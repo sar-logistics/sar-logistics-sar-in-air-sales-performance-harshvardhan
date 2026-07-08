@@ -2893,6 +2893,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   }
 
   // Build per-rep filtered data
+  // Only show zones that exist in Sales Performance (getZones()).
+  // Reps whose zone isn't in salesZones get bucketed under 'Cross Sales'.
+  var salesZones = getZones(); // zones from repsRaw (Sales Performance)
+  var salesZoneSet = {};
+  salesZones.forEach(function(z){ salesZoneSet[z] = true; });
+
   var repsFiltered = (d.reps||[]).map(function(rep){
     var colData = activeCols.map(function(col){
       if (isWeekly) {
@@ -2903,7 +2909,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     });
     var tp = colData.reduce(function(s,c){ return s+c.pending; }, 0);
     var td = colData.reduce(function(s,c){ return s+c.done;    }, 0);
-    return { name: rep.name, zone: rep.zone||'Unassigned', colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
+    // If zone not in Sales Performance → Cross Sales
+    var zone = salesZoneSet[rep.zone] ? rep.zone : 'Cross Sales';
+    return { name: rep.name, zone: zone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
   }).filter(function(r){ return r.total > 0; });
 
   // Grand totals
@@ -3026,49 +3034,68 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   zoneOrder.forEach(function(zone){
     var zt = zoneTotals[zone];
     if (!zt || zt.total === 0) return;
+    var isCrossSales = zone === 'Cross Sales';
     var isCollapsed = state.pendencyZoneOpen[zone] === false; // default open
     var zHue = zoneHueVal(zone);
-    var zAvBg = 'oklch(0.55 0.14 '+zHue+')';
-    var zIni = zone.slice(0,2).toUpperCase();
+    var zAvBg = isCrossSales ? 'linear-gradient(135deg,#7C3AED,#4C1D95)' : 'oklch(0.55 0.14 '+zHue+')';
+    var zIni = isCrossSales ? 'CS' : zone.slice(0,2).toUpperCase();
     // Zone avatar — rounded square like sales
     var zAvatar = '<div style="width:28px;height:28px;border-radius:8px;background:'+zAvBg+';color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 5px rgba(0,0,0,0.15);">'+zIni+'</div>';
-    // Zone label with ZONE badge + code + description
-    var zoneParts = /^(\S+)\s*(.*)$/.exec(zone) || [null, zone, ''];
-    var zCode = zoneParts[1], zDesc = zoneParts[2];
-    var zLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">'
-      +'<div style="display:flex;align-items:baseline;gap:6px;">'
-        +'<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5678C2;text-transform:uppercase;">ZONE</span>'
-        +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">'+esc(zCode)+'</span>'
-      +'</div>'
-      +(zDesc ? '<div style="font-size:10.5px;font-weight:500;color:#5B6678;line-height:1.3;">'+esc(zDesc)+'</div>' : '')
-    +'</div>';
+    // Zone label
+    var zLabel;
+    if (isCrossSales) {
+      zLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">'
+        +'<div style="display:flex;align-items:baseline;gap:6px;">'
+          +'<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#7C3AED;text-transform:uppercase;">BRANCH</span>'
+          +'<span style="font-size:13px;font-weight:800;color:#4C1D95;letter-spacing:-0.01em;">Cross Sales</span>'
+        +'</div>'
+        +'<div style="font-size:10.5px;font-weight:500;color:#5B6678;line-height:1.3;">Branch-wise · Not zone mapped</div>'
+      +'</div>';
+    } else {
+      var zoneParts = /^(\S+)\s*(.*)$/.exec(zone) || [null, zone, ''];
+      var zCode = zoneParts[1], zDesc = zoneParts[2];
+      zLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">'
+        +'<div style="display:flex;align-items:baseline;gap:6px;">'
+          +'<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5678C2;text-transform:uppercase;">ZONE</span>'
+          +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">'+esc(zCode)+'</span>'
+        +'</div>'
+        +(zDesc ? '<div style="font-size:10.5px;font-weight:500;color:#5B6678;line-height:1.3;">'+esc(zDesc)+'</div>' : '')
+      +'</div>';
+    }
     // Chevron toggle
     var chevSvg = isCollapsed
       ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>'
       : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
-    var zToggle = '<div data-act="pendencyZoneToggle" data-zone="'+esc(zone)+'" style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,'+BRAND+',#0D2B5E);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;box-shadow:0 1px 3px rgba(30,58,102,0.3);">'+chevSvg+'</div>';
-    var zAccent = 'box-shadow:inset 3px 0 0 '+BRAND+', inset -1.5px 0 0 '+PBORDER_STRONG+';';
+    var toggleBg = isCrossSales ? 'linear-gradient(135deg,#7C3AED,#4C1D95)' : 'linear-gradient(135deg,'+BRAND+',#0D2B5E)';
+    var zToggle = '<div data-act="pendencyZoneToggle" data-zone="'+esc(zone)+'" style="width:18px;height:18px;border-radius:5px;background:'+toggleBg+';display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;box-shadow:0 1px 3px rgba(30,58,102,0.3);">'+chevSvg+'</div>';
+    var zAccentColor = isCrossSales ? '#7C3AED' : BRAND;
+    var zAccent = 'box-shadow:inset 3px 0 0 '+zAccentColor+', inset -1.5px 0 0 '+PBORDER_STRONG+';';
+    var zoneBg   = isCrossSales ? '#F5F3FF' : '#F0F4FB';
     var zoneData = { colData: zt.colData, totalPending: zt.totalPending, totalDone: zt.totalDone, total: zt.total };
-    bodyRows += metricRows(zoneData, null, '#F0F4FB', true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';');
+    bodyRows += metricRows(zoneData, null, zoneBg, true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';');
 
     if (isCollapsed) return; // skip reps if zone collapsed
 
-    // Reps under this zone
+    // Cross Sales: render branch-wise directly (no zone sub-grouping)
     repsFiltered.filter(function(r){ return r.zone===zone; }).forEach(function(rep){
       var repKey = 'rep__' + zone + '__' + rep.name;
       var repCollapsed = state.pendencyZoneOpen[repKey] === false;
       var hasOwners = showJobOwners && rep.jobOwners && rep.jobOwners.length > 0;
-      var avatarBg = 'oklch(0.6 0.12 '+hue(rep.name)+')';
-      var repAvatar = '<div style="width:24px;height:24px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'+ini(rep.name)+'</div>';
+      var avatarBg = isCrossSales
+        ? 'oklch(0.55 0.12 '+hue(rep.name)+')'
+        : 'oklch(0.6 0.12 '+hue(rep.name)+')';
+      var repAvatar = '<div style="width:24px;height:24px;border-radius:'+(isCrossSales?'6px':'50%')+';background:'+avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'+ini(rep.name)+'</div>';
       var repLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:0px;">'
-        +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(rep.name)+'</div>'
+        +'<div style="font-size:11px;font-weight:600;color:'+(isCrossSales?'#4C1D95':'#1E3A66')+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(rep.name)+'</div>'
+        +(isCrossSales ? '<div style="font-size:9px;color:#7C3AED;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;">Branch</div>' : '')
       +'</div>';
       var repChev = hasOwners
         ? '<div data-act="pendencyZoneToggle" data-zone="'+esc(repKey)+'" style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,'+BRAND+',#0D2B5E);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'
           +(repCollapsed ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>' : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>')
           +'</div>'
         : '';
-      bodyRows += metricRows(rep, null, '#FFFFFF', false, zone, null, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #9AA6B8;');
+      var repBg = isCrossSales ? '#FDFCFF' : '#FFFFFF';
+      bodyRows += metricRows(rep, null, repBg, false, zone, null, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #9AA6B8;');
 
       // Job owners nested under rep (OL page only)
       if (hasOwners && !repCollapsed) {
