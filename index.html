@@ -298,6 +298,9 @@ function showDashboard() {
       var fc = lsGet('finance');   if (fc && fc.success) { financeData  = fc; financeDataReady  = true; }
       var oc = lsGet('op');        if (oc && oc.success) { opData       = oc; opDataReady       = true; }
       var gc = lsGet('org');       if (gc && gc.success) { orgData      = gc; orgDataReady      = true; }
+      // Load drill rows from localStorage — avoids re-fetch on every session
+      var dc = lsGet('drillrows');
+      if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
     })();
 
     if (dataReady) {
@@ -537,6 +540,7 @@ function fetchLiveData(callback, force){
         .forEach(function(k){ localStorage.removeItem(k); });
       _weekDataFetched = false;
       _drillResultCache = {};
+      allDrillRows = null;
     } catch(e){}
   }
 
@@ -566,6 +570,10 @@ function fetchLiveData(callback, force){
           syncDateRangeToData();
           dataReady = true;
           setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
+          if (data.allDrillRows && data.allDrillRows.length > 0 && !allDrillRows) {
+            allDrillRows = data.allDrillRows;
+            lsSet('drillrows', { rows: allDrillRows });
+          }
           console.log('✅ Live data:', repsRawOriginal.length, 'reps, tgt[0]=', repsRawOriginal[0] && repsRawOriginal[0].tgt);
           if (callback) callback();
         } else if (retriesLeft > 0) {
@@ -4544,7 +4552,10 @@ function loadDrillData(callback){
   fetch('/api/mongo-batch?action=sales', { priority: 'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
-      if (data.allDrillRows) allDrillRows = data.allDrillRows;
+      if (data.allDrillRows) {
+        allDrillRows = data.allDrillRows;
+        lsSet('drillrows', { rows: allDrillRows });
+      }
       _drillDataLoading = false;
       _drillDataCallbacks.forEach(function(cb){ cb(); });
       _drillDataCallbacks = [];
@@ -4708,6 +4719,7 @@ function openDrill(entity, metric, col, valueFmt){
   render();
 
   var cacheKey = entity+'||'+metric+'||'+col;
+  var _drillLsKey = 'drill_'+cacheKey.replace(/[|]/g,'__');
   if (_drillResultCache[cacheKey]) {
     // Instant — served from browser cache, zero network
     var cached = _drillResultCache[cacheKey];
@@ -4717,13 +4729,24 @@ function openDrill(entity, metric, col, valueFmt){
     render();
     return;
   }
+  // Check localStorage before hitting network
+  var lsDrill = lsGet(_drillLsKey);
+  if (lsDrill && lsDrill.success) {
+    _drillResultCache[cacheKey] = lsDrill;
+    state.drill.loading=false; state.drill.rows=lsDrill.rows; state.drill.count=lsDrill.count;
+    state.drill.totalMetric=lsDrill.totalMetric; state.drill.totalGP=lsDrill.totalGP;
+    state.drill.totalRevenue=lsDrill.totalRevenue||0; state.drill.totalCost=lsDrill.totalCost||0;
+    render();
+    return;
+  }
 
   var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col);
   fetch('/api/mongo-batch'+qs, { priority:'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (!data.success) { state.drill.loading=false; state.drill.error=data.error||'Failed.'; render(); return; }
-      _drillResultCache[cacheKey] = data; // cache for instant reuse
+      _drillResultCache[cacheKey] = data;
+      try { lsSet(_drillLsKey, data); } catch(e){} // persist for lifetime
       state.drill.loading=false; state.drill.rows=data.rows; state.drill.count=data.count;
       state.drill.totalMetric=data.totalMetric; state.drill.totalGP=data.totalGP;
       state.drill.totalRevenue=data.totalRevenue||0; state.drill.totalCost=data.totalCost||0;
