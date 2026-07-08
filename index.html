@@ -5343,53 +5343,7 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     var zn = el.getAttribute('data-zone');
     state.pendencyZoneOpen[zn] = (state.pendencyZoneOpen[zn] === false) ? true : false;
-    var isNowCollapsed = state.pendencyZoneOpen[zn] === false;
-    // Toggle rows without full re-render — find all rows belonging to this zone
-    var tbody = el.closest('table') && el.closest('table').querySelector('tbody');
-    if (tbody) {
-      var isBranchToggle = zn.indexOf('branch__') === 0;
-      var isRepToggle    = zn.indexOf('rep__')    === 0;
-      var rows = isRepToggle
-        ? tbody.querySelectorAll('tr[data-rep-group="'+zn+'"]')
-        : tbody.querySelectorAll('tr[data-zone-group="'+zn+'"]');
-      rows.forEach(function(r){
-        if (isNowCollapsed) {
-          r.style.display = 'none';
-        } else {
-          if (isRepToggle) {
-            r.style.display = ''; // rep expand: show job owner rows
-          } else if (isBranchToggle) {
-            // Branch expand: show reps, but honour collapsed rep state for job owners
-            var repGroup = r.getAttribute('data-rep-group');
-            if (repGroup && state.pendencyZoneOpen[repGroup] === false) {
-              r.style.display = 'none';
-            } else {
-              r.style.display = '';
-            }
-          } else {
-            // Zone expand: show only if parent branch/rep not collapsed
-            var zoneGroup2 = r.getAttribute('data-zone-group');
-            var repGroup2  = r.getAttribute('data-rep-group');
-            // Check if any parent is collapsed
-            var parentCollapsed = false;
-            if (repGroup2 && state.pendencyZoneOpen[repGroup2] === false) parentCollapsed = true;
-            // For branch rows under this zone
-            if (!parentCollapsed && zoneGroup2 && zoneGroup2 !== zn && state.pendencyZoneOpen[zoneGroup2] === false) parentCollapsed = true;
-            r.style.display = parentCollapsed ? 'none' : '';
-          }
-        }
-      });
-      // Flip chevron
-      var chevronEl = el.querySelector('svg');
-      if (chevronEl) chevronEl.style.transform = isNowCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
-      // Update expand/collapse button label
-      var expandBtn = document.querySelector('button[data-act="pendencyExpandAll"]');
-      if (expandBtn) {
-        var allZones = JSON.parse(expandBtn.getAttribute('data-zones')||'[]');
-        var anyCollapsedNow = allZones.some(function(z){ return state.pendencyZoneOpen[z] === false; });
-        expandBtn.lastChild.textContent = anyCollapsedNow ? 'Expand All' : 'Collapse All';
-      }
-    } else { render(); }
+    render();
   }
   else if(act==='pendencyExpandAll'){
     ev.stopPropagation();
@@ -5397,22 +5351,7 @@ document.addEventListener('click', function(ev){
     var anyCollapsed = pzones.some(function(z){ return state.pendencyZoneOpen[z] === false; });
     var newVal = anyCollapsed ? true : false;
     pzones.forEach(function(z){ state.pendencyZoneOpen[z] = newVal; });
-    // Update DOM directly — no full re-render
-    var tbody = document.querySelector('#main-slot table tbody');
-    if (tbody) {
-      pzones.forEach(function(z){
-        var rows = tbody.querySelectorAll('tr[data-zone-group="'+z+'"]');
-        rows.forEach(function(r){ r.style.display = newVal ? '' : 'none'; });
-        // Flip chevrons on zone header rows
-        var zoneToggleEl = tbody.querySelector('[data-act="pendencyZoneToggle"][data-zone="'+z+'"]');
-        if (zoneToggleEl) {
-          var chevronEl = zoneToggleEl.querySelector('svg');
-          if (chevronEl) chevronEl.style.transform = newVal ? 'rotate(0deg)' : 'rotate(-90deg)';
-        }
-      });
-      // Flip button label
-      el.lastChild.textContent = anyCollapsed ? 'Collapse All' : 'Expand All';
-    } else { render(); }
+    render();
   }
   else if(act==='toggleAllZones'){
     ev.stopPropagation();
