@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v20'; // v20: Tradelane drill-through — fclTeu/tankTeu/lcl/tons per month
+var CACHE_VERSION = 'v21'; // v21: lifetime cache — DB-timestamp staleness instead of 2hr TTL
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -346,6 +346,7 @@ function checkForFreshData(cached, callback) {
       if (!cached) return callback(true); // no cache at all — must fetch
       if (!meta.lastUpdated) return callback(false); // no push recorded — trust cache
       var dbUpdatedAt = new Date(meta.lastUpdated).getTime();
+      _dbLastUpdated = dbUpdatedAt; // store globally so lsGet can mark stale entries
       var cacheBuiltAt = cached._cachedAt || 0;
       callback(dbUpdatedAt > cacheBuiltAt); // refresh only if DB is newer than our cache
     })
@@ -611,9 +612,13 @@ function fetchWeekDataIfNeeded(callback){
     var lsCached = localStorage.getItem('sar_week_cache_v1');
     if (lsCached) {
       var parsed = JSON.parse(lsCached);
-      if (parsed && parsed.length > 0) {
+      // Support both old array format and new {data,_cachedAt} format
+      var weekArr = Array.isArray(parsed) ? parsed : (parsed && parsed.data ? parsed.data : null);
+      var weekCachedAt = parsed && parsed._cachedAt ? parsed._cachedAt : 0;
+      var weekStale = _dbLastUpdated > 0 && weekCachedAt && _dbLastUpdated > weekCachedAt;
+      if (weekArr && weekArr.length > 0 && !weekStale) {
         var byKey = {};
-        parsed.forEach(function(r){ byKey[r.name+'||'+r.zone] = r.weekData; });
+        weekArr.forEach(function(r){ byKey[r.name+'||'+r.zone] = r.weekData; });
         repsRawOriginal.forEach(function(r){ var wd=byKey[r.name+'||'+r.zone]; if(wd) r.weekData=wd; });
         _weekDataFetched = true;
         if (callback) callback();
@@ -634,7 +639,7 @@ function fetchWeekDataIfNeeded(callback){
         try {
           var toStore = repsRawOriginal.filter(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; })
             .map(function(r){ return {name:r.name, zone:r.zone, weekData:r.weekData}; });
-          localStorage.setItem('sar_week_cache_v1', JSON.stringify(toStore));
+          localStorage.setItem('sar_week_cache_v1', JSON.stringify({data:toStore, _cachedAt:Date.now()}));
         } catch(e){}
       }
       if (callback) callback();
@@ -667,7 +672,7 @@ function fetchLobDataIfNeeded(callback){
 }
 
 // ── Generic localStorage cache helpers ───────────────────────────────────────
-var CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours — matches server TTL
+var _dbLastUpdated = 0; // set once after meta check — used to detect stale cache
 
 function lsGet(key) {
   try {
@@ -675,7 +680,7 @@ function lsGet(key) {
     if (!raw) return null;
     var d = JSON.parse(raw);
     // Treat as stale after TTL but still return it (caller decides to background-refresh)
-    d._isStale = d._cachedAt && (Date.now() - d._cachedAt) > CACHE_TTL_MS;
+    d._isStale = _dbLastUpdated > 0 && d._cachedAt && _dbLastUpdated > d._cachedAt;
     return d;
   } catch(e) { return null; }
 }
