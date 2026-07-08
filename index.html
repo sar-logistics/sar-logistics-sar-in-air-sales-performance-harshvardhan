@@ -1453,12 +1453,19 @@ function grandEntity(){
 }
 
 // Returns unique zones in order
+function sortZones(arr){
+  var CROSS = "Cross Sales";
+  return arr.slice().sort(function(a,b){
+    if(a===CROSS) return 1; if(b===CROSS) return -1;
+    return a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"});
+  });
+}
 function getZones(){
   var seen = {}, zones = [];
   repsRaw.forEach(function(r){
     if (!seen[r.zone]) { seen[r.zone] = true; zones.push(r.zone); }
   });
-  return zones;
+  return sortZones(zones);
 }
 
 // Zone-level aggregate entity
@@ -2871,13 +2878,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   });
   // Order zones: alphanumeric (INAZ01, INAZ02...), Cross Sales always last
   var CROSS_SALES_ZONE = 'Cross Sales';
-  var zoneOrder = Object.keys(zoneTotals).sort(function(a, b){
-    var aIsCross = a === CROSS_SALES_ZONE;
-    var bIsCross = b === CROSS_SALES_ZONE;
-    if (aIsCross && !bIsCross) return 1;
-    if (bIsCross && !aIsCross) return -1;
-    return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
-  });
+  var zoneOrder = sortZones(Object.keys(zoneTotals));
 
   var BRAND = brandColor || '#1D5FCC';
   var dateLabel = activeCols.length===0 ? '\u2014' : activeCols.length===1 ? activeCols[0] : activeCols[0]+' \u2013 '+activeCols[activeCols.length-1];
@@ -3272,7 +3273,7 @@ function orgEditModal(){
   if (!person) return '';
 
   var ROLES = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
-  var ZONES = [...new Set(repsRawOriginal.map(function(r){ return r.zone; }).filter(Boolean))].sort();
+  var ZONES = sortZones([...new Set(repsRawOriginal.map(function(r){ return r.zone; }).filter(Boolean))]);
 
   var roleOptsHtml = ROLES.map(function(r){
     return '<option value="'+esc(r)+'"'+(r===person.role?' selected':'')+'>'+esc(r)+'</option>';
@@ -3336,7 +3337,7 @@ function orgEditModal(){
 function addUserModal(){
   if (!state.addUserOpen) return '';
   var ROLES = ['Admin','HR','Regional Manager','Zonal Manager','Sales Rep'];
-  var ZONES = [...new Set(repsRawOriginal.map(function(r){ return r.zone; }).filter(Boolean))].sort();
+  var ZONES = sortZones([...new Set(repsRawOriginal.map(function(r){ return r.zone; }).filter(Boolean))]);
   var allPeople = orgDataReady ? (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]) : [];
   var defaultRole = state.addUserDefaultRole || '';
 
