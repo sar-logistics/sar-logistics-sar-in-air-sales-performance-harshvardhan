@@ -2905,8 +2905,8 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var thBase = 'padding:9px 12px;font-size:10px;font-weight:700;letter-spacing:0.07em;color:#8B97A8;text-transform:uppercase;white-space:nowrap;background:#F0F4FA;border-bottom:2px solid '+PBORDER_STRONG+';border-right:1px solid '+PBORDER+';';
   var colThs = colHeaders.map(function(h){ return '<th style="'+thBase+'text-align:right;">'+h+'</th>'; }).join('');
   var thead = '<thead style="position:sticky;top:0;z-index:4;"><tr>'
-    +'<th style="'+thBase+'width:190px;">Sales Rep</th>'
-    +'<th style="'+thBase+'width:150px;">Metric</th>'
+    +'<th style="position:sticky;left:0;z-index:5;'+thBase+'width:190px;min-width:190px;">Sales Rep</th>'
+    +'<th style="position:sticky;left:190px;z-index:5;'+thBase+'width:150px;min-width:150px;">Metric</th>'
     +'<th style="'+thBase+'text-align:right;background:#FCF3DA;color:#A8720E;min-width:90px;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;border-right:none;">Grand Total</th>'
     +colThs
     +'</tr></thead>';
@@ -2919,35 +2919,39 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     return '<td style="'+s+'">'+v+'</td>';
   }
 
-  function metricRows(data, nameEl, rowBg, isZone, zoneGroup, repGroup){
-    var border = 'border-bottom:1px solid #EEF1F6;';
+  function metricRows(data, nameEl, rowBg, isZone, zoneGroup, repGroup, isGrand, entityName, avatarEl, nameLabel, toggleEl, leftAccent, topBorderStyle){
     var isZoneCollapsed = zoneGroup && state.pendencyZoneOpen[zoneGroup] === false;
     var isRepCollapsed  = repGroup  && state.pendencyZoneOpen[repGroup]  === false;
-    var rowStyle = 'background:'+rowBg+';'+border+((isZoneCollapsed||isRepCollapsed)?'display:none;':'');
+    var hidden = (isZoneCollapsed||isRepCollapsed) ? 'display:none;' : '';
     var zgAttr = zoneGroup ? ' data-zone-group="'+esc(zoneGroup)+'"' : '';
     var rgAttr = repGroup  ? ' data-rep-group="'+esc(repGroup)+'"'   : '';
 
     function mRow(label, icon, getV, total, idx){
+      var isMiddle = idx === 1; // middle row of 3 — show name content
+      var rowTopBorder = idx === 0 ? topBorderStyle : 'border-top:1px solid #EEF1F6;';
       var colCells = data.colData.map(function(cd){ return numCell(getV(cd)); }).join('');
-      return '<tr'+zgAttr+rgAttr+' style="'+rowStyle+'">'
-        +(idx===0 ? '<td rowspan="3" style="padding:10px 12px;vertical-align:middle;border-right:2px solid '+PBORDER_STRONG+';white-space:nowrap;">'+nameEl+'</td>' : '')
-        +'<td style="padding:9px 12px;font-size:12px;font-weight:500;color:#374151;white-space:nowrap;border-right:2px solid '+PBORDER_STRONG+';">'+icon+' '+label+'</td>'
-        + (function(){ var v=total; var color=v>0?'#0D2B5E':'#C5D0E0'; var fw=v>0?'700':'400'; return '<td style="padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+fw+';color:'+color+';white-space:nowrap;background:#FCF3DA;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+v+'</td>'; })()
+      // Sticky name cell
+      var nameAccent = leftAccent || 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';';
+      var nameTd = isMiddle
+        ? '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:190px;min-width:190px;max-width:190px;'+nameAccent+'"><div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatarEl+nameLabel+(toggleEl||'')+'</div></td>'
+        : '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';width:190px;min-width:190px;'+nameAccent+'"></td>';
+      var gtTd = (function(){ var v=total; var color=v>0?'#0D2B5E':'#C5D0E0'; var fw=v>0?'700':'400'; return '<td style="padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+fw+';color:'+color+';white-space:nowrap;background:#FCF3DA;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;">'+v+'</td>'; })();
+      return '<tr'+zgAttr+rgAttr+' style="background:'+rowBg+';border-bottom:1px solid #EEF1F6;'+rowTopBorder+hidden+'">'
+        + nameTd
+        +'<td style="position:sticky;left:190px;z-index:2;background:'+rowBg+';padding:9px 12px;font-size:12px;font-weight:500;color:#374151;white-space:nowrap;border-right:2px solid '+PBORDER_STRONG+';min-width:150px;">'+icon+' '+label+'</td>'
+        + gtTd
         + colCells
         +'</tr>';
     }
     return mRow(pendingLabel,'\uD83D\uDD34', function(cd){ return cd.pending||0; }, data.totalPending, 0)
          + mRow(doneLabel,   '\u2705',       function(cd){ return cd.done||0;    }, data.totalDone,    1)
-         + mRow('Total Jobs',     '\uD83D\uDCCA',  function(cd){ return (cd.pending||0)+(cd.done||0); }, data.total, 2);
+         + mRow('Total Jobs','\uD83D\uDCCA', function(cd){ return (cd.pending||0)+(cd.done||0); }, data.total, 2);
   }
 
-  // Grand Total row
-  var grandNameEl = '<div style="display:flex;align-items:center;gap:9px;">'
-    +'<div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#1D5FCC,#0D2B5E);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">GT</div>'
-    +'<span style="font-size:13px;font-weight:700;color:#0D2B5E;">Grand Total</span>'
-    +'</div>';
   var grandData = { colData: gtColData, totalPending: gtPending, totalDone: gtDone, total: gtTotal };
-  var grandRows = metricRows(grandData, grandNameEl, '#F0F4FA', false);
+  var grandAvatar = '<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3B5BA5,#0D2B5E);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 6px rgba(13,43,94,0.25);">GT</div>';
+  var grandLabel  = '<div style="font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Grand Total</div>';
+  var grandRows = metricRows(grandData, null, '#EEF3FC', false, null, null, true, 'Grand Total', grandAvatar, grandLabel, '', 'box-shadow:inset 3px 0 0 #0D2B5E, inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:2px solid '+PBORDER_STRONG+';');
 
   // Zone + rep rows
   var bodyRows = '';
@@ -2959,14 +2963,26 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var zHue = zoneHueVal(zone);
     var zAvBg = 'oklch(0.55 0.14 '+zHue+')';
     var zIni = zone.slice(0,2).toUpperCase();
-    var chevron = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5B6678" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.2s;transform:rotate('+(isCollapsed?'-90':'0')+'deg);flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>';
-    var zoneNameEl = '<div data-act="pendencyZoneToggle" data-zone="'+esc(zone)+'" style="display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none;">'
-      +'<div style="width:32px;height:32px;border-radius:8px;background:'+zAvBg+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+zIni+'</div>'
-      +'<span style="font-size:13px;font-weight:700;color:#0D2B5E;">'+esc(zone)+'</span>'
-      + chevron
-      +'</div>';
+    // Zone avatar — rounded square like sales
+    var zAvatar = '<div style="width:28px;height:28px;border-radius:8px;background:'+zAvBg+';color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 5px rgba(0,0,0,0.15);">'+zIni+'</div>';
+    // Zone label with ZONE badge + code + description
+    var zoneParts = /^(\S+)\s*(.*)$/.exec(zone) || [null, zone, ''];
+    var zCode = zoneParts[1], zDesc = zoneParts[2];
+    var zLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">'
+      +'<div style="display:flex;align-items:baseline;gap:6px;">'
+        +'<span style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5678C2;text-transform:uppercase;">ZONE</span>'
+        +'<span style="font-size:13px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">'+esc(zCode)+'</span>'
+      +'</div>'
+      +(zDesc ? '<div style="font-size:10.5px;font-weight:500;color:#5B6678;line-height:1.3;">'+esc(zDesc)+'</div>' : '')
+    +'</div>';
+    // Chevron toggle
+    var chevSvg = isCollapsed
+      ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>'
+      : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    var zToggle = '<div data-act="pendencyZoneToggle" data-zone="'+esc(zone)+'" style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,'+BRAND+',#0D2B5E);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;box-shadow:0 1px 3px rgba(30,58,102,0.3);">'+chevSvg+'</div>';
+    var zAccent = 'box-shadow:inset 3px 0 0 '+BRAND+', inset -1.5px 0 0 '+PBORDER_STRONG+';';
     var zoneData = { colData: zt.colData, totalPending: zt.totalPending, totalDone: zt.totalDone, total: zt.total };
-    bodyRows += metricRows(zoneData, zoneNameEl, '#F8FAFC', true);
+    bodyRows += metricRows(zoneData, null, '#F0F4FB', true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';');
 
     if (isCollapsed) return; // skip reps if zone collapsed
 
@@ -2976,15 +2992,16 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       var repCollapsed = state.pendencyZoneOpen[repKey] === false;
       var hasOwners = showJobOwners && rep.jobOwners && rep.jobOwners.length > 0;
       var avatarBg = 'oklch(0.6 0.12 '+hue(rep.name)+')';
-      var chevron = hasOwners
-        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.2s;transform:rotate('+(repCollapsed?'-90':'0')+'deg);flex-shrink:0;margin-left:2px;"><polyline points="6 9 12 15 18 9"/></svg>'
+      var repAvatar = '<div style="width:24px;height:24px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'+ini(rep.name)+'</div>';
+      var repLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:0px;">'
+        +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(rep.name)+'</div>'
+      +'</div>';
+      var repChev = hasOwners
+        ? '<div data-act="pendencyZoneToggle" data-zone="'+esc(repKey)+'" style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,'+BRAND+',#0D2B5E);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'
+          +(repCollapsed ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>' : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>')
+          +'</div>'
         : '';
-      var repNameEl = '<div '+(hasOwners ? 'data-act="pendencyZoneToggle" data-zone="'+esc(repKey)+'"' : '')+' style="display:flex;align-items:center;gap:9px;padding-left:14px;'+(hasOwners?'cursor:pointer;user-select:none;':'')+'">'
-        +'<div style="width:28px;height:28px;border-radius:50%;background:'+avatarBg+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini(rep.name)+'</div>'
-        +'<span style="font-size:12.5px;font-weight:600;color:#374151;">'+esc(rep.name)+'</span>'
-        +chevron
-        +'</div>';
-      bodyRows += metricRows(rep, repNameEl, '#FFFFFF', false, zone);
+      bodyRows += metricRows(rep, null, '#FFFFFF', false, zone, null, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #9AA6B8;');
 
       // Job owners nested under rep (OL page only)
       if (hasOwners && !repCollapsed) {
@@ -3000,12 +3017,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           joFiltered.total = joFiltered.totalPending + joFiltered.totalDone;
           if (joFiltered.total === 0) return;
           var joAvatarBg = 'oklch(0.55 0.09 '+hue(jo.name)+')';
-          var joNameEl = '<div style="display:flex;align-items:center;gap:8px;padding-left:32px;">'
-            +'<div style="width:24px;height:24px;border-radius:50%;background:'+joAvatarBg+';color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini(jo.name)+'</div>'
-            +'<span style="font-size:11.5px;font-weight:500;color:#64748B;">'+esc(jo.name)+'</span>'
-            +'<span style="font-size:10px;color:#94A3B8;font-weight:500;">(Job Owner)</span>'
-            +'</div>';
-          bodyRows += metricRows(joFiltered, joNameEl, '#FAFBFD', false, zone, repKey);
+          var joAvatar = '<div style="width:20px;height:20px;border-radius:50%;background:'+joAvatarBg+';color:#fff;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:16px;">'+ini(jo.name)+'</div>';
+          var joLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:0px;">'
+            +'<div style="font-size:10.5px;font-weight:500;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(jo.name)+'</div>'
+            +'<div style="font-size:9px;color:#94A3B8;font-weight:500;">Job Owner</div>'
+          +'</div>';
+          bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, zone, repKey, false, jo.name, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px solid #EEF1F6;');
         });
       }
     });
