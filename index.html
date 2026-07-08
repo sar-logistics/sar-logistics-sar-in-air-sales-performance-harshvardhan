@@ -5307,12 +5307,15 @@ document.addEventListener('click', function(ev){
     var first = allM[0];
     var len   = allM.length;
 
-    // Each view ALWAYS sets a specific window — never silently keeps the old range.
+    // Each view sets its own state — Monthly preserves user's current FROM/TO.
     if (v === 'Weekly') {
-      state.weeklyMonth = allM[len - 1];
+      // Default weekly month to current real-world month, not last available
+      var nowV = new Date();
+      var MONV = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var curMonV = MONV[nowV.getMonth()] + '-' + String(nowV.getFullYear()).slice(2);
+      state.weeklyMonth = allM.indexOf(curMonV) >= 0 ? curMonV : allM[len - 1];
     } else if (v === 'Monthly') {
-      state.dateFrom = allM[Math.max(0, len - 6)];
-      state.dateTo   = last;
+      // Don't touch dateFrom/dateTo — preserve whatever the user last set
     } else if (v === 'Quarterly') {
       state.selectedQuarter = 'Q1';
     } else if (v === 'Yearly') {
