@@ -1454,10 +1454,16 @@ function grandEntity(){
 
 // Returns unique zones in order
 function sortZones(arr){
-  var CROSS = "Cross Sales";
+  var CROSS = 'Cross Sales';
+  function zoneNum(z){
+    var m = z.match(/(\d+)$/);
+    return m ? parseInt(m[1], 10) : 999999;
+  }
   return arr.slice().sort(function(a,b){
     if(a===CROSS) return 1; if(b===CROSS) return -1;
-    return a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"});
+    var na = zoneNum(a), nb = zoneNum(b);
+    if(na !== nb) return na - nb;
+    return a.localeCompare(b, undefined, {sensitivity:'base'});
   });
 }
 function getZones(){
