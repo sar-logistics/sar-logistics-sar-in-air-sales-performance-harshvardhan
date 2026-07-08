@@ -330,20 +330,43 @@ function showDashboard() {
     // Cheap check: has MongoDB data changed since our cache was built?
     checkForFreshData(cached, function(needsRefresh) {
       // Always background-prefetch secondary pages so navigation is instant.
-      // Use a small helper that computes the current date range from months26
-      // (same logic as syncDateRangeToData) so keys always match what the UI shows.
+      // We fetch with explicit date range matching what syncDateRangeToData will set,
+      // WITHOUT touching state (which would blank the current view).
       function bgPrefetchSecondary() {
-        var latest = months26 && months26.length > 0 ? months26[months26.length - 1] : '';
-        var from = latest, to = latest;
-        // Override state temporarily so getCustomerDateRange() returns the right key
-        var prevFrom = state.dateFrom, prevTo = state.dateTo;
-        if (latest) { state.dateFrom = from; state.dateTo = to; }
-        setTimeout(function(){ fetchCustomerData(null);   },  300);
-        setTimeout(function(){ fetchAgentData(null);      },  700);
-        setTimeout(function(){ fetchTradelaneData(null);  }, 1100);
-        setTimeout(function(){ fetchFinanceData(null);    }, 1500);
-        setTimeout(function(){ fetchOpData(null);         }, 1900);
-        setTimeout(function(){ fetchOrgData(null);        }, 2300);
+        var m26 = months26 && months26.length > 0 ? months26 : [];
+        var from = m26.indexOf('Jan-26') >= 0 ? 'Jan-26' : (m26[0] || '');
+        var to   = m26.indexOf('Dec-26') >= 0 ? 'Dec-26' : (m26[m26.length-1] || '');
+        if (!from || !to) return;
+        var key = from + '_' + to;
+        // Fetch each secondary data source with the explicit range
+        // Finance and Op don't use a date range key — they use makeFetcher directly
+        setTimeout(function(){
+          if (!_customerCache[key]) {
+            var lsc = lsGet('customers_'+key);
+            if (lsc && lsc.success) { _customerCache[key]=lsc; customerData=lsc; customerDataReady=true; return; }
+            fetch('/api/mongo-batch?action=customers&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
+              .then(function(r){return r.json();}).then(function(d){ if(d.success){_customerCache[key]=d;customerData=d;customerDataReady=true;lsSet('customers_'+key,d);} }).catch(function(){});
+          }
+        }, 300);
+        setTimeout(function(){
+          if (!_agentCache[key]) {
+            var lsa = lsGet('agents_'+key);
+            if (lsa && lsa.success) { _agentCache[key]=lsa; agentData=lsa; agentDataReady=true; return; }
+            fetch('/api/mongo-batch?action=agents&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
+              .then(function(r){return r.json();}).then(function(d){ if(d.success){_agentCache[key]=d;agentData=d;agentDataReady=true;lsSet('agents_'+key,d);} }).catch(function(){});
+          }
+        }, 700);
+        setTimeout(function(){
+          if (!_tradelaneCache[key]) {
+            var lst = lsGet('tradelane_'+key);
+            if (lst && lst.success) { _tradelaneCache[key]=lst; tradelaneData=lst; tradelaneDataReady=true; return; }
+            fetch('/api/mongo-batch?action=tradelane&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
+              .then(function(r){return r.json();}).then(function(d){ if(d.success){_tradelaneCache[key]=d;tradelaneData=d;tradelaneDataReady=true;lsSet('tradelane_'+key,d);} }).catch(function(){});
+          }
+        }, 1100);
+        setTimeout(function(){ fetchFinanceData(null);  }, 1500);
+        setTimeout(function(){ fetchOpData(null);       }, 1900);
+        setTimeout(function(){ fetchOrgData(null);      }, 2300);
       }
       bgPrefetchSecondary();
 
@@ -1422,12 +1445,13 @@ function entityWeekArrays(r, metric){
 // Call this whenever months26 changes (API load, cache load).
 function syncDateRangeToData(){
   if (!months26 || months26.length === 0) return;
-  var latest = months26[months26.length - 1];
-  // Always default both FROM and TO to the latest available month
-  state.dateFrom = latest;
-  state.dateTo   = latest;
+  // Default range: Jan-26 → Dec-26 (current FY). Fall back to first/last available.
+  var defaultFrom = months26.indexOf('Jan-26') >= 0 ? 'Jan-26' : months26[0];
+  var defaultTo   = months26.indexOf('Dec-26') >= 0 ? 'Dec-26' : months26[months26.length - 1];
+  state.dateFrom = defaultFrom;
+  state.dateTo   = defaultTo;
   if (!state.weeklyMonth || months26.indexOf(state.weeklyMonth) < 0) {
-    state.weeklyMonth = latest;
+    state.weeklyMonth = months26[months26.length - 1];
   }
 }
 
