@@ -404,7 +404,7 @@ function checkForFreshData(cached, callback) {
       _dbLastUpdated = dbUpdatedAt; // store globally so lsGet can mark stale entries
       var cacheBuiltAt = cached._cachedAt || 0;
       // If DB updated, also wipe IDB drill cache so stale drill results are re-fetched
-      if (dbUpdatedAt > cacheBuiltAt) { idbClear(); }
+
       callback(dbUpdatedAt > cacheBuiltAt); // refresh only if DB is newer than our cache
     })
     .catch(function(){
@@ -568,7 +568,7 @@ function fetchLiveData(callback, force){
       _weekDataFetched = false;
       _drillResultCache = {};
       allDrillRows = null;
-      idbClear(); // clear IndexedDB drill cache
+
       try {
         Object.keys(sessionStorage).filter(function(k){ return k.startsWith('sar_drill_'); })
           .forEach(function(k){ sessionStorage.removeItem(k); });
@@ -4900,50 +4900,12 @@ function computeDrillResult(entity, metric, month){
 
 var _drillResultCache = {}; // in-memory: entity||metric||col → full result object
 
-// ── IndexedDB drill cache — persists across refreshes, no size limit ──────────
-var _idb = null;
-function idbOpen(cb){
-  if (_idb) { cb(_idb); return; }
-  try {
-    var req = indexedDB.open('sar_drill_v3', 1);
-    req.onupgradeneeded = function(e){ e.target.result.createObjectStore('drill', {keyPath:'k'}); };
-    req.onsuccess = function(e){ _idb = e.target.result; cb(_idb); };
-    req.onerror = function(){ cb(null); };
-  } catch(e){ cb(null); }
-}
-function idbSet(key, data){
-  idbOpen(function(db){
-    if (!db) return;
-    try {
-      var tx = db.transaction('drill','readwrite');
-      tx.objectStore('drill').put({ k: key, d: data, t: Date.now() });
-    } catch(e){}
-  });
-}
-function idbGet(key, cb){
-  idbOpen(function(db){
-    if (!db) { cb(null); return; }
-    try {
-      var tx = db.transaction('drill','readonly');
-      var req = tx.objectStore('drill').get(key);
-      req.onsuccess = function(e){ cb(e.target.result ? e.target.result.d : null); };
-      req.onerror = function(){ cb(null); };
-    } catch(e){ cb(null); }
-  });
-}
-function idbClear(){
-  idbOpen(function(db){
-    if (!db) return;
-    try { db.transaction('drill','readwrite').objectStore('drill').clear(); } catch(e){}
-  });
-}
-
 function openDrill(entity, metric, col, valueFmt){
   var cacheKey = entity+'||'+metric+'||'+col;
 
-  // 1. In-memory (instant, same-session repeat click)
+  // In-memory cache — instant repeat clicks within the same session
   var mem = _drillResultCache[cacheKey];
-  if (mem && mem.rows && mem.rows.length > 0) {
+  if (mem && mem.rows) {
     state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
       rows:mem.rows, count:mem.count, totalMetric:mem.totalMetric, totalGP:mem.totalGP,
       totalProvGP:mem.totalProvGP||0, totalActualGP:mem.totalActualGP||0,
@@ -4952,38 +4914,24 @@ function openDrill(entity, metric, col, valueFmt){
     render(); return;
   }
 
-  // Show spinner while we check IDB / fetch
+  // Show spinner and fetch from API — always correct, no stale cache risk
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
     lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
   render();
 
-  // 2. IndexedDB (persists across refreshes, no quota)
-  idbGet(cacheKey, function(idbData){
-    if (idbData && idbData.rows && idbData.rows.length > 0) {
-      _drillResultCache[cacheKey] = idbData;
-      state.drill.loading=false; state.drill.rows=idbData.rows; state.drill.count=idbData.count;
-      state.drill.totalMetric=idbData.totalMetric; state.drill.totalGP=idbData.totalGP;
-      state.drill.totalProvGP=idbData.totalProvGP||0; state.drill.totalActualGP=idbData.totalActualGP||0;
-      state.drill.totalRevenue=idbData.totalRevenue||0; state.drill.totalCost=idbData.totalCost||0;
-      render(); return;
-    }
-
-    // 3. Fetch from API
-    var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col);
-    fetch('/api/mongo-batch'+qs, { priority:'high' })
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        if (!data.success) { state.drill.loading=false; state.drill.error=data.error||'Failed.'; render(); return; }
-        _drillResultCache[cacheKey] = data;
-        idbSet(cacheKey, data); // persist to IDB for next refresh
-        state.drill.loading=false; state.drill.rows=data.rows; state.drill.count=data.count;
-        state.drill.totalMetric=data.totalMetric; state.drill.totalGP=data.totalGP;
-        state.drill.totalProvGP=data.totalProvGP||0; state.drill.totalActualGP=data.totalActualGP||0;
-        state.drill.totalRevenue=data.totalRevenue||0; state.drill.totalCost=data.totalCost||0;
-        render();
-      })
-      .catch(function(){ state.drill.loading=false; state.drill.error='Could not reach the server.'; render(); });
-  });
+  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col);
+  fetch('/api/mongo-batch'+qs, { priority:'high' })
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (!data.success) { state.drill.loading=false; state.drill.error=data.error||'Failed.'; render(); return; }
+      _drillResultCache[cacheKey] = data;
+      state.drill.loading=false; state.drill.rows=data.rows; state.drill.count=data.count;
+      state.drill.totalMetric=data.totalMetric; state.drill.totalGP=data.totalGP;
+      state.drill.totalProvGP=data.totalProvGP||0; state.drill.totalActualGP=data.totalActualGP||0;
+      state.drill.totalRevenue=data.totalRevenue||0; state.drill.totalCost=data.totalCost||0;
+      render();
+    })
+    .catch(function(){ state.drill.loading=false; state.drill.error='Could not reach the server.'; render(); });
 }
 
 // Live-filters the option checklist inside an open drill column-filter popup
