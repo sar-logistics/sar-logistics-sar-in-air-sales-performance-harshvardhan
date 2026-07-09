@@ -729,6 +729,41 @@ function lsSet(key, data) {
   } catch(e) { /* quota exceeded — ignore */ }
 }
 
+function lsSetDrill(key, data) {
+  // Store only summary — rows are recomputed from allDrillRows to avoid quota issues
+  try {
+    var summary = {
+      success: data.success, entity: data.entity, metric: data.metric, month: data.month,
+      count: data.count, totalGP: data.totalGP, totalProvGP: data.totalProvGP,
+      totalActualGP: data.totalActualGP, totalRevenue: data.totalRevenue,
+      totalCost: data.totalCost, totalMetric: data.totalMetric,
+      _cachedAt: Date.now(), _summaryOnly: true
+    };
+    localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, JSON.stringify(summary));
+  } catch(e) {}
+}
+
+function lsGetDrill(key, entity, metric, col) {
+  try {
+    var raw = localStorage.getItem('sar_' + key + '_' + CACHE_VERSION);
+    if (!raw) return null;
+    var d = JSON.parse(raw);
+    if (!d || !d.success) return null;
+    d._isStale = _dbLastUpdated > 0 && d._cachedAt && _dbLastUpdated > d._cachedAt;
+    if (d._isStale) return null;
+    // If we have allDrillRows, recompute the actual rows
+    if (d._summaryOnly && allDrillRows) {
+      var full = computeDrillResult(entity, metric, col);
+      if (full && full.count > 0) return full;
+      // computeDrillResult returned 0 — return summary without rows so API is tried
+      return null;
+    }
+    // Full result (rows included)
+    if (d.rows && d.rows.length > 0) return d;
+    return null;
+  } catch(e) { return null; }
+}
+
 // ── Generic fetch-with-cache factory ─────────────────────────────────────────
 function makeFetcher(action, lsKey, setReady) {
   return function(callback, force) {
@@ -4874,7 +4909,7 @@ function openDrill(entity, metric, col, valueFmt){
   }
 
   // ── localStorage cache — only use if has actual rows ──
-  var lsDrill = lsGet(_drillLsKey);
+  var lsDrill = lsGetDrill(_drillLsKey, entity, metric, col);
   if (lsDrill && lsDrill.success && lsDrill.rows && lsDrill.rows.length > 0) {
     _drillResultCache[cacheKey] = lsDrill;
     state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
@@ -4890,7 +4925,7 @@ function openDrill(entity, metric, col, valueFmt){
     var result = computeDrillResult(entity, metric, col);
     if (result && result.count > 0) {
       _drillResultCache[cacheKey] = result;
-      try { lsSet(_drillLsKey, result); } catch(e){}
+      try { lsSetDrill(_drillLsKey, result); } catch(e){}
       state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
         rows:result.rows, count:result.count, totalMetric:result.totalMetric,
         totalGP:result.totalGP, totalRevenue:result.totalRevenue||0,
@@ -4911,7 +4946,7 @@ function openDrill(entity, metric, col, valueFmt){
     .then(function(data){
       if (!data.success) { state.drill.loading=false; state.drill.error=data.error||'Failed.'; render(); return; }
       _drillResultCache[cacheKey] = data;
-      try { lsSet(_drillLsKey, data); } catch(e){}
+      try { lsSetDrill(_drillLsKey, data); } catch(e){}
       state.drill.loading=false; state.drill.rows=data.rows; state.drill.count=data.count;
       state.drill.totalMetric=data.totalMetric; state.drill.totalGP=data.totalGP;
       state.drill.totalRevenue=data.totalRevenue||0; state.drill.totalCost=data.totalCost||0;
