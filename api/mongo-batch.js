@@ -345,10 +345,18 @@ async function getDrillRows(db, entity, metric, month) {
       normByDisplayByFY[fy][displayName] = norm;
     }
 
-    // Always load ALL FY rows — no date pre-filter.
-    // drillRowsCache is reused across all drill requests, so it must be complete.
+    // Build a date string filter covering the full 2-year FY window.
+    // This is broad enough for all drill requests but avoids loading
+    // documents outside our fiscal years (which would time out on Vercel).
+    const ds = "2025-04-01", de = "2027-03-31";
+    const mf = { $or:[
+      {"ETD Loading Port":{$type:2,$gte:ds,$lte:de+"\uffff"}},
+      {"ETA Discharge":   {$type:2,$gte:ds,$lte:de+"\uffff"}},
+      {"Job Date":        {$type:2,$gte:ds,$lte:de+"\uffff"}},
+    ]};
+
     const allResults = await Promise.all(
-      JOB_COLLECTIONS.map(c => db.collection(c).find({}).toArray().then(r => ({ collName: c, rows: r })))
+      JOB_COLLECTIONS.map(c => db.collection(c).find(mf).toArray().then(r => ({ collName: c, rows: r })))
     );
 
     const allRows = [];
