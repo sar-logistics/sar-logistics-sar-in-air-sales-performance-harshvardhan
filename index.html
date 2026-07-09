@@ -3017,12 +3017,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     +'</tr></thead>';
 
   // number cell — same monospace + sizing as sales table
-  function numCell(v, bg, drillRep, drillCol, drillStatus, drillLock){
+  function numCell(v, bg, drillRep, drillCol, drillStatus, drillLock, drillType){
     var color = v > 0 ? '#0D2B5E' : '#C5D0E0';
     var fw = v > 0 ? '700' : '400';
     var s = 'padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+fw+';color:'+color+';white-space:nowrap;'+(bg?'background:'+bg+';':'');
     if (drillRep && v > 0) {
-      return '<td class="pcell" data-act="pendencyDrill" data-rep="'+esc(drillRep)+'" data-col="'+esc(drillCol)+'" data-status="'+esc(drillStatus)+'" data-lock="'+esc(drillLock)+'" style="'+s+'cursor:pointer;">'+v+'</td>';
+      return '<td class="pcell" data-act="pendencyDrill" data-rep="'+esc(drillRep)+'" data-col="'+esc(drillCol)+'" data-status="'+esc(drillStatus)+'" data-lock="'+esc(drillLock)+'" data-type="'+esc(drillType||'rep')+'" style="'+s+'cursor:pointer;">'+v+'</td>';
     }
     return '<td style="'+s+'">'+v+'</td>';
   }
@@ -3042,18 +3042,19 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       var colCells = data.colData.map(function(cd, ci){
         var v = getV(cd);
         var col = activeCols[ci] || '';
-        return numCell(v, null, entityName||null, col, drillStatus||null, lockType||null);
+        var dtype = isGrand ? 'grand' : (isZone ? 'zone' : 'rep');
+        return numCell(v, null, entityName||null, col, drillStatus||null, lockType||null, dtype);
       }).join('');
       var nameAccent = leftAccent || 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';';
       var nameTd = isMiddle
         ? '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:190px;min-width:190px;max-width:190px;'+nameAccent+rowTopBorder+rowBottomBorder+'"><div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatarEl+nameLabel+(toggleEl||'')+'</div></td>'
         : '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';width:190px;min-width:190px;'+nameAccent+rowTopBorder+rowBottomBorder+'"></td>';
-      // Grand total column — clickable if entity known
       var gtV = total;
       var gtColor = gtV>0?'#0D2B5E':'#C5D0E0'; var gtFw = gtV>0?'700':'400';
       var gtStyle = 'padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+gtFw+';color:'+gtColor+';white-space:nowrap;background:#FCF3DA;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;'+(isLast&&bottomBorderStyle?rowBottomBorder:'');
+      var gtDtype = isGrand ? 'grand' : (isZone ? 'zone' : 'rep');
       var gtTd = entityName && gtV > 0
-        ? '<td class="pcell" data-act="pendencyDrill" data-rep="'+esc(entityName)+'" data-col="FY Total" data-status="'+esc(drillStatus||'all')+'" data-lock="'+esc(lockType||'')+'" style="'+gtStyle+'cursor:pointer;">'+gtV+'</td>'
+        ? '<td class="pcell" data-act="pendencyDrill" data-rep="'+esc(entityName)+'" data-col="FY Total" data-status="'+esc(drillStatus||'all')+'" data-lock="'+esc(lockType||'')+'" data-type="'+esc(gtDtype)+'" style="'+gtStyle+'cursor:pointer;">'+gtV+'</td>'
         : '<td style="'+gtStyle+'">'+gtV+'</td>';
       return '<tr'+zgAttr+rgAttr+' style="background:'+rowBg+';'+rowTopBorder+(isLast&&bottomBorderStyle?rowBottomBorder:'')+hidden+'">'
         + nameTd
@@ -4961,9 +4962,9 @@ function openDrill(entity, metric, col, valueFmt){
 // ── Pendency Drill-through ────────────────────────────────────────────────────
 var _pendencyDrillCache = {}; // rep||month||status||lock → rows
 
-function openPendencyDrill(rep, col, status, lock){
-  var cacheKey = rep+'||'+col+'||'+status+'||'+lock;
-  state.pendencyDrill = { rep:rep, col:col, status:status, lock:lock, loading:true, rows:null, error:null };
+function openPendencyDrill(rep, col, status, lock, type){
+  var cacheKey = rep+'||'+col+'||'+status+'||'+lock+'||'+(type||'rep');
+  state.pendencyDrill = { rep:rep, col:col, status:status, lock:lock, type:type||'rep', loading:true, rows:null, error:null };
   render();
 
   if (_pendencyDrillCache[cacheKey]) {
@@ -4972,7 +4973,7 @@ function openPendencyDrill(rep, col, status, lock){
     render(); return;
   }
 
-  var qs = '?action=pendencyDrill&rep='+encodeURIComponent(rep)+'&month='+encodeURIComponent(col)+'&status='+encodeURIComponent(status)+'&lock='+encodeURIComponent(lock);
+  var qs = '?action=pendencyDrill&rep='+encodeURIComponent(rep)+'&month='+encodeURIComponent(col)+'&status='+encodeURIComponent(status)+'&lock='+encodeURIComponent(lock)+'&type='+encodeURIComponent(type||'rep');
   fetch('/api/mongo-batch'+qs)
     .then(function(r){ return r.json(); })
     .then(function(data){
@@ -4989,66 +4990,67 @@ function pendencyDrillDrawer(){
   if (!pd) return '';
   var lockLabel = pd.lock==='Operation Lock' ? 'OL' : 'FL';
   var statusLabel = pd.status==='pending' ? lockLabel+' Pending' : pd.status==='done' ? lockLabel+' Done' : 'All Jobs';
-  var colLabel = pd.col==='FY Total' ? 'FY Total' : (pd.col||'All');
-  var title = esc(pd.rep)+' — '+esc(statusLabel)+' — '+esc(colLabel);
-  var BORDER = '#E2E8F0'; var BORDER_STRONG = '#CBD5E1';
+  var colLabel = (pd.col==='FY Total'||!pd.col) ? 'FY Total' : pd.col;
+  var COLS = [
+    {k:'shipmentNo',  l:'Shipment No',      t:'mono'},
+    {k:'jobDate',     l:'Job Date',         t:'date'},
+    {k:'lob',         l:'LOB',              t:'badge'},
+    {k:'customer',    l:'Customer',         t:'text', trunc:180},
+    {k:'salesPerson', l:'Sales Person',     t:'text', trunc:140},
+    {k:'jobOwner',    l:'Job Owner',        t:'text', trunc:130},
+    {k:'carrier',     l:'Carrier',          t:'text', trunc:130},
+    {k:'location',    l:'Location',         t:'text'},
+    {k:'lockStatus',  l:lockLabel+' Status',t:'status'},
+    {k:'etdLoading',  l:'ETD Loading',      t:'date'},
+    {k:'etaDischarge',l:'ETA Discharge',    t:'date'},
+  ];
+  var BS = '#B0BAC8'; var BD = '#D5DCE6';
   var body = '';
   if (pd.loading) {
-    body = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:14px;"><div class="login-spinner" style="width:30px;height:30px;border-width:3px;"></div><div style="font-size:12px;color:#9AAFC8;font-weight:600;">Loading jobs…</div></div>';
+    body = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:14px;"><div class="login-spinner" style="width:30px;height:30px;border-width:3px;"></div><div style="font-size:12px;color:#9AAFC8;font-weight:600;">Loading shipment details...</div></div>';
   } else if (pd.error) {
-    body = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:40px;text-align:center;color:#DC2626;font-size:13px;font-weight:600;">'+esc(pd.error)+'</div>';
-  } else if (!pd.rows || pd.rows.length === 0) {
-    body = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:40px;text-align:center;color:#9AAFC8;font-size:13px;">No jobs found for this selection.</div>';
+    body = '<div style="display:flex;align-items:center;justify-content:center;flex:1;color:#DC2626;font-size:13px;font-weight:600;">'+esc(pd.error)+'</div>';
+  } else if (!pd.rows || pd.rows.length===0) {
+    body = '<div style="display:flex;align-items:center;justify-content:center;flex:1;color:#9AAFC8;font-size:13px;">No jobs found.</div>';
   } else {
-    var COLS = [
-      {k:'shipmentNo',  l:'Shipment No',   w:130, t:'link'},
-      {k:'jobDate',     l:'Job Date',       w:100, t:'date'},
-      {k:'lob',         l:'LOB',            w:120, t:'badge'},
-      {k:'customer',    l:'Customer',       w:180, t:'text'},
-      {k:'jobOwner',    l:'Job Owner',      w:130, t:'text'},
-      {k:'salesPerson', l:'Sales Person',   w:130, t:'text'},
-      {k:'carrier',     l:'Carrier',        w:130, t:'text'},
-      {k:'location',    l:'Location',       w:100, t:'text'},
-      {k:'lockStatus',  l:lockLabel+' Status', w:110, t:'status'},
-      {k:'etdLoading',  l:'ETD Loading',    w:110, t:'date'},
-      {k:'etaDischarge',l:'ETA Discharge',  w:110, t:'date'},
-    ];
-    var renderRows = pd._showAll ? pd.rows : pd.rows.slice(0, 500);
+    var renderRows = pd._showAll ? pd.rows : pd.rows.slice(0,500);
     var hiddenCount = pd.rows.length - renderRows.length;
     var thead = '<thead style="position:sticky;top:0;z-index:3;"><tr>'
-      +COLS.map(function(c){ return '<th style="background:#F0F4FA;padding:9px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';white-space:nowrap;min-width:'+c.w+'px;">'+c.l+'</th>'; }).join('')
+      +COLS.map(function(c){ return '<th style="background:#F0F4FA;padding:9px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid '+BS+';white-space:nowrap;text-align:left;">'+c.l+'</th>'; }).join('')
       +'</tr></thead>';
     var tbody = '<tbody>'
-      +renderRows.map(function(r, i){
+      +renderRows.map(function(r,i){
         var bg = i%2===0?'#FFFFFF':'#F8FAFC';
-        var isDone = r.lockStatus === 'Done';
-        return '<tr style="border-bottom:1px solid #EEF1F6;background:'+bg+';">'
+        var isDone = r.lockStatus==='Done';
+        return '<tr style="border-bottom:1px solid '+BD+';background:'+bg+';">'
           +COLS.map(function(c){
-            var v = c.t==='date' ? (r[c.k]?r[c.k].slice(0,10):'—') : (r[c.k]||'—');
-            if (c.t==='link') return '<td style="padding:8px 10px;font-family:monospace;font-size:11.5px;font-weight:700;color:#2563EB;white-space:nowrap;">'+esc(v)+'</td>';
-            if (c.t==='date') return '<td style="padding:8px 10px;font-size:11px;color:#64748B;white-space:nowrap;font-family:monospace;">'+esc(v)+'</td>';
-            if (c.t==='badge') return '<td style="padding:8px 10px;"><span style="font-size:9px;font-weight:700;color:#5678C2;background:#EEF2FF;border-radius:4px;padding:2px 7px;text-transform:uppercase;white-space:nowrap;">'+esc(v)+'</span></td>';
-            if (c.t==='status') return '<td style="padding:8px 10px;">'+(isDone?'<span style="font-size:10px;font-weight:700;color:#0A7E53;background:#E8F7EF;border-radius:5px;padding:3px 9px;white-space:nowrap;">✓ Done</span>':'<span style="font-size:10px;font-weight:600;color:#B45309;background:#FEF3C7;border-radius:5px;padding:3px 9px;white-space:nowrap;">Pending</span>')+'</td>';
-            return '<td style="padding:8px 10px;font-size:11.5px;color:#374151;max-width:'+c.w+'px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(String(r[c.k]||''))+'">'+esc(v)+'</td>';
-          }).join('')
-          +'</tr>';
+            var v = r[c.k]||'—';
+            if(c.t==='mono') return '<td style="padding:8px 10px;font-family:monospace;font-size:11.5px;font-weight:700;color:#2563EB;white-space:nowrap;">'+esc(String(v))+'</td>';
+            if(c.t==='date') return '<td style="padding:8px 10px;font-size:11px;color:#64748B;white-space:nowrap;font-family:monospace;">'+esc(v&&String(v).length>=10?String(v).slice(0,10):'—')+'</td>';
+            if(c.t==='badge') return '<td style="padding:8px 10px;"><span style="font-size:9px;font-weight:700;color:#5678C2;background:#EEF2FF;border-radius:4px;padding:2px 7px;text-transform:uppercase;white-space:nowrap;">'+esc(String(v))+'</span></td>';
+            if(c.t==='status') return '<td style="padding:8px 10px;">'+(isDone?'<span style="font-size:10px;font-weight:700;color:#0A7E53;background:#E8F7EF;border-radius:5px;padding:3px 9px;white-space:nowrap;">\u2713 Done</span>':'<span style="font-size:10px;font-weight:600;color:#B45309;background:#FEF3C7;border-radius:5px;padding:3px 9px;white-space:nowrap;">Pending</span>')+'</td>';
+            if(c.trunc) return '<td style="padding:8px 10px;font-size:11.5px;color:#374151;max-width:'+c.trunc+'px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(String(r[c.k]||''))+'">'+esc(String(v))+'</td>';
+            return '<td style="padding:8px 10px;font-size:11.5px;color:#374151;white-space:nowrap;">'+esc(String(v))+'</td>';
+          }).join('')+'</tr>';
       }).join('')
       +(hiddenCount>0?'<tr><td colspan="'+COLS.length+'" style="text-align:center;padding:14px;background:#F8FAFC;"><button data-act="pendencyDrillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">Show all '+pd.rows.length.toLocaleString()+' rows ('+hiddenCount.toLocaleString()+' more)</button></td></tr>':'')
       +'</tbody>';
-    body = '<div style="overflow:auto;flex:1;"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;">'+thead+tbody+'</table></div>';
+    body = '<div style="flex:1;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;">'+thead+tbody+'</table></div>';
   }
-  return '<div data-act="closePendencyDrill" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:200;display:flex;align-items:flex-start;justify-content:flex-end;">'
-    +'<div data-stop="1" style="width:min(960px,96vw);height:100%;background:#FFFFFF;display:flex;flex-direction:column;box-shadow:-4px 0 32px rgba(13,43,94,0.15);animation:drwSlide 0.22s cubic-bezier(0.22,1,0.36,1);">'
+  return '<div data-act="closePendencyDrill" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:200;display:flex;align-items:center;justify-content:center;padding:24px;">'
+    +'<div data-stop="1" style="width:min(1100px,96vw);max-height:90vh;background:#FFFFFF;border-radius:14px;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(15,23,40,0.22);overflow:hidden;animation:drwSlide 0.2s cubic-bezier(0.22,1,0.36,1);">'
       +'<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #E3EAF3;flex-shrink:0;background:#F8FAFC;">'
-        +'<div style="min-width:0;"><div style="font-size:14px;font-weight:800;color:#0D2B5E;">'+title+'</div>'
-        +(pd.count!=null?'<div style="font-size:11px;color:#9AAFC8;margin-top:2px;font-weight:500;">'+pd.count.toLocaleString()+' job'+(pd.count!==1?'s':'')+'</div>':'')
+        +'<div style="min-width:0;">'
+          +'<div style="font-size:14px;font-weight:800;color:#0D2B5E;">'+esc(pd.rep)+' \u2014 '+esc(statusLabel)+' \u2014 '+esc(colLabel)+'</div>'
+          +(pd.count!=null?'<div style="font-size:11px;color:#9AAFC8;margin-top:2px;font-weight:500;">'+pd.count.toLocaleString()+' job'+(pd.count!==1?'s':'')+'</div>':'')
         +'</div>'
-        +'<button data-act="closePendencyDrill" style="border:none;background:#F0F4FA;width:28px;height:28px;border-radius:8px;cursor:pointer;color:#64748B;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:12px;">✕</button>'
+        +'<button data-act="closePendencyDrill" style="border:none;background:#F0F4FA;width:28px;height:28px;border-radius:8px;cursor:pointer;color:#64748B;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:12px;">\u00d7</button>'
       +'</div>'
       +body
     +'</div>'
   +'</div>';
 }
+
 // Live-filters the option checklist inside an open drill column-filter popup
 function filterDrillFilterOptions(inputEl){
   var query = inputEl.value.toLowerCase().trim();
@@ -5505,7 +5507,7 @@ document.addEventListener('click', function(ev){
     render();
   }
   else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
-  else if(act==='pendencyDrill'){ ev.stopPropagation(); openPendencyDrill(el.getAttribute('data-rep'),el.getAttribute('data-col'),el.getAttribute('data-status'),el.getAttribute('data-lock')); }
+  else if(act==='pendencyDrill'){ ev.stopPropagation(); openPendencyDrill(el.getAttribute('data-rep'),el.getAttribute('data-col'),el.getAttribute('data-status'),el.getAttribute('data-lock'),el.getAttribute('data-type')||'rep'); }
   else if(act==='closePendencyDrill'){ if(el.getAttribute('data-stop')) return; state.pendencyDrill=null; render(); }
   else if(act==='pendencyDrillShowAll'){ ev.stopPropagation(); if(state.pendencyDrill){ state.pendencyDrill._showAll=true; var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+pendencyDrillDrawer(); } }
   else if(act==='drillShowAll'){ ev.stopPropagation(); if(state.drill){ state.drill._showAll=true; renderDrillOnly(); } }

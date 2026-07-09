@@ -2090,102 +2090,89 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "pendencyDrill") {
-      // Fetch job-level detail for a specific rep + month + lock type + status
-      const repName  = req.query?.rep   || req.body?.rep;
-      const month    = req.query?.month || req.body?.month; // e.g. "Apr-26" or "FY Total"
-      const lockType = req.query?.lock  || req.body?.lock;  // "Operation Lock" or "Financial Lock"
-      const status   = req.query?.status|| req.body?.status; // "pending" | "done" | "all"
-      if (!repName || !lockType) return res.status(400).json({ error: "rep and lock required" });
+      const repName    = req.query?.rep    || req.body?.rep;
+      const month      = req.query?.month  || req.body?.month;
+      const lockType   = req.query?.lock   || req.body?.lock;
+      const status     = req.query?.status || req.body?.status;
+      const entityType = req.query?.type   || req.body?.type || 'rep';
+      if (!repName || !lockType) return res.status(400).json({ error: 'rep and lock required' });
 
-      const ALL_JOB_COLLS = Object.values(COLLECTIONS);
-      const isFY = !month || month === "FY Total";
-
-      // Build date filter
-      let ds = null, de = null;
-      if (!isFY && month) {
-        const [mn, yr] = month.split("-");
-        const mi = MONTH_NAMES.indexOf(mn);
-        const y  = 2000 + parseInt(yr, 10);
-        const ld = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate();
-        ds = `${y}-${String(mi+1).padStart(2,"0")}-01`;
-        de = `${y}-${String(mi+1).padStart(2,"0")}-${ld}`;
-      } else {
-        ds = "2025-04-01"; de = "2027-03-31";
-      }
-
-      const normRep = normalizeName(repName);
-      const isGrandTotal = repName === 'Grand Total';
-      const isZone = !isGrandTotal && repName.match(/^IN[A-Z]?\d+/) || repName === 'Cross Sales';
-
-      // Load mapping to resolve zone membership
-      let repZoneMap = {};
-      if (isZone) {
-        const mRows = await db.collection("mapping_sales_targets").find({}, { projection: {"Sales Rep Name":1,"Display Name":1,"Zone":1} }).toArray();
+      // Load zone mapping for zone-level drill
+      const repZoneMap = {};
+      if (entityType === 'zone') {
+        const mRows = await db.collection('mapping_sales_targets').find(
+          {}, { projection: {'Sales Rep Name':1,'Display Name':1,'Zone':1} }
+        ).toArray();
         for (const r of mRows) {
-          const n = normalizeName(r["Sales Rep Name"]);
-          if (n) repZoneMap[n] = String(r["Zone"]||"").trim();
+          const n = normalizeName(r['Sales Rep Name'] || '');
+          if (n) repZoneMap[n] = String(r['Zone']||'').trim();
+          const d2 = normalizeName(r['Display Name'] || '');
+          if (d2) repZoneMap[d2] = String(r['Zone']||'').trim();
         }
       }
 
+      const normRep = normalizeName(repName);
+      const isFY = !month || month === 'FY Total';
+      let ds = '2025-04-01', de = '2027-03-31';
+      if (!isFY && month) {
+        const [mn, yr] = month.split('-');
+        const mi = MONTH_NAMES.indexOf(mn);
+        const y  = 2000 + parseInt(yr, 10);
+        const ld = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate();
+        ds = `${y}-${String(mi+1).padStart(2,'0')}-01`;
+        de = `${y}-${String(mi+1).padStart(2,'0')}-${ld}`;
+      }
+
+      const ALL_JOB_COLLS = Object.values(COLLECTIONS);
       const rows = [];
 
       await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
-        const isExport = collName.includes("export");
-        const isImport = collName.includes("import");
-        const dateField = isExport ? "ETD Loading Port" : isImport ? "ETA Discharge" : "Job Date";
-        const mf = ds ? { $or:[
-          { [dateField]: { $type: 2, $gte: ds, $lte: de + "\uffff" } },
-          { "Job Date":  { $type: 2, $gte: ds, $lte: de + "\uffff" } },
-        ]} : {};
+        const isExp = collName.includes('export');
+        const isImp = collName.includes('import');
+        const dateField = isExp ? 'ETD Loading Port' : isImp ? 'ETA Discharge' : 'Job Date';
+        const mf = { $or:[
+          { [dateField]: { $type:2, $gte:ds, $lte:de+'\uffff' } },
+          { 'Job Date':  { $type:2, $gte:ds, $lte:de+'\uffff' } },
+        ]};
 
         const jobs = await db.collection(collName).find(mf).toArray();
         for (const job of jobs) {
-          const sp = normalizeName(job["Sales Person"] || "");
-          // Entity filter
-          if (!isGrandTotal) {
-            if (isZone) {
-              const spZone = repZoneMap[sp] || "";
-              if (repName === 'Cross Sales') {
-                if (spZone && spZone !== 'Unassigned' && repZoneMap[sp]) continue; // skip mapped reps
-              } else {
-                if (spZone !== repName) continue;
-              }
-            } else {
-              if (sp !== normRep) continue;
-            }
-          }
+          const sp = normalizeName(job['Sales Person'] || '');
+          if (!sp) continue;
+          if (entityType === 'rep'  && sp !== normRep) continue;
+          if (entityType === 'zone' && (repZoneMap[sp]||'') !== repName) continue;
 
-          const rawDate = job[dateField] || job["Job Date"];
+          const rawDate = job[dateField] || job['Job Date'];
           if (!rawDate) continue;
           const d = new Date(rawDate);
           if (isNaN(d.getTime())) continue;
-          const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
-          if (!FY_MONTHS.includes(monthLabel)) continue;
+          const ml = MONTH_NAMES[d.getMonth()] + '-' + String(d.getFullYear()).slice(2);
+          if (!FY_MONTHS.includes(ml)) continue;
 
-          const isDone = job[lockType] && String(job[lockType]).trim() !== "";
-          if (status === "pending" && isDone)  continue;
-          if (status === "done"    && !isDone) continue;
+          const isDone = job[lockType] && String(job[lockType]).trim() !== '';
+          if (status === 'pending' && isDone)  continue;
+          if (status === 'done'    && !isDone) continue;
 
+          const cls = classifyRow(job, collName);
           rows.push({
-            shipmentNo:   job["Shipment No"]     || "—",
-            jobDate:      job["Job Date"]        || "",
-            lob: (function(){ const cls = classifyRow(job, collName); return cls.kind + (cls.direction ? " " + cls.direction : ""); })(),
-            customer:     job["Customer"]        || "",
-            jobOwner:     (job["Job Owner"]      || "").split("|")[0].trim(),
-            salesPerson:  (job["Sales Person"]   || "").split("|")[0].trim(),
-            location:     job["Location"]        || "",
-            carrier:      job["Carrier"] || job["Carrier Name"] || "",
-            etdLoading:   job["ETD Loading Port"]|| "",
-            etaDischarge: job["ETA Discharge"]   || "",
-            lockStatus:   isDone ? "Done" : "Pending",
-            lockValue:    job[lockType]          || "",
-            month:        monthLabel,
+            shipmentNo:   job['Shipment No']     || '—',
+            jobDate:      job['Job Date']        || '',
+            lob:          cls.kind + (cls.direction ? ' ' + cls.direction : ''),
+            customer:     String(job['Customer'] || '').trim() || '—',
+            jobOwner:     (job['Job Owner']      || '').split('|')[0].trim() || '—',
+            salesPerson:  (job['Sales Person']   || '').split('|')[0].trim() || '—',
+            location:     job['Location']        || '—',
+            carrier:      job['Carrier'] || job['Carrier Name'] || '—',
+            etdLoading:   job['ETD Loading Port']|| '',
+            etaDischarge: job['ETA Discharge']   || '',
+            lockStatus:   isDone ? 'Done' : 'Pending',
+            month:        ml,
           });
         }
       }));
 
       rows.sort((a, b) => new Date(b.jobDate) - new Date(a.jobDate));
-      return res.status(200).json({ success: true, rep: repName, month, lock: lockType, status, count: rows.length, rows });
+      return res.status(200).json({ success:true, rep:repName, month, lock:lockType, status, count:rows.length, rows });
     }
 
     if (action === "financeDebug") {
