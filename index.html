@@ -1580,7 +1580,12 @@ function zoneEntity(zoneName){
     gpProv:   idxs.map(function(i){ return sum(zReps.map(function(r){ return (r.gpProv&&r.gpProv[i])||0; })); }),
     gpActual: idxs.map(function(i){ return sum(zReps.map(function(r){ return (r.gpActual&&r.gpActual[i])||0; })); }),
     tank: (isWeekly ? wkeys : idxs).map(function(){ return 0; }),
-    tgt:  zoneTgtForView(zData, zReps)
+    tgt:         zoneTgtForView(zData, zReps),
+    weeklyTgt:   zData.weeklyTarget  || 0,
+    yearlyTgt:   zData.yearlyTarget  || 0,
+    dailyTgt:    zData.dailyTarget   || 0,
+    joinDate:    null,
+    exitDate:    null
   };
 }
 
@@ -1619,11 +1624,11 @@ function repTgtForView(r){
   return r.tgt || 0;
 }
 
-// Zone target for view — sum of rep targets
+// Zone target for view — use zone target directly (reps sum to it)
 function zoneTgtForView(zData, zReps){
   var v = state.reportView;
-  if (v === 'Weekly')  return sum(zReps.map(function(r){ return r.weeklyTgt||r.tgt||0; }));
-  if (v === 'Yearly')  return sum(zReps.map(function(r){ return r.yearlyTgt?(r.yearlyTgt/12):(r.tgt||0); }));
+  if (v === 'Weekly')  return zData.weeklyTarget  || sum(zReps.map(function(r){ return r.weeklyTgt||r.tgt||0; }));
+  if (v === 'Yearly')  return zData.yearlyTarget  ? (zData.yearlyTarget/12)  : sum(zReps.map(function(r){ return r.yearlyTgt?(r.yearlyTgt/12):(r.tgt||0); }));
   if (v === 'Custom')  return sum(zReps.map(function(r){ return repTgtForView(r); }));
   return zData.monthlyTarget || sum(zReps.map(function(r){ return r.tgt||0; }));
 }

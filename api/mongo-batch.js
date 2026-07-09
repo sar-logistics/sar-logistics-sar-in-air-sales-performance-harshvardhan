@@ -612,11 +612,18 @@ async function computeSalesAggregate(db) {
     const newMonthlyTarget = zTgtINR > 0 ? zTgtINR : zTgtUSD;
     const existing = zoneTargetsByFY[fy][zone];
     if (existing && existing.monthlyTarget > 0 && newMonthlyTarget === 0) continue;
-    const yearlyINR = parseFloat(row["Yearly Target (INR)"] || 0) || 0;
-    const yearlyUSD = (parseFloat(row["Yearly Target (USD)"] || 0) || 0) * USD_TO_INR;
+    const yearlyINR  = parseFloat(row["Yearly Target (INR)"]  || 0) || 0;
+    const yearlyUSD  = (parseFloat(row["Yearly Target (USD)"] || 0) || 0) * USD_TO_INR;
+    const weeklyINR  = parseFloat(row["Weekly Target (INR)"]  || 0) || 0;
+    const dailyINR   = parseFloat(row["Daily Target (INR)"]   || 0) || 0;
+    // Zonal Manager: display name in the last col — used to compute their target as remainder
+    const zonalMgr   = String(row["Zonal Manager"] || "").split("|")[0].trim();
     zoneTargetsByFY[fy][zone] = {
-      yearlyTarget:  yearlyINR > 0 ? yearlyINR : yearlyUSD,
+      yearlyTarget:  yearlyINR  > 0 ? yearlyINR  : yearlyUSD,
       monthlyTarget: newMonthlyTarget,
+      weeklyTarget:  weeklyINR,
+      dailyTarget:   dailyINR,
+      zonalManager:  zonalMgr,
     };
   }
 
@@ -888,11 +895,7 @@ async function computeSalesAggregate(db) {
     return bGP - aGP;
   });
 
-  // 5. Build zone summaries
-  // Zone targets: prefer FY27's value if present, else fall back to FY26's —
-  // since a single zone-summary row spans months from both fiscal years,
-  // there's no single "correct" FY to pull from; defaulting to the more
-  // recent year's target is the most useful choice for an at-a-glance number.
+  // 5. Build zone summaries + compute zonal manager target as remainder
   const zonesMap = {};
   for (const rep of repsRaw) {
     if (!zonesMap[rep.zone]) {
@@ -903,6 +906,9 @@ async function computeSalesAggregate(db) {
         zone: rep.zone,
         monthlyTarget: chosenTarget.monthlyTarget || 0,
         yearlyTarget:  chosenTarget.yearlyTarget  || 0,
+        weeklyTarget:  chosenTarget.weeklyTarget  || 0,
+        dailyTarget:   chosenTarget.dailyTarget   || 0,
+        zonalManager:  chosenTarget.zonalManager  || "",
         gp:   activeMonths.map(() => 0),
         ship: activeMonths.map(() => 0),
         tons: activeMonths.map(() => 0),
@@ -915,6 +921,29 @@ async function computeSalesAggregate(db) {
     rep.tons.forEach((v, i) => { zonesMap[rep.zone].tons[i] += v; });
     rep.teu.forEach((v, i)  => { zonesMap[rep.zone].teu[i]  += v; });
     rep.lcl.forEach((v, i)  => { zonesMap[rep.zone].lcl[i]  += v; });
+  }
+
+  // After building zonesMap, compute zonal manager target:
+  // ZM target = zone target - sum(all other reps' targets in that zone)
+  for (const [zoneName, zData] of Object.entries(zonesMap)) {
+    const zm = zData.zonalManager;
+    if (!zm) continue;
+    const zmNorm = normalizeName(zm);
+    const zoneReps = repsRaw.filter(r => r.zone === zoneName && !r.isBranch);
+    const otherReps = zoneReps.filter(r => normalizeName(r.name) !== zmNorm);
+    const zmRep = zoneReps.find(r => normalizeName(r.name) === zmNorm);
+    if (!zmRep) continue;
+
+    // Sum other reps' targets — override ZM's target with the remainder
+    const otherMonthly  = otherReps.reduce((s, r) => s + (r.tgt       || 0), 0);
+    const otherWeekly   = otherReps.reduce((s, r) => s + (r.weeklyTgt || 0), 0);
+    const otherYearly   = otherReps.reduce((s, r) => s + (r.yearlyTgt || 0), 0);
+    const otherDaily    = otherReps.reduce((s, r) => s + (r.dailyTgt  || 0), 0);
+
+    zmRep.tgt       = Math.max(0, (zData.monthlyTarget || 0) - otherMonthly);
+    zmRep.weeklyTgt = Math.max(0, (zData.weeklyTarget  || 0) - otherWeekly);
+    zmRep.yearlyTgt = Math.max(0, (zData.yearlyTarget  || 0) - otherYearly);
+    zmRep.dailyTgt  = Math.max(0, (zData.dailyTarget   || 0) - otherDaily);
   }
 
 
