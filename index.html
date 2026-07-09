@@ -579,7 +579,7 @@ function fetchLiveData(callback, force){
   var maxRetries = force ? 3 : 2;
 
   function attempt(retriesLeft){
-    fetch('/api/mongo-batch?action=sales' + (force ? '&force=1' : ''), {
+    fetch('/api/mongo-batch?action=sales' + (force ? '&force=1&bust=' + Date.now() : ''), {
       priority: 'high',
       cache: 'no-cache'
     })
