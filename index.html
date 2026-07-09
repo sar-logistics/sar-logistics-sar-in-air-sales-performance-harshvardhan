@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v21'; // v21: lifetime cache — DB-timestamp staleness instead of 2hr TTL
+var CACHE_VERSION = 'v22'; // v22: skip empty drill cache entries, force re-fetch
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -4862,8 +4862,8 @@ function openDrill(entity, metric, col, valueFmt){
   var cacheKey = entity+'||'+metric+'||'+col;
   var _drillLsKey = 'drill_'+cacheKey.replace(/[|]/g,'__');
 
-  // ── In-memory cache (fastest) ──
-  if (_drillResultCache[cacheKey]) {
+  // ── In-memory cache (fastest) — only use if has actual rows ──
+  if (_drillResultCache[cacheKey] && _drillResultCache[cacheKey].rows && _drillResultCache[cacheKey].rows.length > 0) {
     var cached = _drillResultCache[cacheKey];
     state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
       rows:cached.rows, count:cached.count, totalMetric:cached.totalMetric,
@@ -4873,9 +4873,9 @@ function openDrill(entity, metric, col, valueFmt){
     return;
   }
 
-  // ── localStorage cache ──
+  // ── localStorage cache — only use if has actual rows ──
   var lsDrill = lsGet(_drillLsKey);
-  if (lsDrill && lsDrill.success) {
+  if (lsDrill && lsDrill.success && lsDrill.rows && lsDrill.rows.length > 0) {
     _drillResultCache[cacheKey] = lsDrill;
     state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
       rows:lsDrill.rows, count:lsDrill.count, totalMetric:lsDrill.totalMetric,
