@@ -592,6 +592,8 @@ async function computeSalesAggregate(db) {
       weeklyTarget,
       yearlyTarget,
       dailyTarget,
+      joinDate:      row["Date of Joining"] ? new Date(row["Date of Joining"]) : null,
+      exitDate:      row["Date Of Exit"]    ? new Date(row["Date Of Exit"])    : null,
       email:         String(row["Email ID"] || "").toLowerCase().trim(),
     };
   }
@@ -844,6 +846,8 @@ async function computeSalesAggregate(db) {
       weeklyTgt:    meta.weeklyTarget  || 0,
       yearlyTgt:    meta.yearlyTarget  || 0,
       dailyTgt:     meta.dailyTarget   || 0,
+      joinDate:     meta.joinDate && !isNaN(meta.joinDate) ? meta.joinDate.toISOString().slice(0,10) : null,
+      exitDate:     meta.exitDate && !isNaN(meta.exitDate) ? meta.exitDate.toISOString().slice(0,10) : null,
       weekData: repWeekData[repKey] || {},
       lobData: repLobData[repKey] || {},
     });

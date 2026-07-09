@@ -1585,43 +1585,46 @@ function zoneEntity(zoneName){
 }
 
 // Returns the per-column target for a rep based on the current view
+// Active days in a date range clamped by rep join/exit dates
+function activeDaysInRange(rangeStart, rangeEnd, joinDate, exitDate){
+  var s = new Date(rangeStart), e = new Date(rangeEnd);
+  if (joinDate){ var j=new Date(joinDate); if(j>s) s=j; }
+  if (exitDate){ var x=new Date(exitDate); if(x<e) e=x; }
+  if (e<s) return 0;
+  return Math.round((e-s)/86400000)+1;
+}
+
+// Month label e.g. "Apr-26" → [firstDay, lastDay] as YYYY-MM-DD
+function monthBounds(m){
+  var MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var p=m.split('-'); var mn=MN.indexOf(p[0]); var y=2000+parseInt(p[1],10);
+  var ld=new Date(Date.UTC(y,mn+1,0)).getUTCDate();
+  return [y+'-'+String(mn+1).padStart(2,'0')+'-01',
+          y+'-'+String(mn+1).padStart(2,'0')+'-'+String(ld).padStart(2,'0')];
+}
+
 function repTgtForView(r){
   var v = state.reportView;
+  var join = r.joinDate || null;
+  var exit = r.exitDate || null;
+  var dailyT = r.dailyTgt || (r.tgt ? r.tgt/30 : 0);
+
   if (v === 'Weekly') return r.weeklyTgt || r.tgt || 0;
-  if (v === 'Yearly') {
-    return r.yearlyTgt ? (r.yearlyTgt / 12) : (r.tgt || 0);
+  if (v === 'Yearly') return r.yearlyTgt ? (r.yearlyTgt/12) : (r.tgt||0);
+  if (v === 'Custom' && state.customDateFrom && state.customDateTo) {
+    if (!dailyT) return 0;
+    return dailyT * activeDaysInRange(state.customDateFrom, state.customDateTo, join, exit);
   }
-  if (v === 'Custom') {
-    // Use dailyTgt if available; else derive from monthly (monthlyTarget / 30)
-    var dailyT = r.dailyTgt || (r.tgt ? r.tgt / 30 : 0);
-    if (dailyT && state.customDateFrom && state.customDateTo) {
-      var d1 = new Date(state.customDateFrom), d2 = new Date(state.customDateTo);
-      if (!isNaN(d1) && !isNaN(d2) && d2 >= d1) {
-        var days = Math.round((d2 - d1) / 86400000) + 1;
-        return dailyT * days;
-      }
-    }
-    return r.tgt || 0;
-  }
-  // Monthly / Quarterly / default → monthly target
+  // Monthly / Quarterly — return monthly target (per-month proration in dispTgt)
   return r.tgt || 0;
 }
 
 // Zone target for view — sum of rep targets
 function zoneTgtForView(zData, zReps){
   var v = state.reportView;
-  if (v === 'Weekly')  return sum(zReps.map(function(r){ return r.weeklyTgt || r.tgt || 0; }));
-  if (v === 'Yearly')  return sum(zReps.map(function(r){ return r.yearlyTgt ? (r.yearlyTgt/12) : (r.tgt||0); }));
-  if (v === 'Custom') {
-    var dailySumFn = function(r){ return r.dailyTgt || (r.tgt ? r.tgt/30 : 0); };
-    if (state.customDateFrom && state.customDateTo) {
-      var d1=new Date(state.customDateFrom), d2=new Date(state.customDateTo);
-      if(!isNaN(d1)&&!isNaN(d2)&&d2>=d1){
-        var days=Math.round((d2-d1)/86400000)+1;
-        return sum(zReps.map(function(r){ return dailySumFn(r)*days; }));
-      }
-    }
-  }
+  if (v === 'Weekly')  return sum(zReps.map(function(r){ return r.weeklyTgt||r.tgt||0; }));
+  if (v === 'Yearly')  return sum(zReps.map(function(r){ return r.yearlyTgt?(r.yearlyTgt/12):(r.tgt||0); }));
+  if (v === 'Custom')  return sum(zReps.map(function(r){ return repTgtForView(r); }));
   return zData.monthlyTarget || sum(zReps.map(function(r){ return r.tgt||0; }));
 }
 
@@ -1650,7 +1653,9 @@ function repEntity(r){
     gpActual: idxs.map(function(i){ return (r.gpActual&&r.gpActual[i])||0; }),
     tank: (isWeekly ? wkeys : idxs).map(function(){ return 0; }),
     tgt:  repTgtForView(r),
-    dailyTgt: r.dailyTgt || 0
+    dailyTgt: r.dailyTgt || 0,
+    joinDate: r.joinDate || null,
+    exitDate: r.exitDate || null
   };
 }
 
@@ -3765,10 +3770,24 @@ function tableRows(){
       dispTons = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.tons&&e.tons[i])||0; })); });
       dispTeus = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.teu&&e.teu[i])||0; })); });
       dispLcl  = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.lcl&&e.lcl[i])||0; })); });
-      dispTgt  = activeGroups.map(function(g){ return e.tgt * g.idxs.length; });
-      dispAch  = activeGroups.map(function(g){
+      dispTgt  = activeGroups.map(function(g){
+        // Sum per-month targets prorated by join/exit date
+        return sum(g.idxs.map(function(i){
+          var m = filteredMonths()[i];
+          if (!m) return e.tgt;
+          if (e.joinDate || e.exitDate) {
+            var bounds = monthBounds(m);
+            var active = activeDaysInRange(bounds[0], bounds[1], e.joinDate||null, e.exitDate||null);
+            if (active <= 0) return 0;
+            var total = Math.round((new Date(bounds[1])-new Date(bounds[0]))/86400000)+1;
+            return active < total ? Math.round(e.tgt * active / total) : e.tgt;
+          }
+          return e.tgt;
+        }));
+      });
+      dispAch  = activeGroups.map(function(g, gi){
         var gp  = sum(g.idxs.map(function(i){ return e.gp[i]||0; }));
-        var tgt = e.tgt * g.idxs.length;
+        var tgt = dispTgt[gi];
         return tgt > 0 ? Math.round(gp/tgt*100) : 0;
       });
     } else {
@@ -3780,17 +3799,37 @@ function tableRows(){
       dispTeus = e.teu  || e.gp.map(function(){ return 0; });
       dispLcl  = e.lcl  || e.gp.map(function(){ return 0; });
       dispTgt  = e.gp.map(function(_, ci){
-        // Custom view: dailyTarget × actual selected days (not full month)
-        if (state.reportView === 'Custom') {
-          var dailyT = e.dailyTgt || (e.tgt ? e.tgt / 30 : 0);
-          if (dailyT && state.customDateFrom && state.customDateTo) {
-            var d1c = new Date(state.customDateFrom), d2c = new Date(state.customDateTo);
-            if (!isNaN(d1c) && !isNaN(d2c) && d2c >= d1c) {
-              var selDays = Math.round((d2c - d1c) / 86400000) + 1;
-              return dailyT * selDays;
-            }
+        var v = state.reportView;
+        var join = e.joinDate || null;
+        var exit = e.exitDate || null;
+
+        if (v === 'Custom') {
+          // Custom: dailyTarget × active days in selected range
+          var dailyT = e.dailyTgt || (e.tgt ? e.tgt/30 : 0);
+          if (!dailyT) return 0;
+          if (state.customDateFrom && state.customDateTo) {
+            return dailyT * activeDaysInRange(state.customDateFrom, state.customDateTo, join, exit);
+          }
+          return 0;
+        }
+
+        if (v === 'Monthly' || v === 'Quarterly') {
+          // Per month column — prorate by join/exit if rep wasn't active all month
+          var m = filteredMonths()[ci];
+          if (m && (join || exit)) {
+            var bounds = monthBounds(m);
+            var active = activeDaysInRange(bounds[0], bounds[1], join, exit);
+            if (active <= 0) return 0;
+            var total = Math.round((new Date(bounds[1]) - new Date(bounds[0])) / 86400000) + 1;
+            return active < total ? Math.round(e.tgt * active / total) : e.tgt;
           }
         }
+
+        if (v === 'Weekly') {
+          // Per week — use weeklyTgt directly (weekly target already per-week)
+          return e.tgt;
+        }
+
         return e.tgt;
       });
       dispAch  = e.gp.map(function(v, ci){ var t = dispTgt[ci]; return t ? Math.round(v/t*100) : 0; });
