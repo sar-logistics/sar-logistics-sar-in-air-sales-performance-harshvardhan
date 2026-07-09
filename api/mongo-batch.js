@@ -614,14 +614,18 @@ async function computeSalesAggregate(db) {
     if (existing && existing.monthlyTarget > 0 && newMonthlyTarget === 0) continue;
     const yearlyINR  = parseFloat(row["Yearly Target (INR)"]  || 0) || 0;
     const yearlyUSD  = (parseFloat(row["Yearly Target (USD)"] || 0) || 0) * USD_TO_INR;
+    const finalYearly = yearlyINR > 0 ? yearlyINR : yearlyUSD;
     const weeklyINR  = parseFloat(row["Weekly Target (INR)"]  || 0) || 0;
-    const dailyINR   = parseFloat(row["Daily Target (INR)"]   || 0) || 0;
-    // Zonal Manager: display name in the last col — used to compute their target as remainder
+    const weeklyUSD  = (parseFloat(row["Weekly Target (USD)"] || 0) || 0) * USD_TO_INR;
+    const finalWeekly = weeklyINR > 0 ? weeklyINR : weeklyUSD;
+    // Daily = explicit col, or derive from yearly/365
+    const dailyINR   = parseFloat(row["Daily Target (INR)"]   || 0) || (finalYearly ? finalYearly / 365 : 0);
+    // Zonal Manager: display name — must match Display Name in sales rep mapping
     const zonalMgr   = String(row["Zonal Manager"] || "").split("|")[0].trim();
     zoneTargetsByFY[fy][zone] = {
-      yearlyTarget:  yearlyINR  > 0 ? yearlyINR  : yearlyUSD,
+      yearlyTarget:  finalYearly,
       monthlyTarget: newMonthlyTarget,
-      weeklyTarget:  weeklyINR,
+      weeklyTarget:  finalWeekly,
       dailyTarget:   dailyINR,
       zonalManager:  zonalMgr,
     };
@@ -930,20 +934,24 @@ async function computeSalesAggregate(db) {
     if (!zm) continue;
     const zmNorm = normalizeName(zm);
     const zoneReps = repsRaw.filter(r => r.zone === zoneName && !r.isBranch);
-    const otherReps = zoneReps.filter(r => normalizeName(r.name) !== zmNorm);
-    const zmRep = zoneReps.find(r => normalizeName(r.name) === zmNorm);
+    // Match ZM by normalized full name OR first word of name (handles "Aniket M" → "Aniket")
+    const zmFirstWord = zmNorm.split(" ")[0];
+    const zmRep = zoneReps.find(r => {
+      const rNorm = normalizeName(r.name);
+      return rNorm === zmNorm || rNorm.startsWith(zmFirstWord + " ") || rNorm === zmFirstWord;
+    });
     if (!zmRep) continue;
 
-    // Sum other reps' targets — override ZM's target with the remainder
+    const otherReps = zoneReps.filter(r => r !== zmRep);
     const otherMonthly  = otherReps.reduce((s, r) => s + (r.tgt       || 0), 0);
     const otherWeekly   = otherReps.reduce((s, r) => s + (r.weeklyTgt || 0), 0);
     const otherYearly   = otherReps.reduce((s, r) => s + (r.yearlyTgt || 0), 0);
     const otherDaily    = otherReps.reduce((s, r) => s + (r.dailyTgt  || 0), 0);
 
-    zmRep.tgt       = Math.max(0, (zData.monthlyTarget || 0) - otherMonthly);
-    zmRep.weeklyTgt = Math.max(0, (zData.weeklyTarget  || 0) - otherWeekly);
-    zmRep.yearlyTgt = Math.max(0, (zData.yearlyTarget  || 0) - otherYearly);
-    zmRep.dailyTgt  = Math.max(0, (zData.dailyTarget   || 0) - otherDaily);
+    zmRep.tgt       = Math.max(0, Math.round((zData.monthlyTarget || 0) - otherMonthly));
+    zmRep.weeklyTgt = Math.max(0, Math.round((zData.weeklyTarget  || 0) - otherWeekly));
+    zmRep.yearlyTgt = Math.max(0, Math.round((zData.yearlyTarget  || 0) - otherYearly));
+    zmRep.dailyTgt  = Math.max(0, Math.round(((zData.dailyTarget  || 0) - otherDaily) * 100) / 100);
   }
 
 
