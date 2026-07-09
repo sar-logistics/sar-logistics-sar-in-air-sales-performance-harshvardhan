@@ -1647,7 +1647,7 @@ function sidebar(){
         +'<span style="width:5px;height:5px;border-radius:50%;background:#22C574;display:inline-block;box-shadow:0 0 0 2px rgba(34,197,116,0.25);flex-shrink:0;"></span>'
         +'<span style="font-size:9.5px;font-weight:700;color:#3DD68C;white-space:nowrap;">Live</span>'
       +'</div>'
-      +'<button class="btnq" data-act="signOut" title="Sign Out" style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;color:rgba(255,255,255,0.5);transition:background 0.15s;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></button>'
+      
     +'</div>'
   +'</aside>';
 }
@@ -1973,7 +1973,7 @@ function topbar(){
       +'<div style="flex:1;min-width:8px;"></div>'
       // Refresh — pushed to the far right, filled accent style with stronger shadow
       +'<button data-act="refreshData" id="refresh-btn" class="btnq" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:8px 16px;font-size:11.5px;font-weight:700;color:#FFFFFF;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:0 2px 6px '+BRAND_A2+'45,0 1px 2px '+BRAND_A2+'30;"><svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s ease;flex-shrink:0;"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>'
-      // Spacer pushes Feedback + Sign Out to the right
+      // Spacer pushes Feedback + Refresh to the right
       +'<div style="flex:1;"></div>'
       +'<button data-act="feedbackOpen" class="btnq" style="display:flex;align-items:center;gap:5px;background:#FFFFFF;border:none;border-radius:999px;padding:6px 12px;font-size:11px;font-weight:700;color:#3C5275;cursor:pointer;flex-shrink:0;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Feedback</button>'
     +'</div>'
@@ -2392,7 +2392,7 @@ function customerPivotTable(lobData, activeLob, brandC) {
   tbody += '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;max-height:calc(100vh - 220px);overflow-y:auto;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 160px);overflow-y:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
     +'</div>'
   +'</div>';
@@ -2579,7 +2579,7 @@ function agentPivotTable(lobData, activeLob, brandC) {
   tbody += '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;max-height:calc(100vh - 220px);overflow-y:auto;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 160px);overflow-y:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
     +'</div>'
   +'</div>';
@@ -2853,7 +2853,7 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
     + '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;max-height:calc(100vh - 200px);overflow-y:auto;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 160px);overflow-y:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
     +'</div></div>';
 }
@@ -3206,7 +3206,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       +'</div>'
       +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
     +'</div>'
-    +'<div style="overflow-x:auto;max-height:calc(100vh - 330px);overflow-y:auto;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 230px);overflow-y:auto;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:700px;">'
         +thead
         +'<tbody>'+grandRows+bodyRows+'</tbody>'
@@ -3322,7 +3322,7 @@ function usagePage(){
     + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
   +'</div>'
   +'<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 340px);">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 240px);">'
     +'<table style="width:100%;border-collapse:collapse;">'
       +'<thead style="position:sticky;top:0;z-index:4;"><tr style="background:#F8FAFC;border-bottom:2px solid #E2E8F0;">'
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">#</th>'
@@ -4019,7 +4019,7 @@ function salesTable(M){
           : '<button data-act="page" data-val="leaderboard" class="btnq" style="display:flex;align-items:center;gap:6px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Leaderboard</button>')
       +'</div>'
     +'</div>'
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 280px);">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 200px);">'
       +'<table style="width:100%;border-collapse:collapse;min-width:850px;font-variant-numeric:tabular-nums;">'
         +'<thead style="position:sticky;top:0;z-index:4;">'+head+'</thead>'
         +'<tbody>'+body+'</tbody>'
@@ -4488,7 +4488,7 @@ function leaderboard(){
       +'</div>'
     +'</div>'
     // table
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 320px);">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 220px);">'
       +'<table style="width:100%;border-collapse:collapse;">'
         +'<thead style="position:sticky;top:0;z-index:4;background:#F4F7FB;">'
           +'<tr>'
