@@ -2113,6 +2113,20 @@ module.exports = async function handler(req, res) {
 
       const normRep = normalizeName(repName);
       const isFY = !month || month === 'FY Total';
+      const isRange = month && month.startsWith('RANGE:');
+
+      // Build month set for filtering
+      let allowedMonths = null; // null = all FY months
+      if (!isFY && !isRange && month) {
+        allowedMonths = new Set([month]);
+      } else if (isRange) {
+        const parts = month.split(':');
+        const fromM = parts[1], toM = parts[2];
+        const fi = FY_MONTHS.indexOf(fromM), ti = FY_MONTHS.indexOf(toM);
+        if (fi >= 0 && ti >= 0) {
+          allowedMonths = new Set(FY_MONTHS.slice(fi, ti + 1));
+        }
+      }
 
       const ALL_JOB_COLLS = Object.values(COLLECTIONS);
       const rows = [];
@@ -2142,9 +2156,8 @@ module.exports = async function handler(req, res) {
           if (isNaN(d.getTime())) continue;
           const ml = MONTH_NAMES[d.getMonth()] + '-' + String(d.getFullYear()).slice(2);
           if (!FY_MONTHS.includes(ml)) continue;
-
-          // Month filter in JS — matches computePendency behaviour
-          if (!isFY && ml !== month) continue;
+          // Month filter — null means all FY months, Set means specific months
+          if (allowedMonths && !allowedMonths.has(ml)) continue;
 
           const isDone = job[lockType] && String(job[lockType]).trim() !== '';
           if (status === 'pending' && isDone)  continue;

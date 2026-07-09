@@ -3053,8 +3053,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       var gtColor = gtV>0?'#0D2B5E':'#C5D0E0'; var gtFw = gtV>0?'700':'400';
       var gtStyle = 'padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+gtFw+';color:'+gtColor+';white-space:nowrap;background:#FCF3DA;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;'+(isLast&&bottomBorderStyle?rowBottomBorder:'');
       var gtDtype = isGrand ? 'grand' : (isZone ? 'zone' : 'rep');
+      // Use active column range for GT drill so it matches what the table shows
+      var gtMonth = activeCols.length > 0
+        ? (activeCols.length === 1 ? activeCols[0] : 'RANGE:'+activeCols[0]+':'+activeCols[activeCols.length-1])
+        : 'FY Total';
       var gtTd = entityName && gtV > 0
-        ? '<td class="pcell" data-act="pendencyDrill" data-rep="'+esc(entityName)+'" data-col="FY Total" data-status="'+esc(drillStatus||'all')+'" data-lock="'+esc(lockType||'')+'" data-type="'+esc(gtDtype)+'" style="'+gtStyle+'cursor:pointer;">'+gtV+'</td>'
+        ? '<td class="pcell" data-act="pendencyDrill" data-rep="'+esc(entityName)+'" data-col="'+esc(gtMonth)+'" data-status="'+esc(drillStatus||'all')+'" data-lock="'+esc(lockType||'')+'" data-type="'+esc(gtDtype)+'" style="'+gtStyle+'cursor:pointer;">'+gtV+'</td>'
         : '<td style="'+gtStyle+'">'+gtV+'</td>';
       return '<tr'+zgAttr+rgAttr+' style="background:'+rowBg+';'+rowTopBorder+(isLast&&bottomBorderStyle?rowBottomBorder:'')+hidden+'">'
         + nameTd
