@@ -2113,15 +2113,6 @@ module.exports = async function handler(req, res) {
 
       const normRep = normalizeName(repName);
       const isFY = !month || month === 'FY Total';
-      let ds = '2025-04-01', de = '2027-03-31';
-      if (!isFY && month) {
-        const [mn, yr] = month.split('-');
-        const mi = MONTH_NAMES.indexOf(mn);
-        const y  = 2000 + parseInt(yr, 10);
-        const ld = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate();
-        ds = `${y}-${String(mi+1).padStart(2,'0')}-01`;
-        de = `${y}-${String(mi+1).padStart(2,'0')}-${ld}`;
-      }
 
       const ALL_JOB_COLLS = Object.values(COLLECTIONS);
       const rows = [];
@@ -2130,12 +2121,15 @@ module.exports = async function handler(req, res) {
         const isExp = collName.includes('export');
         const isImp = collName.includes('import');
         const dateField = isExp ? 'ETD Loading Port' : isImp ? 'ETA Discharge' : 'Job Date';
-        const mf = { $or:[
-          { [dateField]: { $type:2, $gte:ds, $lte:de+'\uffff' } },
-          { 'Job Date':  { $type:2, $gte:ds, $lte:de+'\uffff' } },
-        ]};
 
-        const jobs = await db.collection(collName).find(mf).toArray();
+        // No date filter on MongoDB — match computePendency exactly
+        // Use lean projection to keep response small and avoid timeout
+        const jobs = await db.collection(collName).find(
+          {},
+          { projection: { 'Sales Person':1, 'Job Owner':1, 'Financial Lock':1, 'Operation Lock':1,
+            [dateField]:1, 'Job Date':1, 'Shipment No':1, 'Customer':1, 'Location':1,
+            'Carrier':1, 'Carrier Name':1, 'ETD Loading Port':1, 'ETA Discharge':1 } }
+        ).toArray();
         for (const job of jobs) {
           const sp = normalizeName(job['Sales Person'] || '');
           if (!sp) continue;
@@ -2148,6 +2142,9 @@ module.exports = async function handler(req, res) {
           if (isNaN(d.getTime())) continue;
           const ml = MONTH_NAMES[d.getMonth()] + '-' + String(d.getFullYear()).slice(2);
           if (!FY_MONTHS.includes(ml)) continue;
+
+          // Month filter in JS — matches computePendency behaviour
+          if (!isFY && ml !== month) continue;
 
           const isDone = job[lockType] && String(job[lockType]).trim() !== '';
           if (status === 'pending' && isDone)  continue;
