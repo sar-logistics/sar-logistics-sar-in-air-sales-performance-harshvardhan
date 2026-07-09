@@ -345,15 +345,35 @@ async function getDrillRows(db, entity, metric, month) {
       normByDisplayByFY[fy][displayName] = norm;
     }
 
-    // Build a date string filter covering the full 2-year FY window.
-    // This is broad enough for all drill requests but avoids loading
-    // documents outside our fiscal years (which would time out on Vercel).
-    const ds = "2025-04-01", de = "2027-03-31";
-    const mf = { $or:[
+    // Build a date string filter for the requested month window.
+    // Dates are stored as strings in MongoDB, so we use string gte/lte.
+    let ds = null, de = null;
+    if (month === "FY Total") { ds = "2025-04-01"; de = "2027-03-31"; }
+    else if (month?.startsWith("YEAR:")) { const y=2000+parseInt(month.split(":")[1],10); ds=`${y}-04-01`; de=`${y+1}-03-31`; }
+    else if (month?.startsWith("WEEK:")) {
+      const [iy,wn]=[parseInt(month.slice(5).split("-W")[0]),parseInt(month.slice(5).split("-W")[1])];
+      const j4=new Date(Date.UTC(iy,0,4)); const j4d=(j4.getUTCDay()+6)%7;
+      const w1m=new Date(j4); w1m.setUTCDate(j4.getUTCDate()-j4d);
+      const mon=new Date(w1m); mon.setUTCDate(w1m.getUTCDate()+(wn-1)*7);
+      const sun=new Date(mon); sun.setUTCDate(mon.getUTCDate()+6);
+      ds=mon.toISOString().slice(0,10); de=sun.toISOString().slice(0,10);
+    } else if (month?.startsWith("DATERANGE:")) { const b=month.split(":"); ds=b[1]; de=b[2]; }
+    else if (month?.startsWith("RANGE:")) {
+      const b=month.split(":"); const [mn1,yr1]=b[1].split("-"); const [mn2,yr2]=b[2].split("-");
+      const mi1=MONTH_NAMES.indexOf(mn1), y1=2000+parseInt(yr1,10);
+      const mi2=MONTH_NAMES.indexOf(mn2), y2=2000+parseInt(yr2,10);
+      const ld=new Date(Date.UTC(y2,mi2+1,0)).getUTCDate();
+      ds=`${y1}-${String(mi1+1).padStart(2,"0")}-01`; de=`${y2}-${String(mi2+1).padStart(2,"0")}-${ld}`;
+    } else if (month) {
+      const [mn,yr]=month.split("-"); const mi=MONTH_NAMES.indexOf(mn); const y=2000+parseInt(yr,10);
+      const ld=new Date(Date.UTC(y,mi+1,0)).getUTCDate();
+      ds=`${y}-${String(mi+1).padStart(2,"0")}-01`; de=`${y}-${String(mi+1).padStart(2,"0")}-${ld}`;
+    }
+    const mf = ds ? { $or:[
       {"ETD Loading Port":{$type:2,$gte:ds,$lte:de+"\uffff"}},
       {"ETA Discharge":   {$type:2,$gte:ds,$lte:de+"\uffff"}},
       {"Job Date":        {$type:2,$gte:ds,$lte:de+"\uffff"}},
-    ]};
+    ]} : {};
 
     const allResults = await Promise.all(
       JOB_COLLECTIONS.map(c => db.collection(c).find(mf).toArray().then(r => ({ collName: c, rows: r })))
@@ -518,7 +538,7 @@ async function getDrillRows(db, entity, metric, month) {
     count: matchedRows.length,
     totalMetric, totalGP,
     totalRevenue, totalCost: totalRevenue - totalGP,
-    rows: matchedRows,
+    rows: matchedRows.slice(0, 6000),
   };
 }
 
@@ -1904,13 +1924,10 @@ module.exports = async function handler(req, res) {
   if (action === "ping") {
     const db = await getDB();
     const now2 = Date.now();
-    // Build salesCache synchronously if cold or expiring
+    // Build salesCache synchronously if cold or expiring — this keeps the cache
+    // warm so that the next ?action=sales request is served instantly from memory.
     if (!salesCache || (now2 - salesCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
       await getSalesAggregate(db, false).catch(() => {});
-    }
-    // Also warm drillRowsCache if cold — avoids slow first drill click
-    if (!drillRowsCache || (now2 - drillRowsCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
-      getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => {});
     }
     return res.status(200).json({ ok: true, ts: now2, cached: !!salesCache });
   }
