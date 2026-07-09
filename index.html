@@ -599,6 +599,10 @@ function fetchLiveData(callback, force){
             allDrillRows = data.allDrillRows;
             lsSet('drillrows', { rows: allDrillRows });
           }
+          // If allDrillRows not in sales response, fetch it silently in background
+          if (!allDrillRows) {
+            setTimeout(function(){ loadDrillData(null); }, 1000);
+          }
           console.log('✅ Live data:', repsRawOriginal.length, 'reps, tgt[0]=', repsRawOriginal[0] && repsRawOriginal[0].tgt);
           if (callback) callback();
         } else if (retriesLeft > 0) {
@@ -4855,45 +4859,70 @@ function computeDrillResult(entity, metric, month){
 var _drillResultCache = {}; // "entity||metric||month" → result
 
 function openDrill(entity, metric, col, valueFmt){
+  var cacheKey = entity+'||'+metric+'||'+col;
+  var _drillLsKey = 'drill_'+cacheKey.replace(/[|]/g,'__');
+
+  // ── Fast path: allDrillRows in memory → compute instantly, no spinner ──
+  if (allDrillRows) {
+    var result = _drillResultCache[cacheKey];
+    if (!result) {
+      result = computeDrillResult(entity, metric, col);
+      if (result) {
+        _drillResultCache[cacheKey] = result;
+        try { lsSet(_drillLsKey, result); } catch(e){}
+      }
+    }
+    if (result) {
+      state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
+        rows:result.rows, count:result.count, totalMetric:result.totalMetric,
+        totalGP:result.totalGP, totalRevenue:result.totalRevenue||0,
+        totalCost:result.totalCost||0, lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
+      render();
+      return;
+    }
+  }
+
+  // ── Check in-memory cache ──
+  if (_drillResultCache[cacheKey]) {
+    var cached = _drillResultCache[cacheKey];
+    state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
+      rows:cached.rows, count:cached.count, totalMetric:cached.totalMetric,
+      totalGP:cached.totalGP, totalRevenue:cached.totalRevenue||0,
+      totalCost:cached.totalCost||0, lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
+    render();
+    return;
+  }
+
+  // ── Check localStorage ──
+  var lsDrill = lsGet(_drillLsKey);
+  if (lsDrill && lsDrill.success) {
+    _drillResultCache[cacheKey] = lsDrill;
+    state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
+      rows:lsDrill.rows, count:lsDrill.count, totalMetric:lsDrill.totalMetric,
+      totalGP:lsDrill.totalGP, totalRevenue:lsDrill.totalRevenue||0,
+      totalCost:lsDrill.totalCost||0, lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
+    render();
+    return;
+  }
+
+  // ── Fallback: show spinner + fetch allDrillRows then compute ──
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
     lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
   render();
 
-  var cacheKey = entity+'||'+metric+'||'+col;
-  var _drillLsKey = 'drill_'+cacheKey.replace(/[|]/g,'__');
-  if (_drillResultCache[cacheKey]) {
-    // Instant — served from browser cache, zero network
-    var cached = _drillResultCache[cacheKey];
-    state.drill.loading=false; state.drill.rows=cached.rows; state.drill.count=cached.count;
-    state.drill.totalMetric=cached.totalMetric; state.drill.totalGP=cached.totalGP;
-    state.drill.totalRevenue=cached.totalRevenue||0; state.drill.totalCost=cached.totalCost||0;
+  loadDrillData(function(){
+    var result2 = computeDrillResult(entity, metric, col);
+    if (result2) {
+      _drillResultCache[cacheKey] = result2;
+      try { lsSet(_drillLsKey, result2); } catch(e){}
+      state.drill.loading=false; state.drill.rows=result2.rows; state.drill.count=result2.count;
+      state.drill.totalMetric=result2.totalMetric; state.drill.totalGP=result2.totalGP;
+      state.drill.totalRevenue=result2.totalRevenue||0; state.drill.totalCost=result2.totalCost||0;
+    } else {
+      state.drill.loading=false; state.drill.error='No data found.';
+    }
     render();
-    return;
-  }
-  // Check localStorage before hitting network
-  var lsDrill = lsGet(_drillLsKey);
-  if (lsDrill && lsDrill.success) {
-    _drillResultCache[cacheKey] = lsDrill;
-    state.drill.loading=false; state.drill.rows=lsDrill.rows; state.drill.count=lsDrill.count;
-    state.drill.totalMetric=lsDrill.totalMetric; state.drill.totalGP=lsDrill.totalGP;
-    state.drill.totalRevenue=lsDrill.totalRevenue||0; state.drill.totalCost=lsDrill.totalCost||0;
-    render();
-    return;
-  }
-
-  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col);
-  fetch('/api/mongo-batch'+qs, { priority:'high' })
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (!data.success) { state.drill.loading=false; state.drill.error=data.error||'Failed.'; render(); return; }
-      _drillResultCache[cacheKey] = data;
-      try { lsSet(_drillLsKey, data); } catch(e){} // persist for lifetime
-      state.drill.loading=false; state.drill.rows=data.rows; state.drill.count=data.count;
-      state.drill.totalMetric=data.totalMetric; state.drill.totalGP=data.totalGP;
-      state.drill.totalRevenue=data.totalRevenue||0; state.drill.totalCost=data.totalCost||0;
-      render();
-    })
-    .catch(function(){ state.drill.loading=false; state.drill.error='Could not reach the server.'; render(); });
+  });
 }
 
 // Live-filters the option checklist inside an open drill column-filter popup
