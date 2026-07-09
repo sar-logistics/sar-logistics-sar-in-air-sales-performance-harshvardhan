@@ -3799,8 +3799,8 @@ function tableRows(){
       var isGP   = toggleType === 'gp';
       var isOpen = isShip ? shipOpen : isGP ? gpOpen : false;
       var arrowChar = (isShip || isGP) ? (isOpen ? '◄ ' : '► ') : '';
-      // Individual reps have no real target data — show dash for Target/Achievement rows
-      var noTarget = isRep && (label === 'Target' || label === 'Achievement %');
+      // Only hide target/achievement if rep has no target set
+      var noTarget = isRep && !e.tgt;
 
       // rawColKeys: what gets sent to the drill API as month parameter
       // Yearly view: year label "2025" → must resolve to "FY Total" for year col,
