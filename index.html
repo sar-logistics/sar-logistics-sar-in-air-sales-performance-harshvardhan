@@ -1492,7 +1492,7 @@ function model(){
     var shipGrand = sum(repsRaw.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0;}));}));
     var tonsGrand = sum(repsRaw.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0;}));}));
     var teusGrand = sum(repsRaw.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0;}));}));
-    var tgtGrand  = sum(zonesRaw.map(function(z){return (z.monthlyTarget||0);})); // 1 month target
+    var tgtGrand  = sum(repsRaw.filter(function(r){return !r.isBranch;}).map(function(r){ return r.weeklyTgt||0; }));
     var achGrand  = tgtGrand > 0 ? Math.round(gpGrand / tgtGrand * 100) : 0;
     return {gpGrand:gpGrand, shipGrand:shipGrand, tonsGrand:tonsGrand, tgtGrand:tgtGrand, achGrand:achGrand, teusGrand:teusGrand};
   }
@@ -1500,7 +1500,7 @@ function model(){
   var gpGrand   = sum(repsRaw.map(function(r){return sum(idxs.map(function(i){return r.gp[i]||0;}));}));
   var shipGrand = sum(repsRaw.map(function(r){return sum(idxs.map(function(i){return r.ship[i]||0;}));}));
   var tonsGrand = sum(repsRaw.map(function(r){return sum(idxs.map(function(i){return (r.tons&&r.tons[i])||0;}));}));
-  var tgtGrand  = sum(zonesRaw.map(function(z){return (z.monthlyTarget||0) * idxs.length;}));
+  var tgtGrand  = sum(repsRaw.filter(function(r){return !r.isBranch;}).map(function(r){ return repTgtForView(r) * idxs.length; }));
   var achGrand  = tgtGrand > 0 ? Math.round(gpGrand / tgtGrand * 100) : 0;
   var teusGrand = sum(repsRaw.map(function(r){return sum(idxs.map(function(i){return (r.teu&&r.teu[i])||0;}));}));
   return {gpGrand:gpGrand, shipGrand:shipGrand, tonsGrand:tonsGrand, tgtGrand:tgtGrand, achGrand:achGrand, teusGrand:teusGrand};
@@ -1530,7 +1530,7 @@ function grandEntity(){
     gpProv:   idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.gpProv&&r.gpProv[i])||0;}));}),
     gpActual: idxs.map(function(i){return sum(repsRaw.map(function(r){return (r.gpActual&&r.gpActual[i])||0;}));}),
     tank: (isWeekly ? wkeys : idxs).map(function(){return 0;}),
-    tgt:  sum(zonesRaw.map(function(z){return z.monthlyTarget||0;}))
+    tgt:  sum(repsRaw.filter(function(r){return !r.isBranch;}).map(function(r){ return repTgtForView(r); }))
   };
 }
 
@@ -1580,8 +1580,44 @@ function zoneEntity(zoneName){
     gpProv:   idxs.map(function(i){ return sum(zReps.map(function(r){ return (r.gpProv&&r.gpProv[i])||0; })); }),
     gpActual: idxs.map(function(i){ return sum(zReps.map(function(r){ return (r.gpActual&&r.gpActual[i])||0; })); }),
     tank: (isWeekly ? wkeys : idxs).map(function(){ return 0; }),
-    tgt:  zData.monthlyTarget || sum(zReps.map(function(r){ return r.tgt; }))
+    tgt:  zoneTgtForView(zData, zReps)
   };
+}
+
+// Returns the per-column target for a rep based on the current view
+function repTgtForView(r){
+  var v = state.reportView;
+  if (v === 'Weekly') return r.weeklyTgt || 0;
+  if (v === 'Yearly') {
+    // yearlyTarget is the full-year target; monthly groups multiply by idxs.length
+    // so we return monthlyTarget (yearlyTarget / 12) to get correct yearly total
+    return r.yearlyTgt ? (r.yearlyTgt / 12) : (r.tgt || 0);
+  }
+  if (v === 'Custom' && state.customDateFrom && state.customDateTo) {
+    // dailyTarget × days in the custom range
+    var d1 = new Date(state.customDateFrom), d2 = new Date(state.customDateTo);
+    if (!isNaN(d1) && !isNaN(d2) && d2 >= d1) {
+      var days = Math.round((d2 - d1) / 86400000) + 1;
+      return (r.dailyTgt || 0) * days;
+    }
+  }
+  // Monthly / Quarterly / default → monthly target
+  return r.tgt || 0;
+}
+
+// Zone target for view — sum of rep targets
+function zoneTgtForView(zData, zReps){
+  var v = state.reportView;
+  if (v === 'Weekly')  return sum(zReps.map(function(r){ return r.weeklyTgt||0; }));
+  if (v === 'Yearly')  return sum(zReps.map(function(r){ return r.yearlyTgt ? (r.yearlyTgt/12) : (r.tgt||0); }));
+  if (v === 'Custom' && state.customDateFrom && state.customDateTo) {
+    var d1=new Date(state.customDateFrom), d2=new Date(state.customDateTo);
+    if(!isNaN(d1)&&!isNaN(d2)&&d2>=d1){
+      var days=Math.round((d2-d1)/86400000)+1;
+      return sum(zReps.map(function(r){ return (r.dailyTgt||0)*days; }));
+    }
+  }
+  return zData.monthlyTarget || sum(zReps.map(function(r){ return r.tgt||0; }));
 }
 
 function zoneHue(zone){
@@ -1608,7 +1644,8 @@ function repEntity(r){
     gpProv:   idxs.map(function(i){ return (r.gpProv  &&r.gpProv[i]  )||0; }),
     gpActual: idxs.map(function(i){ return (r.gpActual&&r.gpActual[i])||0; }),
     tank: (isWeekly ? wkeys : idxs).map(function(){ return 0; }),
-    tgt:  r.tgt
+    tgt:  repTgtForView(r),
+    dailyTgt: r.dailyTgt || 0
   };
 }
 
@@ -3706,7 +3743,7 @@ function tableRows(){
     var shipOpen = state.shipOpen[e.name] === true;
     var gpOpen   = state.gpOpen[e.name]   === true;
 
-    var achFy = e.tgt > 0 ? Math.round(sum(e.gp) / (e.tgt * e.gp.length) * 100) : 0;
+    var achFy = e.tgt > 0 ? Math.round(sum(e.gp) / (e.tgt * (e.gp.length||1)) * 100) : 0;
 
     // Zone-level background
     var groupBg = isGrand ? '#EEF3FC' : isZone ? '#F0F4FB' : '#FFFFFF';
@@ -3737,8 +3774,19 @@ function tableRows(){
       dispTons = e.tons || e.gp.map(function(){ return 0; });
       dispTeus = e.teu  || e.gp.map(function(){ return 0; });
       dispLcl  = e.lcl  || e.gp.map(function(){ return 0; });
-      dispTgt  = e.gp.map(function(){ return e.tgt; });
-      dispAch  = e.gp.map(function(v){ return e.tgt ? Math.round(v/e.tgt*100) : 0; });
+      dispTgt  = e.gp.map(function(_, ci){
+        // Custom view: dailyTarget × days in that specific month
+        if (state.reportView === 'Custom' && e.dailyTgt) {
+          var m = filteredMonths()[ci];
+          if (m) {
+            var p = m.split('-'); var mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(p[0]); var y = 2000+parseInt(p[1],10);
+            var daysInM = new Date(y, mn+1, 0).getDate();
+            return e.dailyTgt * daysInM;
+          }
+        }
+        return e.tgt;
+      });
+      dispAch  = e.gp.map(function(v, ci){ var t = dispTgt[ci]; return t ? Math.round(v/t*100) : 0; });
     }
 
     var teus    = dispTeus;

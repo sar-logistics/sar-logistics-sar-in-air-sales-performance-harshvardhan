@@ -578,6 +578,9 @@ async function computeSalesAggregate(db) {
     const tgtINR = parseFloat(row["Monthly Target (INR)"] || 0) || 0;
     const tgtUSD = (parseFloat(row["Monhtly Target (USD)"] || row["Monthly Target (USD)"] || 0) || 0) * USD_TO_INR;
     const monthlyTarget = tgtINR > 0 ? tgtINR : tgtUSD;
+    const weeklyTarget  = parseFloat(row["Weekly Target (INR)"]  || 0) || 0;
+    const yearlyTarget  = parseFloat(row["Yearly Target (INR)"]  || 0) || 0;
+    const dailyTarget   = parseFloat(row["Daily Target (INR)"]   || 0) || 0;
     const existing = repLookupByFY[fy][key];
     // Overwrite unless existing has a target and new one doesn't
     if (existing && existing.monthlyTarget > 0 && monthlyTarget === 0) continue;
@@ -586,6 +589,9 @@ async function computeSalesAggregate(db) {
       zone:          String(row["Zone"] || "Unassigned").trim(),
       lob:           String(row["LOB"] || "").trim(),
       monthlyTarget,
+      weeklyTarget,
+      yearlyTarget,
+      dailyTarget,
       email:         String(row["Email ID"] || "").toLowerCase().trim(),
     };
   }
@@ -823,7 +829,7 @@ async function computeSalesAggregate(db) {
     const teu  = activeMonths.map(m => Math.round((monthData[m]?.teu  || 0) * 100) / 100);
     const lcl  = activeMonths.map(m => Math.round((monthData[m]?.lcl  || 0) * 100) / 100);
 
-    // Use rep's own monthly target directly from the mapping sheet
+    // Use rep's own targets directly from the mapping sheet
     const repTgt = meta.monthlyTarget || 0;
 
     repsRaw.push({
@@ -834,7 +840,10 @@ async function computeSalesAggregate(db) {
       hue:   zoneHue(meta.zone),
       gp, gpProv, gpActual, ship, tons, teu, lcl,
       tank:  activeMonths.map(() => 0),
-      tgt:   repTgt,
+      tgt:          repTgt,
+      weeklyTgt:    meta.weeklyTarget  || 0,
+      yearlyTgt:    meta.yearlyTarget  || 0,
+      dailyTgt:     meta.dailyTarget   || 0,
       weekData: repWeekData[repKey] || {},
       lobData: repLobData[repKey] || {},
     });
