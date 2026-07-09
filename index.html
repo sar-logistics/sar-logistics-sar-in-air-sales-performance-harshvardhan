@@ -4905,7 +4905,7 @@ var _idb = null;
 function idbOpen(cb){
   if (_idb) { cb(_idb); return; }
   try {
-    var req = indexedDB.open('sar_drill_v2', 1);
+    var req = indexedDB.open('sar_drill_v3', 1);
     req.onupgradeneeded = function(e){ e.target.result.createObjectStore('drill', {keyPath:'k'}); };
     req.onsuccess = function(e){ _idb = e.target.result; cb(_idb); };
     req.onerror = function(){ cb(null); };
@@ -4939,8 +4939,7 @@ function idbClear(){
 }
 
 function openDrill(entity, metric, col, valueFmt){
-  var lobStr = (state.filterLobs||[]).slice().sort().join(',');
-  var cacheKey = entity+'||'+metric+'||'+col+'||'+lobStr;
+  var cacheKey = entity+'||'+metric+'||'+col;
 
   // 1. In-memory (instant, same-session repeat click)
   var mem = _drillResultCache[cacheKey];
