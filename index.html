@@ -1107,7 +1107,7 @@ function updateUserField(email, fields, callback){
     });
 }
 
-var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'', dateTo:'', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:1, agentLob:'Air', agentView:'chart', agentSortCol:'gp', agentSortDir:1, tradelaneLob:'Air', tradelaneView:'chart', tradelaneSortCol:'gp', tradelaneSortDir:-1, tradelaneShipOpen:{},
+var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'', dateTo:'', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, pendencyDrill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:1, agentLob:'Air', agentView:'chart', agentSortCol:'gp', agentSortDir:1, tradelaneLob:'Air', tradelaneView:'chart', tradelaneSortCol:'gp', tradelaneSortDir:-1, tradelaneShipOpen:{},
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
   addUserOpen: false, addUserError: '', addUserDefaultRole: '',
   weeklyMonth: null,
@@ -2909,7 +2909,7 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
 
 
 /* ====================== FINANCE PENDENCY ====================== */
-function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobOwners){
+function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobOwners, lockType){
   var d = data;
   var isWeekly = state.reportView === 'Weekly';
   var activeCols, colHeaders;
@@ -3017,26 +3017,33 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     +'</tr></thead>';
 
   // number cell — same monospace + sizing as sales table
-  function numCell(v, bg){
+  function numCell(v, bg, drillRep, drillCol, drillStatus, drillLock){
     var color = v > 0 ? '#0D2B5E' : '#C5D0E0';
     var fw = v > 0 ? '700' : '400';
     var s = 'padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+fw+';color:'+color+';white-space:nowrap;'+(bg?'background:'+bg+';':'');
+    if (drillRep && v > 0) {
+      return '<td class="pcell" data-act="pendencyDrill" data-rep="'+esc(drillRep)+'" data-col="'+esc(drillCol)+'" data-status="'+esc(drillStatus)+'" data-lock="'+esc(drillLock)+'" style="'+s+'cursor:pointer;">'+v+'</td>';
+    }
     return '<td style="'+s+'">'+v+'</td>';
   }
 
-  function metricRows(data, nameEl, rowBg, isZone, zoneGroup, repGroup, isGrand, entityName, avatarEl, nameLabel, toggleEl, leftAccent, topBorderStyle, bottomBorderStyle){
+  function metricRows(data, nameEl, rowBg, isZone, zoneGroup, repGroup, isGrand, entityName, avatarEl, nameLabel, toggleEl, leftAccent, topBorderStyle, bottomBorderStyle, drillRepName, lockType){
     var isZoneCollapsed = zoneGroup && state.pendencyZoneOpen[zoneGroup] === false;
     var isRepCollapsed  = repGroup  && state.pendencyZoneOpen[repGroup]  === false;
     var hidden = (isZoneCollapsed||isRepCollapsed) ? 'display:none;' : '';
     var zgAttr = zoneGroup ? ' data-zone-group="'+esc(zoneGroup)+'"' : '';
     var rgAttr = repGroup  ? ' data-rep-group="'+esc(repGroup)+'"'   : '';
 
-    function mRow(label, icon, getV, total, idx){
+    function mRow(label, icon, getV, total, idx, drillStatus){
       var isMiddle = idx === 1; // middle row of 3 — show name content
       var isLast   = idx === 2;
       var rowTopBorder = idx === 0 ? topBorderStyle : 'border-top:1px solid #EEF1F6;';
       var rowBottomBorder = (isLast && bottomBorderStyle) ? bottomBorderStyle : '';
-      var colCells = data.colData.map(function(cd){ return numCell(getV(cd)); }).join('');
+      var colCells = data.colData.map(function(cd, ci){
+        var v = getV(cd);
+        var col = activeCols[ci] || '';
+        return numCell(v, null, drillRepName||null, col, drillStatus||null, lockType||null);
+      }).join('');
       // Sticky name cell
       var nameAccent = leftAccent || 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';';
       var nameTd = isMiddle
@@ -3050,9 +3057,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         + colCells
         +'</tr>';
     }
-    return mRow(pendingLabel,'\uD83D\uDD34', function(cd){ return cd.pending||0; }, data.totalPending, 0)
-         + mRow(doneLabel,   '\u2705',       function(cd){ return cd.done||0;    }, data.totalDone,    1)
-         + mRow('Total Jobs','\uD83D\uDCCA', function(cd){ return (cd.pending||0)+(cd.done||0); }, data.total, 2);
+    return mRow(pendingLabel,'\uD83D\uDD34', function(cd){ return cd.pending||0; }, data.totalPending, 0, 'pending')
+         + mRow(doneLabel,   '\u2705',       function(cd){ return cd.done||0;    }, data.totalDone,    1, 'done')
+         + mRow('Total Jobs','\uD83D\uDCCA', function(cd){ return (cd.pending||0)+(cd.done||0); }, data.total, 2, 'all');
   }
 
   var grandData = { colData: gtColData, totalPending: gtPending, totalDone: gtDone, total: gtTotal };
@@ -3166,7 +3173,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
               +(repCollapsed ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>' : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>')
               +'</div>'
             : '';
-          bodyRows += metricRows(rep, null, '#FDFCFF', false, 'Cross Sales', branchKey, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #C4B5FD;');
+          bodyRows += metricRows(rep, null, '#FDFCFF', false, 'Cross Sales', branchKey, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #C4B5FD;', null, rep.name, lockType);
 
           // Job Owners under rep
           if (hasOwners && !repCollapsed) {
@@ -3207,7 +3214,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           +(repCollapsed ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>' : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>')
           +'</div>'
         : '';
-      bodyRows += metricRows(rep, null, '#FFFFFF', false, zone, null, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #9AA6B8;');
+      bodyRows += metricRows(rep, null, '#FFFFFF', false, zone, null, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #9AA6B8;', null, rep.name, lockType);
 
       // Job owners nested under rep (OL page only)
       if (hasOwners && !repCollapsed) {
@@ -3276,7 +3283,7 @@ function financePage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading finance pendency…</div>'
       +'</div>';
   }
-  return pendencyPage(financeData, 'Finance Pendency', 'FL Pending Jobs', 'FL Done Jobs', '#1D5FCC');
+  return pendencyPage(financeData, 'Finance Pendency', 'FL Pending Jobs', 'FL Done Jobs', '#1D5FCC', false, 'Financial Lock');
 }
 
 
@@ -3292,7 +3299,7 @@ function opPage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading operation pendency…</div>'
       +'</div>';
   }
-  return pendencyPage(opData, 'Operation Pendency', 'OL Pending Jobs', 'OL Done Jobs', '#7C3AED', true);
+  return pendencyPage(opData, 'Operation Pendency', 'OL Pending Jobs', 'OL Done Jobs', '#7C3AED', true, 'Operation Lock');
 }
 
 /* ====================== USAGE ANALYTICS ====================== */
@@ -4708,7 +4715,7 @@ function render(){
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
-  document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal();
+  document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
   if(scrollTop) mainEl.scrollTop=scrollTop;
   if(innerScrollTop){ var newInner=mainEl.querySelector('div[style*="overflow-y:auto"]'); if(newInner) newInner.scrollTop=innerScrollTop; }
   requestAnimationFrame(positionAllDrops);
@@ -4943,6 +4950,114 @@ function openDrill(entity, metric, col, valueFmt){
       render();
     })
     .catch(function(){ state.drill.loading=false; state.drill.error='Could not reach the server.'; render(); });
+}
+
+
+// ── Pendency Drill-through ────────────────────────────────────────────────────
+var _pendencyDrillCache = {}; // rep||month||status||lock → rows
+
+function openPendencyDrill(rep, col, status, lock){
+  var cacheKey = rep+'||'+col+'||'+status+'||'+lock;
+  state.pendencyDrill = { rep:rep, col:col, status:status, lock:lock, loading:true, rows:null, error:null };
+  render();
+
+  if (_pendencyDrillCache[cacheKey]) {
+    var c = _pendencyDrillCache[cacheKey];
+    state.pendencyDrill.loading=false; state.pendencyDrill.rows=c.rows; state.pendencyDrill.count=c.count;
+    render(); return;
+  }
+
+  var qs = '?action=pendencyDrill&rep='+encodeURIComponent(rep)+'&month='+encodeURIComponent(col)+'&status='+encodeURIComponent(status)+'&lock='+encodeURIComponent(lock);
+  fetch('/api/mongo-batch'+qs)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (!data.success) { state.pendencyDrill.loading=false; state.pendencyDrill.error=data.error||'Failed.'; render(); return; }
+      _pendencyDrillCache[cacheKey] = data;
+      state.pendencyDrill.loading=false; state.pendencyDrill.rows=data.rows; state.pendencyDrill.count=data.count;
+      render();
+    })
+    .catch(function(){ state.pendencyDrill.loading=false; state.pendencyDrill.error='Could not reach the server.'; render(); });
+}
+
+function pendencyDrillDrawer(){
+  var pd = state.pendencyDrill;
+  if (!pd) return '';
+  var statusLabel = pd.status==='pending' ? '🔴 Pending' : pd.status==='done' ? '✅ Done' : '📊 All Jobs';
+  var title = pd.rep+' — '+statusLabel+' — '+(pd.col||'All Months');
+  var lockLabel = pd.lock==='Operation Lock' ? 'OL' : 'FL';
+
+  var body = '';
+  if (pd.loading) {
+    body = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:12px;">'
+      +'<div class="login-spinner" style="width:28px;height:28px;border-width:3px;"></div>'
+      +'<div style="font-size:12px;color:#9AAFC8;font-weight:600;">Loading jobs…</div>'
+      +'</div>';
+  } else if (pd.error) {
+    body = '<div style="padding:40px;text-align:center;color:#DC2626;font-size:13px;font-weight:600;">'+esc(pd.error)+'</div>';
+  } else if (!pd.rows || pd.rows.length === 0) {
+    body = '<div style="padding:40px;text-align:center;color:#9AAFC8;font-size:13px;">No jobs found.</div>';
+  } else {
+    var cols = [
+      {k:'shipmentNo', l:'Shipment No', w:130},
+      {k:'jobDate',    l:'Job Date',    w:100},
+      {k:'lob',        l:'LOB',         w:120},
+      {k:'customer',   l:'Customer',    w:160},
+      {k:'jobOwner',   l:'Job Owner',   w:130},
+      {k:'carrier',    l:'Carrier',     w:120},
+      {k:'location',   l:'Location',    w:100},
+      {k:'lockStatus', l:lockLabel+' Status', w:110},
+      {k:'etdLoading', l:'ETD Loading', w:110},
+      {k:'etaDischarge',l:'ETA Discharge',w:110},
+    ];
+    var PDBORDER = '#D5DCE6';
+    var thead = '<thead style="position:sticky;top:0;z-index:3;"><tr>'
+      +cols.map(function(c){ return '<th style="background:#F0F4FA;padding:8px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid '+PDBORDER+';white-space:nowrap;min-width:'+c.w+'px;">'+c.l+'</th>'; }).join('')
+      +'</tr></thead>';
+    var renderRows = pd._showAll ? pd.rows : pd.rows.slice(0, 500);
+    var hiddenCount = pd.rows.length - renderRows.length;
+    var tbody = '<tbody>'
+      +renderRows.map(function(r, i){
+        var bg = i%2===0?'#FFFFFF':'#F8FAFC';
+        var isDone = r.lockStatus === 'Done';
+        return '<tr style="border-bottom:1px solid #EEF1F6;background:'+bg+';">'
+          +'<td style="padding:7px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;color:#2563EB;white-space:nowrap;">'+esc(r.shipmentNo||'—')+'</td>'
+          +'<td style="padding:7px 10px;font-size:11px;color:#64748B;white-space:nowrap;">'+esc(r.jobDate?r.jobDate.slice(0,10):'—')+'</td>'
+          +'<td style="padding:7px 10px;"><span style="font-size:9px;font-weight:700;color:#5678C2;background:#EEF2FF;border-radius:4px;padding:2px 6px;text-transform:uppercase;white-space:nowrap;">'+esc(r.lob||'—')+'</span></td>'
+          +'<td style="padding:7px 10px;font-size:11px;color:#374151;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(r.customer||'')+'">'+esc(r.customer||'—')+'</td>'
+          +'<td style="padding:7px 10px;font-size:11px;color:#374151;white-space:nowrap;">'+esc(r.jobOwner||'—')+'</td>'
+          +'<td style="padding:7px 10px;font-size:11px;color:#374151;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;" title="'+esc(r.carrier||'')+'">'+esc(r.carrier||'—')+'</td>'
+          +'<td style="padding:7px 10px;font-size:11px;color:#374151;white-space:nowrap;">'+esc(r.location||'—')+'</td>'
+          +'<td style="padding:7px 10px;">'+(isDone
+            ? '<span style="font-size:10px;font-weight:700;color:#0A7E53;background:#E8F7EF;border-radius:5px;padding:3px 8px;">✅ Done</span>'
+            : '<span style="font-size:10px;font-weight:600;color:#9AAFC8;background:#F4F7FA;border-radius:5px;padding:3px 8px;">🔴 Pending</span>')
+          +'</td>'
+          +'<td style="padding:7px 10px;font-size:11px;color:#64748B;white-space:nowrap;">'+esc(r.etdLoading?r.etdLoading.slice(0,10):'—')+'</td>'
+          +'<td style="padding:7px 10px;font-size:11px;color:#64748B;white-space:nowrap;">'+esc(r.etaDischarge?r.etaDischarge.slice(0,10):'—')+'</td>'
+          +'</tr>';
+      }).join('')
+      +(hiddenCount>0
+        ? '<tr><td colspan="'+cols.length+'" style="text-align:center;padding:14px;background:#F8FAFC;">'
+          +'<button data-act="pendencyDrillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">Show all '+pd.rows.length.toLocaleString()+' rows ('+hiddenCount.toLocaleString()+' more)</button>'
+          +'</td></tr>'
+        : '')
+      +'</tbody>';
+    body = '<div style="overflow:auto;flex:1;">'
+      +'<table style="width:100%;border-collapse:collapse;min-width:800px;">'+thead+tbody+'</table>'
+      +'</div>';
+  }
+
+  return '<div data-act="closePendencyDrill" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:200;display:flex;align-items:flex-start;justify-content:flex-end;">'
+    +'<div data-stop="1" style="width:min(900px,96vw);height:100%;background:#FFFFFF;display:flex;flex-direction:column;box-shadow:-4px 0 32px rgba(13,43,94,0.15);animation:drwSlide 0.22s cubic-bezier(0.22,1,0.36,1);">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #E3EAF3;flex-shrink:0;background:#F8FAFC;">'
+        +'<div>'
+          +'<div style="font-size:14px;font-weight:800;color:#0D2B5E;">'+esc(title)+'</div>'
+          +(pd.count!=null?'<div style="font-size:11px;color:#9AAFC8;margin-top:2px;font-weight:500;">'+(pd.count).toLocaleString()+' job'+(pd.count!==1?'s':'')+'</div>':'')
+        +'</div>'
+        +'<button data-act="closePendencyDrill" style="border:none;background:#F0F4FA;width:28px;height:28px;border-radius:8px;cursor:pointer;color:#64748B;font-size:15px;display:flex;align-items:center;justify-content:center;">✕</button>'
+      +'</div>'
+      +body
+    +'</div>'
+  +'</div>';
 }
 
 // Live-filters the option checklist inside an open drill column-filter popup
@@ -5401,6 +5516,9 @@ document.addEventListener('click', function(ev){
     render();
   }
   else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
+  else if(act==='pendencyDrill'){ ev.stopPropagation(); openPendencyDrill(el.getAttribute('data-rep'),el.getAttribute('data-col'),el.getAttribute('data-status'),el.getAttribute('data-lock')); }
+  else if(act==='closePendencyDrill'){ if(el.getAttribute('data-stop')) return; state.pendencyDrill=null; render(); }
+  else if(act==='pendencyDrillShowAll'){ ev.stopPropagation(); if(state.pendencyDrill){ state.pendencyDrill._showAll=true; var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+pendencyDrillDrawer(); } }
   else if(act==='drillShowAll'){ ev.stopPropagation(); if(state.drill){ state.drill._showAll=true; renderDrillOnly(); } }
   else if(act==='setDrillLobTab'){
     ev.stopPropagation();

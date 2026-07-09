@@ -1933,7 +1933,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op", "pendencyDrill"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -2087,6 +2087,80 @@ module.exports = async function handler(req, res) {
     if (action === "op") {
       const result = await getOpPendency(db, forceRefresh);
       return res.status(200).json(result);
+    }
+
+    if (action === "pendencyDrill") {
+      // Fetch job-level detail for a specific rep + month + lock type + status
+      const repName  = req.query?.rep   || req.body?.rep;
+      const month    = req.query?.month || req.body?.month; // e.g. "Apr-26" or "FY Total"
+      const lockType = req.query?.lock  || req.body?.lock;  // "Operation Lock" or "Financial Lock"
+      const status   = req.query?.status|| req.body?.status; // "pending" | "done" | "all"
+      if (!repName || !lockType) return res.status(400).json({ error: "rep and lock required" });
+
+      const ALL_JOB_COLLS = Object.values(COLLECTIONS);
+      const isFY = !month || month === "FY Total";
+
+      // Build date filter
+      let ds = null, de = null;
+      if (!isFY && month) {
+        const [mn, yr] = month.split("-");
+        const mi = MONTH_NAMES.indexOf(mn);
+        const y  = 2000 + parseInt(yr, 10);
+        const ld = new Date(Date.UTC(y, mi + 1, 0)).getUTCDate();
+        ds = `${y}-${String(mi+1).padStart(2,"0")}-01`;
+        de = `${y}-${String(mi+1).padStart(2,"0")}-${ld}`;
+      } else {
+        ds = "2025-04-01"; de = "2027-03-31";
+      }
+
+      const normRep = normalizeName(repName);
+      const rows = [];
+
+      await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
+        const isExport = collName.includes("export");
+        const isImport = collName.includes("import");
+        const dateField = isExport ? "ETD Loading Port" : isImport ? "ETA Discharge" : "Job Date";
+        const mf = ds ? { $or:[
+          { [dateField]: { $type: 2, $gte: ds, $lte: de + "\uffff" } },
+          { "Job Date":  { $type: 2, $gte: ds, $lte: de + "\uffff" } },
+        ]} : {};
+
+        const jobs = await db.collection(collName).find(mf).toArray();
+        for (const job of jobs) {
+          const sp = normalizeName(job["Sales Person"] || "");
+          if (sp !== normRep) continue;
+
+          const rawDate = job[dateField] || job["Job Date"];
+          if (!rawDate) continue;
+          const d = new Date(rawDate);
+          if (isNaN(d.getTime())) continue;
+          const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
+          if (!FY_MONTHS.includes(monthLabel)) continue;
+
+          const isDone = job[lockType] && String(job[lockType]).trim() !== "";
+          if (status === "pending" && isDone)  continue;
+          if (status === "done"    && !isDone) continue;
+
+          rows.push({
+            shipmentNo:   job["Shipment No"]     || "—",
+            jobDate:      job["Job Date"]        || "",
+            lob: (function(){ const cls = classifyRow(job, collName); return cls.kind + (cls.direction ? " " + cls.direction : ""); })(),
+            customer:     job["Customer"]        || "",
+            jobOwner:     (job["Job Owner"]      || "").split("|")[0].trim(),
+            salesPerson:  (job["Sales Person"]   || "").split("|")[0].trim(),
+            location:     job["Location"]        || "",
+            carrier:      job["Carrier"] || job["Carrier Name"] || "",
+            etdLoading:   job["ETD Loading Port"]|| "",
+            etaDischarge: job["ETA Discharge"]   || "",
+            lockStatus:   isDone ? "Done" : "Pending",
+            lockValue:    job[lockType]          || "",
+            month:        monthLabel,
+          });
+        }
+      }));
+
+      rows.sort((a, b) => new Date(b.jobDate) - new Date(a.jobDate));
+      return res.status(200).json({ success: true, rep: repName, month, lock: lockType, status, count: rows.length, rows });
     }
 
     if (action === "financeDebug") {
