@@ -3780,15 +3780,14 @@ function tableRows(){
       dispTeus = e.teu  || e.gp.map(function(){ return 0; });
       dispLcl  = e.lcl  || e.gp.map(function(){ return 0; });
       dispTgt  = e.gp.map(function(_, ci){
-        // Custom view: dailyTarget × days in that specific month
+        // Custom view: dailyTarget × actual selected days (not full month)
         if (state.reportView === 'Custom') {
           var dailyT = e.dailyTgt || (e.tgt ? e.tgt / 30 : 0);
-          if (dailyT) {
-            var m = filteredMonths()[ci];
-            if (m) {
-              var p = m.split('-'); var mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(p[0]); var y = 2000+parseInt(p[1],10);
-              var daysInM = new Date(y, mn+1, 0).getDate();
-              return dailyT * daysInM;
+          if (dailyT && state.customDateFrom && state.customDateTo) {
+            var d1c = new Date(state.customDateFrom), d2c = new Date(state.customDateTo);
+            if (!isNaN(d1c) && !isNaN(d2c) && d2c >= d1c) {
+              var selDays = Math.round((d2c - d1c) / 86400000) + 1;
+              return dailyT * selDays;
             }
           }
         }
