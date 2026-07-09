@@ -510,7 +510,7 @@ async function getDrillRows(db, entity, metric, month) {
     count: matchedRows.length,
     totalMetric, totalGP,
     totalRevenue, totalCost: totalRevenue - totalGP,
-    rows: matchedRows.slice(0, 6000),
+    rows: matchedRows,
   };
 }
 
@@ -1896,10 +1896,13 @@ module.exports = async function handler(req, res) {
   if (action === "ping") {
     const db = await getDB();
     const now2 = Date.now();
-    // Build salesCache synchronously if cold or expiring — this keeps the cache
-    // warm so that the next ?action=sales request is served instantly from memory.
+    // Build salesCache synchronously if cold or expiring
     if (!salesCache || (now2 - salesCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
       await getSalesAggregate(db, false).catch(() => {});
+    }
+    // Also warm drillRowsCache if cold — avoids slow first drill click
+    if (!drillRowsCache || (now2 - drillRowsCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
+      getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => {});
     }
     return res.status(200).json({ ok: true, ts: now2, cached: !!salesCache });
   }
