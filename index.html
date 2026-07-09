@@ -3035,21 +3035,26 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var rgAttr = repGroup  ? ' data-rep-group="'+esc(repGroup)+'"'   : '';
 
     function mRow(label, icon, getV, total, idx, drillStatus){
-      var isMiddle = idx === 1; // middle row of 3 — show name content
+      var isMiddle = idx === 1;
       var isLast   = idx === 2;
       var rowTopBorder = idx === 0 ? topBorderStyle : 'border-top:1px solid #EEF1F6;';
       var rowBottomBorder = (isLast && bottomBorderStyle) ? bottomBorderStyle : '';
       var colCells = data.colData.map(function(cd, ci){
         var v = getV(cd);
         var col = activeCols[ci] || '';
-        return numCell(v, null, drillRepName||null, col, drillStatus||null, lockType||null);
+        return numCell(v, null, entityName||null, col, drillStatus||null, lockType||null);
       }).join('');
-      // Sticky name cell
       var nameAccent = leftAccent || 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';';
       var nameTd = isMiddle
         ? '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';padding:6px 8px 6px 10px;width:190px;min-width:190px;max-width:190px;'+nameAccent+rowTopBorder+rowBottomBorder+'"><div style="display:flex;align-items:center;gap:6px;min-width:0;">'+avatarEl+nameLabel+(toggleEl||'')+'</div></td>'
         : '<td style="position:sticky;left:0;z-index:2;background:'+rowBg+';width:190px;min-width:190px;'+nameAccent+rowTopBorder+rowBottomBorder+'"></td>';
-      var gtTd = (function(){ var v=total; var color=v>0?'#0D2B5E':'#C5D0E0'; var fw=v>0?'700':'400'; return '<td style="padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+fw+';color:'+color+';white-space:nowrap;background:#FCF3DA;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;'+(isLast&&bottomBorderStyle?bottomBorderStyle:'')+'">'+v+'</td>'; })();
+      // Grand total column — clickable if entity known
+      var gtV = total;
+      var gtColor = gtV>0?'#0D2B5E':'#C5D0E0'; var gtFw = gtV>0?'700':'400';
+      var gtStyle = 'padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+gtFw+';color:'+gtColor+';white-space:nowrap;background:#FCF3DA;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;'+(isLast&&bottomBorderStyle?rowBottomBorder:'');
+      var gtTd = entityName && gtV > 0
+        ? '<td class="pcell" data-act="pendencyDrill" data-rep="'+esc(entityName)+'" data-col="FY Total" data-status="'+esc(drillStatus||'all')+'" data-lock="'+esc(lockType||'')+'" style="'+gtStyle+'cursor:pointer;">'+gtV+'</td>'
+        : '<td style="'+gtStyle+'">'+gtV+'</td>';
       return '<tr'+zgAttr+rgAttr+' style="background:'+rowBg+';'+rowTopBorder+(isLast&&bottomBorderStyle?rowBottomBorder:'')+hidden+'">'
         + nameTd
         +'<td style="position:sticky;left:190px;z-index:2;background:'+rowBg+';padding:9px 12px;font-size:12px;font-weight:500;color:#374151;white-space:nowrap;border-right:2px solid '+PBORDER_STRONG+';min-width:150px;'+rowTopBorder+rowBottomBorder+'">'+icon+' '+label+'</td>'
@@ -3065,7 +3070,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var grandData = { colData: gtColData, totalPending: gtPending, totalDone: gtDone, total: gtTotal };
   var grandAvatar = '<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3B5BA5,#0D2B5E);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 6px rgba(13,43,94,0.25);">GT</div>';
   var grandLabel  = '<div style="font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Grand Total</div>';
-  var grandRows = metricRows(grandData, null, '#EEF3FC', false, null, null, true, 'Grand Total', grandAvatar, grandLabel, '', 'box-shadow:inset 3px 0 0 #0D2B5E, inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:2px solid '+PBORDER_STRONG+';');
+  var grandRows = metricRows(grandData, null, '#EEF3FC', false, null, null, true, 'Grand Total', grandAvatar, grandLabel, '', 'box-shadow:inset 3px 0 0 #0D2B5E, inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:2px solid '+PBORDER_STRONG+';', null, 'Grand Total', lockType);
 
   // Zone + rep rows
   var bodyRows = '';
@@ -3110,7 +3115,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var zAccent = 'box-shadow:inset 3px 0 0 '+zAccentColor+', inset -1.5px 0 0 '+PBORDER_STRONG+';';
     var zoneBg   = isCrossSales ? '#F5F3FF' : '#F0F4FB';
     var zoneData = { colData: zt.colData, totalPending: zt.totalPending, totalDone: zt.totalDone, total: zt.total };
-    bodyRows += metricRows(zoneData, null, zoneBg, true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';');
+    bodyRows += metricRows(zoneData, null, zoneBg, true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';', null, zone, lockType);
 
     if (isCollapsed) return; // skip reps if zone collapsed
 
@@ -3154,7 +3159,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           +'<div style="font-size:9.5px;color:#7C3AED;font-weight:500;">'+branchReps.length+' rep'+(branchReps.length===1?'':'s')+'</div>'
         +'</div>';
         var bAccent = 'box-shadow:inset 3px 0 0 #7C3AED, inset -1.5px 0 0 '+PBORDER_STRONG+';';
-        bodyRows += metricRows(bData, null, '#F5F3FF', false, 'Cross Sales', null, false, branch, bAvatar, bLabel, bToggle, bAccent, 'border-top:1.5px solid #C4B5FD;');
+        bodyRows += metricRows(bData, null, '#F5F3FF', false, 'Cross Sales', null, false, branch, bAvatar, bLabel, bToggle, bAccent, 'border-top:1.5px solid #C4B5FD;', null, branch, lockType);
 
         if (branchCollapsed) return;
 
@@ -4982,84 +4987,68 @@ function openPendencyDrill(rep, col, status, lock){
 function pendencyDrillDrawer(){
   var pd = state.pendencyDrill;
   if (!pd) return '';
-  var statusLabel = pd.status==='pending' ? '🔴 Pending' : pd.status==='done' ? '✅ Done' : '📊 All Jobs';
-  var title = pd.rep+' — '+statusLabel+' — '+(pd.col||'All Months');
   var lockLabel = pd.lock==='Operation Lock' ? 'OL' : 'FL';
-
+  var statusLabel = pd.status==='pending' ? lockLabel+' Pending' : pd.status==='done' ? lockLabel+' Done' : 'All Jobs';
+  var colLabel = pd.col==='FY Total' ? 'FY Total' : (pd.col||'All');
+  var title = esc(pd.rep)+' — '+esc(statusLabel)+' — '+esc(colLabel);
+  var BORDER = '#E2E8F0'; var BORDER_STRONG = '#CBD5E1';
   var body = '';
   if (pd.loading) {
-    body = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:12px;">'
-      +'<div class="login-spinner" style="width:28px;height:28px;border-width:3px;"></div>'
-      +'<div style="font-size:12px;color:#9AAFC8;font-weight:600;">Loading jobs…</div>'
-      +'</div>';
+    body = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:14px;"><div class="login-spinner" style="width:30px;height:30px;border-width:3px;"></div><div style="font-size:12px;color:#9AAFC8;font-weight:600;">Loading jobs…</div></div>';
   } else if (pd.error) {
-    body = '<div style="padding:40px;text-align:center;color:#DC2626;font-size:13px;font-weight:600;">'+esc(pd.error)+'</div>';
+    body = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:40px;text-align:center;color:#DC2626;font-size:13px;font-weight:600;">'+esc(pd.error)+'</div>';
   } else if (!pd.rows || pd.rows.length === 0) {
-    body = '<div style="padding:40px;text-align:center;color:#9AAFC8;font-size:13px;">No jobs found.</div>';
+    body = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:40px;text-align:center;color:#9AAFC8;font-size:13px;">No jobs found for this selection.</div>';
   } else {
-    var cols = [
-      {k:'shipmentNo', l:'Shipment No', w:130},
-      {k:'jobDate',    l:'Job Date',    w:100},
-      {k:'lob',        l:'LOB',         w:120},
-      {k:'customer',   l:'Customer',    w:160},
-      {k:'jobOwner',   l:'Job Owner',   w:130},
-      {k:'carrier',    l:'Carrier',     w:120},
-      {k:'location',   l:'Location',    w:100},
-      {k:'lockStatus', l:lockLabel+' Status', w:110},
-      {k:'etdLoading', l:'ETD Loading', w:110},
-      {k:'etaDischarge',l:'ETA Discharge',w:110},
+    var COLS = [
+      {k:'shipmentNo',  l:'Shipment No',   w:130, t:'link'},
+      {k:'jobDate',     l:'Job Date',       w:100, t:'date'},
+      {k:'lob',         l:'LOB',            w:120, t:'badge'},
+      {k:'customer',    l:'Customer',       w:180, t:'text'},
+      {k:'jobOwner',    l:'Job Owner',      w:130, t:'text'},
+      {k:'salesPerson', l:'Sales Person',   w:130, t:'text'},
+      {k:'carrier',     l:'Carrier',        w:130, t:'text'},
+      {k:'location',    l:'Location',       w:100, t:'text'},
+      {k:'lockStatus',  l:lockLabel+' Status', w:110, t:'status'},
+      {k:'etdLoading',  l:'ETD Loading',    w:110, t:'date'},
+      {k:'etaDischarge',l:'ETA Discharge',  w:110, t:'date'},
     ];
-    var PDBORDER = '#D5DCE6';
-    var thead = '<thead style="position:sticky;top:0;z-index:3;"><tr>'
-      +cols.map(function(c){ return '<th style="background:#F0F4FA;padding:8px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid '+PDBORDER+';white-space:nowrap;min-width:'+c.w+'px;">'+c.l+'</th>'; }).join('')
-      +'</tr></thead>';
     var renderRows = pd._showAll ? pd.rows : pd.rows.slice(0, 500);
     var hiddenCount = pd.rows.length - renderRows.length;
+    var thead = '<thead style="position:sticky;top:0;z-index:3;"><tr>'
+      +COLS.map(function(c){ return '<th style="background:#F0F4FA;padding:9px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';white-space:nowrap;min-width:'+c.w+'px;">'+c.l+'</th>'; }).join('')
+      +'</tr></thead>';
     var tbody = '<tbody>'
       +renderRows.map(function(r, i){
         var bg = i%2===0?'#FFFFFF':'#F8FAFC';
         var isDone = r.lockStatus === 'Done';
         return '<tr style="border-bottom:1px solid #EEF1F6;background:'+bg+';">'
-          +'<td style="padding:7px 10px;font-family:\'DM Mono\',monospace;font-size:11px;font-weight:600;color:#2563EB;white-space:nowrap;">'+esc(r.shipmentNo||'—')+'</td>'
-          +'<td style="padding:7px 10px;font-size:11px;color:#64748B;white-space:nowrap;">'+esc(r.jobDate?r.jobDate.slice(0,10):'—')+'</td>'
-          +'<td style="padding:7px 10px;"><span style="font-size:9px;font-weight:700;color:#5678C2;background:#EEF2FF;border-radius:4px;padding:2px 6px;text-transform:uppercase;white-space:nowrap;">'+esc(r.lob||'—')+'</span></td>'
-          +'<td style="padding:7px 10px;font-size:11px;color:#374151;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(r.customer||'')+'">'+esc(r.customer||'—')+'</td>'
-          +'<td style="padding:7px 10px;font-size:11px;color:#374151;white-space:nowrap;">'+esc(r.jobOwner||'—')+'</td>'
-          +'<td style="padding:7px 10px;font-size:11px;color:#374151;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;" title="'+esc(r.carrier||'')+'">'+esc(r.carrier||'—')+'</td>'
-          +'<td style="padding:7px 10px;font-size:11px;color:#374151;white-space:nowrap;">'+esc(r.location||'—')+'</td>'
-          +'<td style="padding:7px 10px;">'+(isDone
-            ? '<span style="font-size:10px;font-weight:700;color:#0A7E53;background:#E8F7EF;border-radius:5px;padding:3px 8px;">✅ Done</span>'
-            : '<span style="font-size:10px;font-weight:600;color:#9AAFC8;background:#F4F7FA;border-radius:5px;padding:3px 8px;">🔴 Pending</span>')
-          +'</td>'
-          +'<td style="padding:7px 10px;font-size:11px;color:#64748B;white-space:nowrap;">'+esc(r.etdLoading?r.etdLoading.slice(0,10):'—')+'</td>'
-          +'<td style="padding:7px 10px;font-size:11px;color:#64748B;white-space:nowrap;">'+esc(r.etaDischarge?r.etaDischarge.slice(0,10):'—')+'</td>'
+          +COLS.map(function(c){
+            var v = c.t==='date' ? (r[c.k]?r[c.k].slice(0,10):'—') : (r[c.k]||'—');
+            if (c.t==='link') return '<td style="padding:8px 10px;font-family:monospace;font-size:11.5px;font-weight:700;color:#2563EB;white-space:nowrap;">'+esc(v)+'</td>';
+            if (c.t==='date') return '<td style="padding:8px 10px;font-size:11px;color:#64748B;white-space:nowrap;font-family:monospace;">'+esc(v)+'</td>';
+            if (c.t==='badge') return '<td style="padding:8px 10px;"><span style="font-size:9px;font-weight:700;color:#5678C2;background:#EEF2FF;border-radius:4px;padding:2px 7px;text-transform:uppercase;white-space:nowrap;">'+esc(v)+'</span></td>';
+            if (c.t==='status') return '<td style="padding:8px 10px;">'+(isDone?'<span style="font-size:10px;font-weight:700;color:#0A7E53;background:#E8F7EF;border-radius:5px;padding:3px 9px;white-space:nowrap;">✓ Done</span>':'<span style="font-size:10px;font-weight:600;color:#B45309;background:#FEF3C7;border-radius:5px;padding:3px 9px;white-space:nowrap;">Pending</span>')+'</td>';
+            return '<td style="padding:8px 10px;font-size:11.5px;color:#374151;max-width:'+c.w+'px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(String(r[c.k]||''))+'">'+esc(v)+'</td>';
+          }).join('')
           +'</tr>';
       }).join('')
-      +(hiddenCount>0
-        ? '<tr><td colspan="'+cols.length+'" style="text-align:center;padding:14px;background:#F8FAFC;">'
-          +'<button data-act="pendencyDrillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">Show all '+pd.rows.length.toLocaleString()+' rows ('+hiddenCount.toLocaleString()+' more)</button>'
-          +'</td></tr>'
-        : '')
+      +(hiddenCount>0?'<tr><td colspan="'+COLS.length+'" style="text-align:center;padding:14px;background:#F8FAFC;"><button data-act="pendencyDrillShowAll" style="border:1.5px solid #D8E1F0;background:#FFFFFF;border-radius:999px;padding:7px 20px;font-size:12px;font-weight:700;color:#1D5FCC;cursor:pointer;">Show all '+pd.rows.length.toLocaleString()+' rows ('+hiddenCount.toLocaleString()+' more)</button></td></tr>':'')
       +'</tbody>';
-    body = '<div style="overflow:auto;flex:1;">'
-      +'<table style="width:100%;border-collapse:collapse;min-width:800px;">'+thead+tbody+'</table>'
-      +'</div>';
+    body = '<div style="overflow:auto;flex:1;"><table style="width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;">'+thead+tbody+'</table></div>';
   }
-
   return '<div data-act="closePendencyDrill" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:200;display:flex;align-items:flex-start;justify-content:flex-end;">'
-    +'<div data-stop="1" style="width:min(900px,96vw);height:100%;background:#FFFFFF;display:flex;flex-direction:column;box-shadow:-4px 0 32px rgba(13,43,94,0.15);animation:drwSlide 0.22s cubic-bezier(0.22,1,0.36,1);">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #E3EAF3;flex-shrink:0;background:#F8FAFC;">'
-        +'<div>'
-          +'<div style="font-size:14px;font-weight:800;color:#0D2B5E;">'+esc(title)+'</div>'
-          +(pd.count!=null?'<div style="font-size:11px;color:#9AAFC8;margin-top:2px;font-weight:500;">'+(pd.count).toLocaleString()+' job'+(pd.count!==1?'s':'')+'</div>':'')
+    +'<div data-stop="1" style="width:min(960px,96vw);height:100%;background:#FFFFFF;display:flex;flex-direction:column;box-shadow:-4px 0 32px rgba(13,43,94,0.15);animation:drwSlide 0.22s cubic-bezier(0.22,1,0.36,1);">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #E3EAF3;flex-shrink:0;background:#F8FAFC;">'
+        +'<div style="min-width:0;"><div style="font-size:14px;font-weight:800;color:#0D2B5E;">'+title+'</div>'
+        +(pd.count!=null?'<div style="font-size:11px;color:#9AAFC8;margin-top:2px;font-weight:500;">'+pd.count.toLocaleString()+' job'+(pd.count!==1?'s':'')+'</div>':'')
         +'</div>'
-        +'<button data-act="closePendencyDrill" style="border:none;background:#F0F4FA;width:28px;height:28px;border-radius:8px;cursor:pointer;color:#64748B;font-size:15px;display:flex;align-items:center;justify-content:center;">✕</button>'
+        +'<button data-act="closePendencyDrill" style="border:none;background:#F0F4FA;width:28px;height:28px;border-radius:8px;cursor:pointer;color:#64748B;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:12px;">✕</button>'
       +'</div>'
       +body
     +'</div>'
   +'</div>';
 }
-
 // Live-filters the option checklist inside an open drill column-filter popup
 function filterDrillFilterOptions(inputEl){
   var query = inputEl.value.toLowerCase().trim();

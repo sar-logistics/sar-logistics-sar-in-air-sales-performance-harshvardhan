@@ -2114,6 +2114,19 @@ module.exports = async function handler(req, res) {
       }
 
       const normRep = normalizeName(repName);
+      const isGrandTotal = repName === 'Grand Total';
+      const isZone = !isGrandTotal && repName.match(/^IN[A-Z]?\d+/) || repName === 'Cross Sales';
+
+      // Load mapping to resolve zone membership
+      let repZoneMap = {};
+      if (isZone) {
+        const mRows = await db.collection("mapping_sales_targets").find({}, { projection: {"Sales Rep Name":1,"Display Name":1,"Zone":1} }).toArray();
+        for (const r of mRows) {
+          const n = normalizeName(r["Sales Rep Name"]);
+          if (n) repZoneMap[n] = String(r["Zone"]||"").trim();
+        }
+      }
+
       const rows = [];
 
       await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
@@ -2128,7 +2141,19 @@ module.exports = async function handler(req, res) {
         const jobs = await db.collection(collName).find(mf).toArray();
         for (const job of jobs) {
           const sp = normalizeName(job["Sales Person"] || "");
-          if (sp !== normRep) continue;
+          // Entity filter
+          if (!isGrandTotal) {
+            if (isZone) {
+              const spZone = repZoneMap[sp] || "";
+              if (repName === 'Cross Sales') {
+                if (spZone && spZone !== 'Unassigned' && repZoneMap[sp]) continue; // skip mapped reps
+              } else {
+                if (spZone !== repName) continue;
+              }
+            } else {
+              if (sp !== normRep) continue;
+            }
+          }
 
           const rawDate = job[dateField] || job["Job Date"];
           if (!rawDate) continue;
