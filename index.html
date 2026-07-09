@@ -566,6 +566,10 @@ function fetchLiveData(callback, force){
       _weekDataFetched = false;
       _drillResultCache = {};
       allDrillRows = null;
+      try { // clear session drill cache too
+        Object.keys(sessionStorage).filter(function(k){ return k.startsWith('sar_drill_'); })
+          .forEach(function(k){ sessionStorage.removeItem(k); });
+      } catch(e){}
     } catch(e){}
   }
 
@@ -4891,51 +4895,42 @@ function computeDrillResult(entity, metric, month){
   };
 }
 
-var _drillResultCache = {}; // "entity||metric||month" → result
+var _drillResultCache = {}; // in-memory: entity||metric||col → full result object
+
+function ssSetDrill(key, data){
+  try { sessionStorage.setItem('sar_drill_'+key, JSON.stringify(data)); } catch(e){}
+}
+function ssGetDrill(key){
+  try { var r=sessionStorage.getItem('sar_drill_'+key); return r?JSON.parse(r):null; } catch(e){ return null; }
+}
 
 function openDrill(entity, metric, col, valueFmt){
   var cacheKey = entity+'||'+metric+'||'+col;
-  var _drillLsKey = 'drill_'+cacheKey.replace(/[|]/g,'__');
 
-  // ── In-memory cache (fastest) — only use if has actual rows ──
-  if (_drillResultCache[cacheKey] && _drillResultCache[cacheKey].rows && _drillResultCache[cacheKey].rows.length > 0) {
-    var cached = _drillResultCache[cacheKey];
+  // 1. In-memory (instant, same-session repeat click)
+  var mem = _drillResultCache[cacheKey];
+  if (mem && mem.rows && mem.rows.length > 0) {
     state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
-      rows:cached.rows, count:cached.count, totalMetric:cached.totalMetric,
-      totalGP:cached.totalGP, totalRevenue:cached.totalRevenue||0,
-      totalCost:cached.totalCost||0, lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
-    render();
-    return;
+      rows:mem.rows, count:mem.count, totalMetric:mem.totalMetric, totalGP:mem.totalGP,
+      totalProvGP:mem.totalProvGP||0, totalActualGP:mem.totalActualGP||0,
+      totalRevenue:mem.totalRevenue||0, totalCost:mem.totalCost||0,
+      lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
+    render(); return;
   }
 
-  // ── localStorage cache — only use if has actual rows ──
-  var lsDrill = lsGetDrill(_drillLsKey, entity, metric, col);
-  if (lsDrill && lsDrill.success && lsDrill.rows && lsDrill.rows.length > 0) {
-    _drillResultCache[cacheKey] = lsDrill;
+  // 2. sessionStorage (survives navigation within tab, not page refresh)
+  var ss = ssGetDrill(cacheKey);
+  if (ss && ss.rows && ss.rows.length > 0) {
+    _drillResultCache[cacheKey] = ss;
     state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
-      rows:lsDrill.rows, count:lsDrill.count, totalMetric:lsDrill.totalMetric,
-      totalGP:lsDrill.totalGP, totalRevenue:lsDrill.totalRevenue||0,
-      totalCost:lsDrill.totalCost||0, lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
-    render();
-    return;
+      rows:ss.rows, count:ss.count, totalMetric:ss.totalMetric, totalGP:ss.totalGP,
+      totalProvGP:ss.totalProvGP||0, totalActualGP:ss.totalActualGP||0,
+      totalRevenue:ss.totalRevenue||0, totalCost:ss.totalCost||0,
+      lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
+    render(); return;
   }
 
-  // ── Try in-browser compute from allDrillRows (no network) ──
-  if (allDrillRows) {
-    var result = computeDrillResult(entity, metric, col);
-    if (result && result.count > 0) {
-      _drillResultCache[cacheKey] = result;
-      try { lsSetDrill(_drillLsKey, result); } catch(e){}
-      state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
-        rows:result.rows, count:result.count, totalMetric:result.totalMetric,
-        totalGP:result.totalGP, totalRevenue:result.totalRevenue||0,
-        totalCost:result.totalCost||0, lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
-      render();
-      return;
-    }
-  }
-
-  // ── Fallback: fetch from API ──
+  // 3. Fetch from API — show spinner
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
     lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
   render();
@@ -4946,9 +4941,10 @@ function openDrill(entity, metric, col, valueFmt){
     .then(function(data){
       if (!data.success) { state.drill.loading=false; state.drill.error=data.error||'Failed.'; render(); return; }
       _drillResultCache[cacheKey] = data;
-      try { lsSetDrill(_drillLsKey, data); } catch(e){}
+      ssSetDrill(cacheKey, data); // cache full result in sessionStorage
       state.drill.loading=false; state.drill.rows=data.rows; state.drill.count=data.count;
       state.drill.totalMetric=data.totalMetric; state.drill.totalGP=data.totalGP;
+      state.drill.totalProvGP=data.totalProvGP||0; state.drill.totalActualGP=data.totalActualGP||0;
       state.drill.totalRevenue=data.totalRevenue||0; state.drill.totalCost=data.totalCost||0;
       render();
     })
