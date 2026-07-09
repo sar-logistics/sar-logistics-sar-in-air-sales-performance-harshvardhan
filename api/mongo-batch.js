@@ -572,6 +572,7 @@ async function computeSalesAggregate(db) {
   const repLookupByFY = { FY26: {}, FY27: {} };
   for (const row of mappingRows) {
     const key = normalizeName(row["Sales Rep Name"]);
+    const displayKey = normalizeName(row["Display Name"] || "");
     if (!key) continue;
     const fy = (row._fy === "FY27") ? "FY27" : "FY26";
     if (!repLookupByFY[fy]) repLookupByFY[fy] = {};
@@ -584,7 +585,7 @@ async function computeSalesAggregate(db) {
     const existing = repLookupByFY[fy][key];
     // Overwrite unless existing has a target and new one doesn't
     if (existing && existing.monthlyTarget > 0 && monthlyTarget === 0) continue;
-    repLookupByFY[fy][key] = {
+    const entry = {
       displayName:   String(row["Display Name"] || row["Sales Rep Name"] || "").trim(),
       zone:          String(row["Zone"] || "Unassigned").trim(),
       lob:           String(row["LOB"] || "").trim(),
@@ -596,6 +597,11 @@ async function computeSalesAggregate(db) {
       exitDate:      row["Date Of Exit"]    ? new Date(row["Date Of Exit"])    : null,
       email:         String(row["Email ID"] || "").toLowerCase().trim(),
     };
+    repLookupByFY[fy][key] = entry;
+    // Also index by Display Name if different — handles jobs where Sales Person = display name
+    if (displayKey && displayKey !== key) {
+      repLookupByFY[fy][displayKey] = entry;
+    }
   }
 
   // 2. Load zone targets — sort oldest→newest so newest wins
@@ -1991,7 +1997,26 @@ module.exports = async function handler(req, res) {
   try {
     const db = await getDB();
 
-    if (action === "debug") {
+    if (action === "salesDebug") {
+      // Check what's actually in Apr-26 for air export
+      const apr26Jobs = await db.collection("jobs_air_export").find(
+        { _fy: "FY27" },
+        { projection: { "Sales Person":1, "ETD Loading Port":1, "Job Date":1, "LOB":1, "Provisional Profit (I=A-E)":1, "Actual Profit (J=C-G)":1 } }
+      ).limit(5).toArray();
+      const apr26Sea = await db.collection("jobs_sea_export").find(
+        { _fy: "FY27" },
+        { projection: { "Sales Person":1, "ETD Loading Port":1, "Job Date":1, "LOB":1, "Provisional Profit (I=A-E)":1 } }
+      ).limit(5).toArray();
+      const counts = {};
+      for (const cn of JOB_COLLECTIONS) {
+        counts[cn] = {
+          total: await db.collection(cn).countDocuments({}),
+          fy26:  await db.collection(cn).countDocuments({ _fy: "FY26" }),
+          fy27:  await db.collection(cn).countDocuments({ _fy: "FY27" }),
+        };
+      }
+      return res.status(200).json({ counts, apr26AirSample: apr26Jobs, apr26SeaSample: apr26Sea });
+    }
       const sample = {};
       sample.mapping_sales_targets = await db.collection("mapping_sales_targets").find({}).toArray();
       sample.mapping_zone_targets  = await db.collection("mapping_zone_targets").find({}).toArray();
