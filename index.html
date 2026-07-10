@@ -396,6 +396,11 @@ function _showDashboardBody() {
     }
   bgPrefetchSecondary();
 
+  // Fetch lobData at boot if LOB filter is active (needed for correct filtering)
+  if (state.filterLobs && state.filterLobs.length > 0 && !_lobDataFetched) {
+    fetchLobDataIfNeeded(function(){ if (dataReady) render(); });
+  }
+
   // If no cache, fetch live data immediately
   if (!cached) {
     fetchLiveData(function() {
@@ -534,9 +539,27 @@ function computeFilteredRepsRaw(){
     }
   }
 
-  // Rep filter only — LOB filter is applied per-page in insights pages, not here
+  // Rep filter
   if (filterReps.length > 0) {
     base = base.filter(function(r){ return filterReps.indexOf(r.name) > -1; });
+  }
+
+  // LOB filter — recompute monthly arrays from lobData when active
+  var filterLobs = state.filterLobs || [];
+  if (filterLobs.length > 0 && _lobDataFetched) {
+    base = base.map(function(r) {
+      if (!r.lobData) return r;
+      // Sum monthly values across selected LOBs only
+      var filtered = Object.assign({}, r);
+      filtered.gp       = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0); }, 0); });
+      filtered.gpProv   = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gpProv)||0); }, 0); });
+      filtered.gpActual = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gpActual)||0); }, 0); });
+      filtered.ship     = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].ship)||0); }, 0); });
+      filtered.tons     = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].tons)||0); }, 0); });
+      filtered.teu      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].teu)||0); }, 0); });
+      filtered.lcl      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].lcl)||0); }, 0); });
+      return filtered;
+    });
   }
 
   repsRaw = base;
@@ -618,6 +641,10 @@ function fetchLiveData(callback, force){
             setTimeout(function(){ loadDrillData(null); }, 1000);
           }
           console.log('✅ Live data:', repsRawOriginal.length, 'reps, tgt[0]=', repsRawOriginal[0] && repsRawOriginal[0].tgt);
+          // Fetch lobData if LOB filter is active
+          if (state.filterLobs && state.filterLobs.length > 0 && !_lobDataFetched) {
+            fetchLobDataIfNeeded(null);
+          }
           if (callback) callback();
         } else if (retriesLeft > 0) {
           console.warn('⚠️ Empty response, retrying…');
@@ -1161,7 +1188,7 @@ var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:f
   filtersOpen: false,
   filterLobDropOpen: false,
   filterRepDropOpen: false,
-  filterLobs: ['AIR EXPORT','AIR IMPORT'],   // default Air Export + Air Import; empty = All LOBs
+  filterLobs: ['AIR EXPORT'],   // default Air Export only; empty = All LOBs
   filterReps: []    // empty = All Reps; else array of selected rep names
 };
 
