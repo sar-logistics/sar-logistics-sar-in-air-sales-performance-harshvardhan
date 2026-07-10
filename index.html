@@ -315,10 +315,6 @@ function showDashboard() {
       var dc = lsGet('drillrows');
       if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
 
-      // If finance/op not in localStorage, start fetching immediately in background
-      // so by the time user navigates there, data is ready (or close to it)
-      if (!financeDataReady) setTimeout(function(){ fetchFinanceData(null); }, 50);
-      if (!opDataReady)      setTimeout(function(){ fetchOpData(null);      }, 300);
     })();
 
     if (dataReady) {
@@ -5967,10 +5963,23 @@ window.addEventListener('load', function() {
     }
   }, 100);
 
-  // Keep-alive ping every 4 minutes — prevents Vercel serverless cold starts
-  // so the MongoDB connection is always warm when users load the dashboard
+  // Keep-alive ping every 2 minutes — prevents Vercel cold starts.
+  // First ping also returns finance+op pendency data bundled in the response
+  // so navigating to those pages is instant without a separate fetch.
   function pingAPI(){
-    fetch('/api/mongo-batch?action=ping').catch(function(){});
+    fetch('/api/mongo-batch?action=ping')
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d.finance && d.finance.success && !financeDataReady) {
+          financeData = d.finance; financeDataReady = true;
+          lsSet('finance', d.finance);
+        }
+        if (d.op && d.op.success && !opDataReady) {
+          opData = d.op; opDataReady = true;
+          lsSet('op', d.op);
+        }
+      })
+      .catch(function(){});
   }
   pingAPI(); // immediate warm-up on page load
   setInterval(pingAPI, 2 * 60 * 1000); // ping every 2 minutes to keep container warm
