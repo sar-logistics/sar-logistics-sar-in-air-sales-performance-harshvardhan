@@ -2934,9 +2934,12 @@ function tradelanePage(){
   var hasFilters = filterReps.length > 0;
   if (hasFilters && lobData.allCountries) {
     var _frNormT = filterReps.map(function(x){ return normalizeName(x); });
+    console.log('[TL RLS] filterReps norms:', _frNormT.slice(0,5));
+    if (lobData.allCountries[0]) console.log('[TL RLS] sample salesReps:', (lobData.allCountries[0].salesReps||[]).slice(0,5), 'norms:', (lobData.allCountries[0].salesReps||[]).slice(0,3).map(function(r){return normalizeName(r);}));
     var filtered = lobData.allCountries.filter(function(c) {
       return (c.salesReps||[]).some(function(r){ return _frNormT.indexOf(normalizeName(r||''))>-1; });
     });
+    console.log('[TL RLS] filtered:', filtered.length, '/', lobData.allCountries.length);
     function top10tl(arr,key){ return arr.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,10); }
     lobData = {
       allCountries:   filtered,
