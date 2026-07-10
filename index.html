@@ -5792,11 +5792,13 @@ document.addEventListener('click', function(ev){
       if (!orgData.support) orgData.support = [];
       orgData.support = orgData.support.concat([{ name:newName, email:newEmail, role:newRole, zone:newZone, reportsTo:newRT, isActive:true, loginCount:0, lastLogin:null }]);
       render();
-      // Background refresh for canonical data
-      fetch('/api/mongo-batch?action=org&force=1')
-        .then(function(r){ return r.json(); })
-        .then(function(fresh){ if(fresh.success){ orgData=fresh; orgDataReady=true; lsSet('org',fresh); render(); } })
-        .catch(function(){});
+      // Background refresh after delay (ensure server has committed the new user)
+      setTimeout(function(){
+        fetch('/api/mongo-batch?action=org&force=1')
+          .then(function(r){ return r.json(); })
+          .then(function(fresh){ if(fresh.success){ orgData=fresh; orgDataReady=true; lsSet('org',fresh); render(); } })
+          .catch(function(){});
+      }, 1500);
     })
     .catch(function(e){ state.addUserError = e.message; render(); });
   }
