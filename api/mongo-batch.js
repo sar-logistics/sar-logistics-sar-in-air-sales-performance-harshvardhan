@@ -2015,15 +2015,7 @@ module.exports = async function handler(req, res) {
     let salesStripped = null;
     if (salesResult && salesResult.repsRaw) {
       salesStripped = { ...salesResult, repsRaw: salesResult.repsRaw.map(r => {
-        const c = { ...r }; delete c.weekData;
-        // Keep Air lobData for default filter, strip others
-        if (c.lobData) {
-          const airOnly = {};
-          if (c.lobData["AIR EXPORT"]) airOnly["AIR EXPORT"] = c.lobData["AIR EXPORT"];
-          if (c.lobData["AIR IMPORT"]) airOnly["AIR IMPORT"] = c.lobData["AIR IMPORT"];
-          c.lobData = Object.keys(airOnly).length > 0 ? airOnly : undefined;
-        }
-        return c;
+        const c = { ...r }; delete c.weekData; delete c.lobData; return c;
       })};
       // Bundle allDrillRows from drillRowsCache so client never needs a separate drill fetch
       if (drillRowsCache && drillRowsCache.allRows && drillRowsCache.allRows.length > 0) {
@@ -2133,15 +2125,7 @@ module.exports = async function handler(req, res) {
       const strip = (result) => ({ ...result, repsRaw: result.repsRaw.map(r => {
         const copy = { ...r };
         if (!includeWeek) delete copy.weekData;
-        if (!includeLob) {
-          // Always include Air lobData (needed for default filter) — strip others to save size
-          if (copy.lobData) {
-            const airOnly = {};
-            if (copy.lobData["AIR EXPORT"]) airOnly["AIR EXPORT"] = copy.lobData["AIR EXPORT"];
-            if (copy.lobData["AIR IMPORT"]) airOnly["AIR IMPORT"] = copy.lobData["AIR IMPORT"];
-            copy.lobData = Object.keys(airOnly).length > 0 ? airOnly : undefined;
-          }
-        }
+        if (!includeLob)  delete copy.lobData;
         return copy;
       })});
 
