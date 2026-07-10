@@ -296,7 +296,7 @@ function showDashboard() {
     (function bootstrapSecondaryCache() {
       var cc = lsGet('customers'); if (cc && cc.success) { customerData = cc; customerDataReady = true; }
       var fc = lsGet('finance');   if (fc && fc.success) { financeData  = fc; financeDataReady  = true; }
-      var oc = lsGet('op');        if (oc && oc.success) { opData       = oc; opDataReady       = true; }
+      var oc = lsGet('op');        if (oc && oc.success) { opData = oc; opDataReady = true; if (oc.allDrillJobRows && oc.allDrillJobRows.length > 0) allPendencyDrillRows = oc.allDrillJobRows; }
       var gc = lsGet('org');       if (gc && gc.success) { orgData      = gc; orgDataReady      = true; }
       // Bootstrap agent + tradelane default range cache
       var defKey = (state.dateFrom||'Jan-26') + '_' + (state.dateTo||'Jun-26');
@@ -314,8 +314,11 @@ function showDashboard() {
       // Load drill rows from localStorage — avoids re-fetch on every session
       var dc = lsGet('drillrows');
       if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
-      var pdc = lsGet('pendencyDrillRows');
-      if (pdc && pdc.rows && pdc.rows.length > 0) { allPendencyDrillRows = pdc.rows; }
+      // allPendencyDrillRows: prefer from opData (already extracted above), fallback to dedicated key
+      if (!allPendencyDrillRows) {
+        var pdc = lsGet('pendencyDrillRows');
+        if (pdc && pdc.rows && pdc.rows.length > 0) { allPendencyDrillRows = pdc.rows; }
+      }
 
     })();
 
@@ -5149,9 +5152,10 @@ function openPendencyDrill(rep, col, status, lock, type){
     render(); return;
   }
 
-  // Fallback: fetch from server (first load before allPendencyDrillRows arrives)
+  // Fallback: fetch from server (only if allPendencyDrillRows not loaded yet)
+  var safeLock = lock || (state.page==='finance' ? 'Financial Lock' : 'Operation Lock');
   render();
-  var qs = '?action=pendencyDrill&rep='+encodeURIComponent(rep)+'&month='+encodeURIComponent(col)+'&status='+encodeURIComponent(status)+'&lock='+encodeURIComponent(lock)+'&type='+encodeURIComponent(type||'rep');
+  var qs = '?action=pendencyDrill&rep='+encodeURIComponent(rep)+'&month='+encodeURIComponent(col)+'&status='+encodeURIComponent(status)+'&lock='+encodeURIComponent(safeLock)+'&type='+encodeURIComponent(type||'rep');
   fetch('/api/mongo-batch'+qs)
     .then(function(r){ return r.json(); })
     .then(function(data){
