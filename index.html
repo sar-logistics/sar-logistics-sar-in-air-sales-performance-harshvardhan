@@ -2914,32 +2914,24 @@ function tradelanePage(){
 
   // Apply filterReps / filterLobs
   // RLS: auto-restrict reps based on user role
-  var _rlsReps = [];
-  if (currentUser) {
-    var _iRole = (currentUser.role || '').toLowerCase().trim();
-    if (_iRole === 'sales rep') {
-      _rlsReps = [currentUser.name];
-    } else if (_iRole === 'zonal manager') {
-      _rlsReps = repsRaw.filter(function(r){ return !r.isBranch; }).map(function(r){ return r.name; });
-    }
-  }
-  var filterReps = _rlsReps.length > 0 ? _rlsReps : (state.filterReps || []);
+  var filterReps = state.filterReps || [];
   var filterLobs = state.filterLobs || [];
   var LOB_KEY_TO_LABEL = {
     'AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp',
     'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
     'ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp'
   };
-  // lobData is already scoped to activeLob tab — only filter by reps
-  var hasFilters = filterReps.length > 0;
+  var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
   if (hasFilters && lobData.allCountries) {
     var _frNormT = filterReps.map(function(x){ return normalizeName(x); });
-    console.log('[TL RLS] filterReps norms:', _frNormT.slice(0,5));
-    if (lobData.allCountries[0]) console.log('[TL RLS] sample salesReps:', (lobData.allCountries[0].salesReps||[]).slice(0,5), 'norms:', (lobData.allCountries[0].salesReps||[]).slice(0,3).map(function(r){return normalizeName(r);}));
     var filtered = lobData.allCountries.filter(function(c) {
-      return (c.salesReps||[]).some(function(r){ return _frNormT.indexOf(normalizeName(r||''))>-1; });
+      var repOk = filterReps.length === 0 || (c.salesReps||[]).some(function(r){ return _frNormT.indexOf(normalizeName(r||''))>-1; });
+      var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
+        var needle = LOB_KEY_TO_LABEL[fk]||'';
+        return needle && (c.lobs||[]).indexOf(needle)>-1;
+      });
+      return repOk && lobOk;
     });
-    console.log('[TL RLS] filtered:', filtered.length, '/', lobData.allCountries.length);
     function top10tl(arr,key){ return arr.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,10); }
     lobData = {
       allCountries:   filtered,
