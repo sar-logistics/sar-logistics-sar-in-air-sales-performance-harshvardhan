@@ -5081,9 +5081,28 @@ function computeDrillResult(entity, metric, month){
   var rangeStart = isRange ? FY_MONTHS_ALL.indexOf(rangeBits[1]) : -1;
   var rangeEnd   = isRange ? FY_MONTHS_ALL.indexOf(rangeBits[2]) : -1;
 
+  // Build LOB collection filter from active filterLobs
+  var _activeLobFilter = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
+  var _LOB_TO_CL = {
+    'AIR EXPORT':     function(cl){ return cl.includes('air') && cl.includes('export'); },
+    'AIR IMPORT':     function(cl){ return cl.includes('air') && cl.includes('import'); },
+    'SEA EXPORT':     function(cl){ return cl.includes('sea') && cl.includes('export'); },
+    'SEA IMPORT':     function(cl){ return cl.includes('sea') && cl.includes('import'); },
+    'ISOTANK EXPORT': function(cl){ return cl.includes('isotank') && cl.includes('export'); },
+    'ISOTANK IMPORT': function(cl){ return cl.includes('isotank') && cl.includes('import'); },
+  };
+
   var matched = [];
   for (var i=0; i<allDrillRows.length; i++){
     var row = allDrillRows[i];
+
+    // LOB filter — apply active filterLobs to restrict drill rows
+    if (_activeLobFilter) {
+      var _lobMatch = _activeLobFilter.some(function(lob){
+        return _LOB_TO_CL[lob] && _LOB_TO_CL[lob](row._cl);
+      });
+      if (!_lobMatch) continue;
+    }
 
     // Collection/metric filter
     if (isAir && !row._cl.includes('air')) continue;
@@ -5841,7 +5860,7 @@ document.addEventListener('click', function(ev){
   }
   else if(act==='toggleFilterLobDrop'){ ev.stopPropagation(); state.filterLobDropOpen=!state.filterLobDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterRepDrop'){ ev.stopPropagation(); state.filterRepDropOpen=!state.filterRepDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='filterLobAll'){ ev.stopPropagation(); state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterLobAll'){ ev.stopPropagation(); _drillResultCache = {}; state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='filterRepAll'){ ev.stopPropagation(); state.filterReps=[]; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterLob'){
     ev.stopPropagation();
@@ -5851,6 +5870,7 @@ document.addEventListener('click', function(ev){
     } else {
       state.filterLobs = state.filterLobs.concat([lv]);
     }
+    _drillResultCache = {}; // clear drill cache when LOB filter changes
     render(); requestAnimationFrame(positionAllDrops);
   }
   else if(act==='toggleFilterRep'){
