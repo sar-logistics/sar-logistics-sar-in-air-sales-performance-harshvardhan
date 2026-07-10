@@ -1962,6 +1962,13 @@ module.exports = async function handler(req, res) {
     if (!drillRowsCache || (now2 - drillRowsCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
       getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => {});
     }
+    // Warm finance and op pendency caches in background — avoids slow first load on those pages
+    if (!financeCache || (now2 - financeCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
+      getFinancePendency(db, false).catch(() => {});
+    }
+    if (!opCache || (now2 - opCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
+      getOpPendency(db, false).catch(() => {});
+    }
     return res.status(200).json({ ok: true, ts: now2, cached: !!salesCache });
   }
 
