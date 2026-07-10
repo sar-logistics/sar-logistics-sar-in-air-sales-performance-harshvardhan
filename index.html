@@ -249,6 +249,8 @@ function verifyWithBackend(userinfo) {
       return;
     }
     currentUser = res.data.user;
+    // Cache session so next page load is instant (no Google OAuth round-trip)
+    try { localStorage.setItem('sar_user_session', JSON.stringify({ user: currentUser, _savedAt: Date.now() })); } catch(e) {}
     showDashboard();
   })
   .catch(function(err) {
@@ -567,6 +569,7 @@ function fetchLiveData(callback, force){
     try {
       Object.keys(localStorage).filter(function(k){ return k.startsWith('sar_'); })
         .forEach(function(k){ localStorage.removeItem(k); });
+      localStorage.removeItem('sar_user_session');
       _weekDataFetched = false;
       _drillResultCache = {};
       allDrillRows = null;
@@ -6070,6 +6073,30 @@ window.addEventListener('load', function() {
   // Set SAR logo on login screen immediately
   var loginLogo = document.getElementById('login-sar-logo');
   if (loginLogo) loginLogo.src = SAR_LOGO_URI;
+
+  // ── Instant session restore ──────────────────────────────────────────────
+  // If we have a cached user session, skip Google OAuth entirely and render
+  // the dashboard immediately — zero network calls before first paint.
+  try {
+    var savedSession = localStorage.getItem('sar_user_session');
+    if (savedSession) {
+      var sess = JSON.parse(savedSession);
+      // Session valid for 8 hours
+      if (sess && sess.user && sess._savedAt && (Date.now() - sess._savedAt) < 8 * 60 * 60 * 1000) {
+        currentUser = sess.user;
+        showDashboard();
+        // Still init Google auth in background for token refresh
+        var interval2 = setInterval(function() {
+          if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
+            clearInterval(interval2); initGoogleAuth();
+          }
+        }, 100);
+        return; // dashboard already showing — skip login screen flow
+      } else {
+        localStorage.removeItem('sar_user_session'); // expired
+      }
+    }
+  } catch(e) {}
 
   var interval = setInterval(function() {
     if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
