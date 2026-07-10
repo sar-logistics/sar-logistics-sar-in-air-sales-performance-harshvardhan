@@ -1903,8 +1903,9 @@ async function computeBothPendency(db) {
       const cls = classifyRow(job, collName);
 
       // Store compact drill row — shared across OL and FL, lock status derived client-side
+      const displayNorm = normalizeName(displayName);
       allDrillJobRows.push({
-        _norm: norm, _zone: zone, _month: monthLabel,
+        _norm: norm, _displayNorm: displayNorm, _zone: zone, _month: monthLabel,
         olDone, flDone,
         shipmentNo:  job["Shipment No"]     || "—",
         jobDate:     job["Job Date"]        || "",
