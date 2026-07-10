@@ -1763,33 +1763,44 @@ async function computeUsageAnalytics(db) {
 }
 
 let financeCache = null;
-let financeCacheTime = 0; // v3: jobOwners
+let financeCacheTime = 0;
 
 let opCache = null;
-let opCacheTime = 0; // v3: reset
+let opCacheTime = 0;
+
+// In-flight promise guard — prevents two parallel computeBothPendency calls
+let _pendencyBuildPromise = null;
 
 async function getOpPendency(db, force) {
   if (!force && opCache && (Date.now() - opCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...opCache, cached: true };
   }
-  const result = await computePendency(db, "Operation Lock");
-  opCache = result;
-  opCacheTime = Date.now();
-  return result;
+  await _ensurePendencyCache(db, force);
+  return { ...opCache, cached: false };
 }
 
 async function getFinancePendency(db, force) {
   if (!force && financeCache && (Date.now() - financeCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...financeCache, cached: true };
   }
-  const result = await computePendency(db, "Financial Lock");
-  financeCache = result;
-  financeCacheTime = Date.now();
-  return result;
+  await _ensurePendencyCache(db, force);
+  return { ...financeCache, cached: false };
 }
 
-async function computePendency(db, lockField) {
-  // Load zone mapping from mapping_sales_targets
+// Ensures both caches built in ONE single DB pass.
+// If a build is already in flight, waits for it instead of starting a second one.
+async function _ensurePendencyCache(db, force) {
+  if (!force && _pendencyBuildPromise) return _pendencyBuildPromise;
+  _pendencyBuildPromise = computeBothPendency(db).then(({ op, finance }) => {
+    opCache = op;           opCacheTime = Date.now();
+    financeCache = finance; financeCacheTime = Date.now();
+    _pendencyBuildPromise = null;
+  }).catch(e => { _pendencyBuildPromise = null; throw e; });
+  return _pendencyBuildPromise;
+}
+
+// Single-pass: loads mapping + all job collections ONCE, builds OL and FL simultaneously
+async function computeBothPendency(db) {
   const mappingRows = await db.collection("mapping_sales_targets").find(
     {}, { projection: { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1, "_fy": 1 } }
   ).toArray();
@@ -1830,13 +1841,16 @@ async function computePendency(db, lockField) {
 
   // Direct lean query across all collections in parallel
   // Filter to FY date range at DB level — avoids pulling irrelevant rows
+  // Single DB pass — track OL and FL simultaneously in same loop
   const FY_DATE_FILTER = { $or: [
-    { "ETD Loading Port": { $gte: "2025-04-01", $lte: "2027-03-31\uffff" } },
-    { "ETA Discharge":    { $gte: "2025-04-01", $lte: "2027-03-31\uffff" } },
-    { "Job Date":         { $gte: "2025-04-01", $lte: "2027-03-31\uffff" } },
+    { "ETD Loading Port": { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
+    { "ETA Discharge":    { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
+    { "Job Date":         { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
   ]};
   const ALL_JOB_COLLS = Object.values(COLLECTIONS);
-  const repMonthMap = {}; // normalizedName → { zone, displayName, monthData: { monthLabel → { pending, done } } }
+  // Two independent maps — one per lock type — built in the same loop
+  const olMap = {}; // OL: norm → { zone, displayName, monthData: { month → { pending, done } }, jobOwners }
+  const flMap = {}; // FL: same structure
   const seenMonths = new Set();
 
   await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
@@ -1861,86 +1875,75 @@ async function computePendency(db, lockField) {
       const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
       if (!FY_MONTHS.includes(monthLabel)) continue;
 
-      const flDone = job[lockField] && String(job[lockField]).trim() !== "";
-
-      // Display name = first pipe segment of Sales Person field
       const nameParts = rawName.split("|").map(s => s.trim());
       const cleanName = nameParts[0] || rawName;
 
-      // Zone resolution priority:
-      // 1. Mapping by normalized name
-      // 2. INZ code lookup built from mapping (e.g. INZ05 → INAZ05 zone)
-      // 3. Extract zone code directly from Sales Person pipe segments
       let zone = repZoneMap[norm] || "";
       let displayName = repDisplayMap[norm] || cleanName;
-
       if (!zone) {
-        // Find INZ/zone code in pipe segments and look up in inzCodeZoneMap
         for (const part of nameParts.slice(1)) {
           const trimmed = part.toUpperCase();
           if (inzCodeZoneMap[trimmed]) { zone = inzCodeZoneMap[trimmed]; break; }
-          // Fallback: use the code itself as zone name if it looks like a zone
           if (/^IN[A-Z]?\d+$/.test(trimmed)) { zone = zone || trimmed; }
         }
       }
       if (!zone) zone = "Unassigned";
 
       const jobOwner = String(job["Job Owner"] || "").trim().split("|")[0].trim() || "";
+      const olDone = job["Operation Lock"] && String(job["Operation Lock"]).trim() !== "";
+      const flDone = job["Financial Lock"]  && String(job["Financial Lock"]).trim()  !== "";
 
-      if (!repMonthMap[norm]) repMonthMap[norm] = { zone, displayName, monthData: {}, jobOwners: {} };
-      if (!repMonthMap[norm].monthData[monthLabel]) repMonthMap[norm].monthData[monthLabel] = { pending: 0, done: 0 };
-      // Track job owner breakdown
-      if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase()) {
-        if (!repMonthMap[norm].jobOwners[jobOwner]) repMonthMap[norm].jobOwners[jobOwner] = {};
-        if (!repMonthMap[norm].jobOwners[jobOwner][monthLabel]) repMonthMap[norm].jobOwners[jobOwner][monthLabel] = { pending: 0, done: 0 };
+      // Helper: ensure rep entry exists in a map
+      function ensureRep(map) {
+        if (!map[norm]) map[norm] = { zone, displayName, monthData: {}, jobOwners: {} };
+        if (!map[norm].monthData[monthLabel]) map[norm].monthData[monthLabel] = { pending: 0, done: 0 };
+        if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase()) {
+          if (!map[norm].jobOwners[jobOwner]) map[norm].jobOwners[jobOwner] = {};
+          if (!map[norm].jobOwners[jobOwner][monthLabel]) map[norm].jobOwners[jobOwner][monthLabel] = { pending: 0, done: 0 };
+        }
       }
-      if (flDone) repMonthMap[norm].monthData[monthLabel].done++;
-      else        repMonthMap[norm].monthData[monthLabel].pending++;
-      if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && repMonthMap[norm].jobOwners[jobOwner]) {
-        if (flDone) repMonthMap[norm].jobOwners[jobOwner][monthLabel].done++;
-        else        repMonthMap[norm].jobOwners[jobOwner][monthLabel].pending++;
-      }
+
+      ensureRep(olMap);
+      if (olDone) { olMap[norm].monthData[monthLabel].done++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && olMap[norm].jobOwners[jobOwner]) olMap[norm].jobOwners[jobOwner][monthLabel].done++; }
+      else        { olMap[norm].monthData[monthLabel].pending++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && olMap[norm].jobOwners[jobOwner]) olMap[norm].jobOwners[jobOwner][monthLabel].pending++; }
+
+      ensureRep(flMap);
+      if (flDone) { flMap[norm].monthData[monthLabel].done++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && flMap[norm].jobOwners[jobOwner]) flMap[norm].jobOwners[jobOwner][monthLabel].done++; }
+      else        { flMap[norm].monthData[monthLabel].pending++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && flMap[norm].jobOwners[jobOwner]) flMap[norm].jobOwners[jobOwner][monthLabel].pending++; }
+
       seenMonths.add(monthLabel);
     }
   }));
 
   const monthsInData = FY_MONTHS.filter(m => seenMonths.has(m));
 
-  // Build reps list with zone
-  const reps = Object.values(repMonthMap).map((rep) => {
-    let totalPending = 0, totalDone = 0;
-    for (const m of monthsInData) {
-      totalPending += (rep.monthData[m]?.pending || 0);
-      totalDone    += (rep.monthData[m]?.done    || 0);
+  function buildResult(repMonthMap) {
+    const reps = Object.values(repMonthMap).map((rep) => {
+      let totalPending = 0, totalDone = 0;
+      for (const m of monthsInData) {
+        totalPending += (rep.monthData[m]?.pending || 0);
+        totalDone    += (rep.monthData[m]?.done    || 0);
+      }
+      const jobOwners = Object.entries(rep.jobOwners || {}).map(([ownerName, ownerMonthData]) => {
+        let op = 0, od = 0;
+        for (const m of monthsInData) { op += ownerMonthData[m]?.pending||0; od += ownerMonthData[m]?.done||0; }
+        return { name: ownerName, monthData: ownerMonthData, totalPending: op, totalDone: od, total: op+od };
+      }).filter(o => o.total > 0).sort((a,b) => b.total - a.total);
+      return { name: rep.displayName, zone: rep.zone, monthData: rep.monthData, totalPending, totalDone, total: totalPending + totalDone, jobOwners };
+    }).sort((a, b) => b.total - a.total);
+
+    const zoneMap = {};
+    for (const rep of reps) {
+      if (!zoneMap[rep.zone]) zoneMap[rep.zone] = { totalPending: 0, totalDone: 0, total: 0 };
+      zoneMap[rep.zone].totalPending += rep.totalPending;
+      zoneMap[rep.zone].totalDone    += rep.totalDone;
+      zoneMap[rep.zone].total        += rep.total;
     }
-    // Build job owner summaries
-    const jobOwners = Object.entries(rep.jobOwners || {}).map(([ownerName, ownerMonthData]) => {
-      let op = 0, od = 0;
-      for (const m of monthsInData) { op += ownerMonthData[m]?.pending||0; od += ownerMonthData[m]?.done||0; }
-      return { name: ownerName, monthData: ownerMonthData, totalPending: op, totalDone: od, total: op+od };
-    }).filter(o => o.total > 0).sort((a,b) => b.total - a.total);
-    return { name: rep.displayName, zone: rep.zone, monthData: rep.monthData, totalPending, totalDone, total: totalPending + totalDone, jobOwners };
-  }).sort((a, b) => b.total - a.total);
-
-  // Build unique zones list (ordered by zone total desc)
-  const zoneMap = {};
-  for (const rep of reps) {
-    if (!zoneMap[rep.zone]) zoneMap[rep.zone] = { totalPending: 0, totalDone: 0, total: 0 };
-    zoneMap[rep.zone].totalPending += rep.totalPending;
-    zoneMap[rep.zone].totalDone    += rep.totalDone;
-    zoneMap[rep.zone].total        += rep.total;
+    const zones = Object.entries(zoneMap).sort((a, b) => b[1].total - a[1].total).map(([name]) => name);
+    return { success: true, months: monthsInData, reps, zones, pushedAt: new Date().toISOString() };
   }
-  const zones = Object.entries(zoneMap)
-    .sort((a, b) => b[1].total - a[1].total)
-    .map(([name]) => name);
 
-  return {
-    success: true,
-    months: monthsInData,
-    reps,
-    zones,
-    pushedAt: new Date().toISOString(),
-  };
+  return { op: buildResult(olMap), finance: buildResult(flMap) };
 }
 
 module.exports = async function handler(req, res) {
