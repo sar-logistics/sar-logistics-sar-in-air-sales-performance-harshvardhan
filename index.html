@@ -314,6 +314,11 @@ function showDashboard() {
       // Load drill rows from localStorage — avoids re-fetch on every session
       var dc = lsGet('drillrows');
       if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
+
+      // If finance/op not in localStorage, start fetching immediately in background
+      // so by the time user navigates there, data is ready (or close to it)
+      if (!financeDataReady) setTimeout(function(){ fetchFinanceData(null); }, 50);
+      if (!opDataReady)      setTimeout(function(){ fetchOpData(null);      }, 300);
     })();
 
     if (dataReady) {
