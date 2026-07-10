@@ -354,6 +354,10 @@ function _showDashboardBody() {
 
   if (dataReady) {
     render();
+    // If LOB filter is active but drillRows not loaded yet, fetch eagerly and re-render
+    if (state.filterLobs && state.filterLobs.length > 0 && !allDrillRows) {
+      loadDrillData(function(){ render(); });
+    }
   } else {
     // No cache — render the full shell immediately so the page feels instant,
     // then kick off a direct fetchLiveData (skip the meta round-trip).
@@ -5073,13 +5077,12 @@ function loadDrillData(callback){
   if (_drillDataLoading) { if(callback) _drillDataCallbacks.push(callback); return; }
   _drillDataLoading = true;
   if(callback) _drillDataCallbacks.push(callback);
-  // Fallback: fetch separately (shouldn't be needed since allDrillRows
-  // comes with the initial ?action=sales response, but kept as a safety net)
-  fetch('/api/mongo-batch?action=sales', { priority: 'high' })
+  // Fetch drill rows via ping which always bundles allDrillRows
+  fetch('/api/mongo-batch?action=ping', { priority: 'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
-      if (data.allDrillRows) {
-        allDrillRows = data.allDrillRows;
+      if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
+        allDrillRows = data.sales.allDrillRows;
         lsSet('drillrows', { rows: allDrillRows });
       }
       _drillDataLoading = false;
