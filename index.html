@@ -1813,9 +1813,11 @@ function repEntity(r){
 }
 
 function entities(){
-  var list = [grandEntity()];
+  var _role = (currentUser && currentUser.role || '').toLowerCase().trim();
+  var _showGrand = _role !== 'zonal manager' && _role !== 'sales rep';
+  var list = _showGrand ? [grandEntity()] : [];
   getZones().forEach(function(z){
-    list.push(zoneEntity(z));
+    if (_role !== 'sales rep') list.push(zoneEntity(z));
     var isCollapsed = state.zoneOpen[z] === false; // default open unless explicitly collapsed
     if (!isCollapsed) {
       repsRaw.filter(function(r){ return r.zone === z; }).forEach(function(r){
@@ -2486,7 +2488,17 @@ function customerPage(){
   var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
 
   // Apply filterReps / filterLobs to customer data
-  var filterReps = state.filterReps || [];
+  // RLS: auto-restrict reps based on user role
+  var _rlsReps = [];
+  if (currentUser) {
+    var _iRole = (currentUser.role || '').toLowerCase().trim();
+    if (_iRole === 'sales rep') {
+      _rlsReps = [currentUser.name];
+    } else if (_iRole === 'zonal manager') {
+      _rlsReps = repsRaw.filter(function(r){ return !r.isBranch; }).map(function(r){ return r.name; });
+    }
+  }
+  var filterReps = _rlsReps.length > 0 ? _rlsReps : (state.filterReps || []);
   var filterLobs = state.filterLobs || [];
   // Map sales LOB filter keys to customer LOB label substrings
   var LOB_KEY_TO_CUST = {
@@ -2676,7 +2688,17 @@ function agentPage(){
   var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
 
   // Apply filterReps / filterLobs
-  var filterReps = state.filterReps || [];
+  // RLS: auto-restrict reps based on user role
+  var _rlsReps = [];
+  if (currentUser) {
+    var _iRole = (currentUser.role || '').toLowerCase().trim();
+    if (_iRole === 'sales rep') {
+      _rlsReps = [currentUser.name];
+    } else if (_iRole === 'zonal manager') {
+      _rlsReps = repsRaw.filter(function(r){ return !r.isBranch; }).map(function(r){ return r.name; });
+    }
+  }
+  var filterReps = _rlsReps.length > 0 ? _rlsReps : (state.filterReps || []);
   var filterLobs = state.filterLobs || [];
   var LOB_KEY_TO_CUST = {
     'AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp',
@@ -2863,7 +2885,17 @@ function tradelanePage(){
   var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
 
   // Apply filterReps / filterLobs
-  var filterReps = state.filterReps || [];
+  // RLS: auto-restrict reps based on user role
+  var _rlsReps = [];
+  if (currentUser) {
+    var _iRole = (currentUser.role || '').toLowerCase().trim();
+    if (_iRole === 'sales rep') {
+      _rlsReps = [currentUser.name];
+    } else if (_iRole === 'zonal manager') {
+      _rlsReps = repsRaw.filter(function(r){ return !r.isBranch; }).map(function(r){ return r.name; });
+    }
+  }
+  var filterReps = _rlsReps.length > 0 ? _rlsReps : (state.filterReps || []);
   var filterLobs = state.filterLobs || [];
   var LOB_KEY_TO_LABEL = {
     'AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp',
