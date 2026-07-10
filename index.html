@@ -564,6 +564,7 @@ function computeFilteredRepsRaw(){
 
   // LOB filter — recompute monthly arrays from allDrillRows when active
   var filterLobs = state.filterLobs || [];
+  console.log('[LOB DEBUG] filterLobs='+JSON.stringify(filterLobs)+' allDrillRows='+(allDrillRows?allDrillRows.length:'null')+' _lobDataFetched='+_lobDataFetched);
   if (filterLobs.length > 0 && allDrillRows && allDrillRows.length > 0) {
     // Build index: normalized_repName -> month -> {gp, ship, tons, teu, lcl}
     var _lobIdx = {};
@@ -583,6 +584,11 @@ function computeFilteredRepsRaw(){
       _md.tons += _row.vol || 0;
       _md.teu  += _row.t   || 0;
     }
+    // Log first 3 entries of _lobIdx to verify matching
+    var _lobIdxKeys = Object.keys(_lobIdx).slice(0,3);
+    console.log('[LOB DEBUG] _lobIdx sample keys:', _lobIdxKeys);
+    _lobIdxKeys.forEach(function(k){ var months=Object.keys(_lobIdx[k]); console.log('[LOB DEBUG]  '+k+' months='+months.length+' sample_ship='+(_lobIdx[k][months[0]]&&_lobIdx[k][months[0]].ship)); });
+
     base = base.map(function(r) {
       var filtered = Object.assign({}, r);
       if (r.isBranch && r.lobData && Object.keys(r.lobData).length > 0) {
@@ -611,6 +617,14 @@ function computeFilteredRepsRaw(){
     });
   }
 
+  // Log first 2 reps post-filter
+  base.slice(0,2).forEach(function(r){
+    var idxs = filteredMonthIndices();
+    var shipTotal = idxs.reduce(function(s,i){ return s+(r.ship[i]||0); },0);
+    var norm = normalizeName(r.name);
+    var inIdx = !!_lobIdx[norm];
+    console.log('[LOB DEBUG] rep='+r.name+' norm='+norm+' isBranch='+r.isBranch+' inIdx='+inIdx+' shipTotal='+shipTotal+' ship[12]='+r.ship[12]);
+  });
   repsRaw = base;
 }
 var zonesRaw = [];
