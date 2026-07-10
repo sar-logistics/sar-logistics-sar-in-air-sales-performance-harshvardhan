@@ -1997,21 +1997,33 @@ module.exports = async function handler(req, res) {
     const needsSales   = !salesCache   || (now2 - salesCacheTime)   > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
     const needsFinance = !financeCache || (now2 - financeCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
     const needsOp      = !opCache      || (now2 - opCacheTime)      > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
+    const needsDrill   = !drillRowsCache || (now2 - drillRowsCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
 
-    // Await all three in parallel — bundle sales+finance+op in one response
-    // so client never needs any separate fetches after first load
+    // Build all caches in parallel
     const [salesResult, financeResult, opResult] = await Promise.all([
-      needsSales   ? getSalesAggregate(db, false).catch(() => null)   : Promise.resolve(salesCache),
-      needsFinance ? getFinancePendency(db, false).catch(() => null)  : Promise.resolve(financeCache),
-      needsOp      ? getOpPendency(db, false).catch(() => null)       : Promise.resolve(opCache),
+      needsSales   ? getSalesAggregate(db, false).catch(() => null)  : Promise.resolve(salesCache),
+      needsFinance ? getFinancePendency(db, false).catch(() => null) : Promise.resolve(financeCache),
+      needsOp      ? getOpPendency(db, false).catch(() => null)      : Promise.resolve(opCache),
     ]);
 
-    // Warm drill rows in background (large — don't block ping)
-    if (!drillRowsCache || (now2 - drillRowsCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
-      getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => {});
+    // Build drill rows cache if needed
+    if (needsDrill) {
+      await getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => null);
     }
 
-    // Include lastUpdated so client can skip checkForFreshData round-trip
+    // Strip weekData/lobData from sales (same as ?action=sales)
+    let salesStripped = null;
+    if (salesResult && salesResult.repsRaw) {
+      salesStripped = { ...salesResult, repsRaw: salesResult.repsRaw.map(r => {
+        const c = { ...r }; delete c.weekData; delete c.lobData; return c;
+      })};
+      // Bundle allDrillRows from drillRowsCache so client never needs a separate drill fetch
+      if (drillRowsCache && drillRowsCache.allRows && drillRowsCache.allRows.length > 0) {
+        salesStripped.allDrillRows = drillRowsCache.allRows;
+      }
+    }
+
+    // Include lastUpdated so client knows if data changed since last cache
     let lastUpdated = null;
     try {
       const meta = await db.collection("_meta").findOne({ _id: "push_meta" });
@@ -2021,7 +2033,7 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       ok: true, ts: now2,
       lastUpdated,
-      sales:   salesResult   || null,
+      sales:   salesStripped || null,
       finance: financeResult || null,
       op:      opResult      || null,
     });
