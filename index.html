@@ -261,6 +261,8 @@ function verifyWithBackend(userinfo) {
 }
 
 function showDashboard(instant) {
+  performance.mark('showDashboard_start');
+  console.time('[PERF] showDashboard total');
   var loginScreen = document.getElementById('login-screen');
   var appEl = document.getElementById('app');
 
@@ -270,6 +272,8 @@ function showDashboard(instant) {
   }
 
   setTimeout(function() {
+    console.timeEnd('[PERF] showDashboard total');
+    console.log('[PERF] setTimeout done at', performance.now().toFixed(1)+'ms');
     loginScreen.style.display = 'none';
     appEl.style.display = 'flex';
     _showDashboardBody();
@@ -277,9 +281,12 @@ function showDashboard(instant) {
 }
 
 function _showDashboardBody() {
+  var _t0 = performance.now();
+  console.log('[PERF] _showDashboardBody start at', _t0.toFixed(1)+'ms');
   // ── Instant boot: identical to Op/Finance ────────────────────────────────
-  // Migrate from old cache key if new key not yet populated
+  var _tSales = performance.now();
   var cached = lsGet('sales');
+  console.log('[PERF] lsGet(sales) took', (performance.now()-_tSales).toFixed(1)+'ms, size='+(cached?JSON.stringify(cached).length:0)+' hit='+!!(cached&&cached.repsRaw));
   if (!cached) {
     try {
       var oldRaw = localStorage.getItem('sar_sales_cache_' + CACHE_VERSION);
@@ -301,6 +308,7 @@ function _showDashboardBody() {
   }
 
   // Pre-populate all secondary data from localStorage before first render
+  var _tBoot = performance.now();
   (function bootstrapSecondaryCache() {
     var cc = lsGet('customers'); if (cc && cc.success) { customerData = cc; customerDataReady = true; }
     var fc = lsGet('finance');   if (fc && fc.success) { financeData  = fc; financeDataReady  = true; }
@@ -320,15 +328,16 @@ function _showDashboardBody() {
     var cusc = lsGet('customers_' + latestKey) || lsGet('customers_' + defKey);
     if (cusc && cusc.success) { customerData = cusc; customerDataReady = true; _customerCache[latestKey] = cusc; }
     // Load drill rows from localStorage — avoids re-fetch on every session
-    var dc = lsGet('drillrows');
+    var _tDrill = performance.now(); var dc = lsGet('drillrows'); console.log('[PERF] lsGet(drillrows) took', (performance.now()-_tDrill).toFixed(1)+'ms rows='+((dc&&dc.rows&&dc.rows.length)||0));
     if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
     // allPendencyDrillRows: prefer from opData (already extracted above), fallback to dedicated key
     if (!allPendencyDrillRows) {
-      var pdc = lsGet('pendencyDrillRows');
+      var _tPDrill = performance.now(); var pdc = lsGet('pendencyDrillRows'); console.log('[PERF] lsGet(pendencyDrillRows) took', (performance.now()-_tPDrill).toFixed(1)+'ms');
       if (pdc && pdc.rows && pdc.rows.length > 0) { allPendencyDrillRows = pdc.rows; }
     }
 
   })();
+  console.log('[PERF] bootstrapSecondaryCache total', (performance.now()-_tBoot).toFixed(1)+'ms');
 
   if (dataReady) {
     render();
@@ -4016,6 +4025,7 @@ function allZonesToggleButton(){
 }
 
 function salesTable(M){
+  var _tSalesTable = performance.now();
   var idxs = filteredMonthIndices();
 
   // Weekly view — auto-fetch weekData if not loaded yet (no empty screen, just load)
@@ -4253,6 +4263,7 @@ function salesTable(M){
     +'</tr>';
   }).join('');
 
+  console.log('[PERF] salesTable() build took', (performance.now()-_tSalesTable).toFixed(1)+'ms');
   return '<div style="background:#FFFFFF;border:1px solid '+BORDER+';border-radius:12px;box-shadow:0 2px 6px rgba(20,35,59,0.08);">'
     +'<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid '+BORDER+';background:#FFFFFF;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:10;border-radius:12px 12px 0 0;">'
       +'<div style="display:flex;align-items:center;gap:10px;">'
@@ -4890,6 +4901,8 @@ function topbarHash(){
 }
 
 function render(){
+  var _tRender = performance.now();
+  console.log('[PERF] render() start at', _tRender.toFixed(1)+'ms');
   computeFilteredRepsRaw();
   var M=model();
   var app=document.getElementById('app');
@@ -4911,6 +4924,7 @@ function render(){
   var innerScrollEl=mainEl&&mainEl.querySelector('div[style*="overflow-y:auto"]');
   var innerScrollTop=innerScrollEl?innerScrollEl.scrollTop:0;
   document.getElementById('topbar-slot').innerHTML=topbar();
+  var _tHtml = performance.now();
   mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='agents' ? agentPage()
     : state.page==='tradelane' ? tradelanePage()
@@ -4920,6 +4934,9 @@ function render(){
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
+  console.log('[PERF] mainEl.innerHTML took', (performance.now()-_tHtml).toFixed(1)+'ms');
+  console.log('[PERF] render() total', (performance.now()-_tRender).toFixed(1)+'ms');
+  requestAnimationFrame(function(){ console.log('[PERF] First RAF at', performance.now().toFixed(1)+'ms (page visible)'); });
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
   if(scrollTop) mainEl.scrollTop=scrollTop;
   if(innerScrollTop){ var newInner=mainEl.querySelector('div[style*="overflow-y:auto"]'); if(newInner) newInner.scrollTop=innerScrollTop; }
