@@ -2930,17 +2930,12 @@ function tradelanePage(){
     'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
     'ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp'
   };
-  var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
+  // lobData is already scoped to activeLob tab — only filter by reps
+  var hasFilters = filterReps.length > 0;
   if (hasFilters && lobData.allCountries) {
     var _frNormT = filterReps.map(function(x){ return normalizeName(x); });
     var filtered = lobData.allCountries.filter(function(c) {
-      var _frNorm = _frNormT;
-      var repOk = filterReps.length === 0 || (c.salesReps||[]).some(function(r){ return _frNorm.indexOf(normalizeName(r||''))>-1; });
-      var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
-        var needle = LOB_KEY_TO_LABEL[fk]||'';
-        return needle && (c.lobs||[]).indexOf(needle)>-1;
-      });
-      return repOk && lobOk;
+      return (c.salesReps||[]).some(function(r){ return _frNormT.indexOf(normalizeName(r||''))>-1; });
     });
     function top10tl(arr,key){ return arr.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,10); }
     lobData = {
