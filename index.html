@@ -5484,30 +5484,17 @@ function pendencyDrillDrawer(){
   } else if (!pd.rows || pd.rows.length===0) {
     bodyContent = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:60px 24px;text-align:center;"><div style="font-size:12.5px;color:#94A3B8;font-weight:600;">No matching jobs found.</div></div>';
   } else {
-    var columnFilters = pd.columnFilters || {};
+    // Filter by global LOB — no per-column filter UI
+    var _pdLobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
     var visibleRows = pd.rows.filter(function(r){
-      for (var k in columnFilters) {
-        var allowed = columnFilters[k];
-        if (!allowed || !allowed.length) continue;
-        var v = String(r[k]||'');
-        if (allowed.indexOf(v)===-1) return false;
-      }
-      return true;
+      return !_pdLobs || _pdLobs.indexOf(r.lob) !== -1;
     });
 
     function th(c){
-      var hasFilter = columnFilters[c.k] && columnFilters[c.k].length>0;
-      var isOpen = pd.openFilterCol===c.k;
-      var bg = hasFilter?'#EEF3FC':'#F8FAFC';
-      var isSticky = c.sticky!==undefined;
-      var isLastSticky = c.k==='lob';
-      var stickyStyle = isSticky?'position:sticky;left:'+c.sticky+'px;width:'+c.width+'px;min-width:'+c.width+'px;max-width:'+c.width+'px;z-index:3;'+(isLastSticky?'box-shadow:2px 0 4px rgba(13,43,94,0.08);':''):'';
-      return '<th style="position:sticky;top:0;'+stickyStyle+'background:'+bg+';text-align:left;padding:9px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:'+(hasFilter?'#1E3A66':'#64748B')+';text-transform:uppercase;border-bottom:2px solid #E2E8F0;white-space:nowrap;user-select:none;z-index:'+(isSticky?3:1)+';">'
-        +'<span style="display:inline-flex;align-items:center;gap:4px;">'+esc(c.l)
-          +'<span data-act="togglePDrillColFilter" data-col="'+c.k+'" style="cursor:pointer;display:inline-flex;padding:2px;border-radius:3px;'+(hasFilter||isOpen?'background:#1D5FCC;':'')+'">'
-            +'<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="'+(hasFilter||isOpen?'#FFFFFF':'#9AAFC8')+'" stroke-width="3" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>'
-          +'</span>'
-        +'</span></th>';
+      var isSticky = c.sticky !== undefined;
+      var isLastSticky = c.k === 'lob';
+      var ss = isSticky ? 'position:sticky;left:'+c.sticky+'px;width:'+c.width+'px;min-width:'+c.width+'px;max-width:'+c.width+'px;z-index:3;'+(isLastSticky?'box-shadow:2px 0 4px rgba(13,43,94,0.08);':'') : '';
+      return '<th style="position:sticky;top:0;'+ss+'background:#F8FAFC;text-align:left;padding:9px 10px;font-size:9px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;border-bottom:2px solid #E2E8F0;white-space:nowrap;z-index:'+(isSticky?3:1)+';">'+esc(c.l)+'</th>';
     }
 
     var DRILL_PAGE_SIZE = 500;
@@ -5525,33 +5512,8 @@ function pendencyDrillDrawer(){
         }).join('')+'</tr>';
     }).join('');
 
-    // Filter popup
-    var filterPopup = '';
-    if (pd.openFilterCol) {
-      var fc = COLS.filter(function(c){return c.k===pd.openFilterCol;})[0];
-      if (fc) {
-        var uniqueVals = [];
-        var seen = {};
-        pd.rows.forEach(function(r){ var v=String(r[fc.k]||''); if(!seen[v]){seen[v]=true;uniqueVals.push(v);} });
-        uniqueVals.sort();
-        var active = columnFilters[fc.k]||[];
-        filterPopup = '<div id="pdrill-colfilter-popup" data-stop="1" style="position:absolute;top:48px;left:0;z-index:50;background:#FFFFFF;border:1.5px solid #E2E8F0;border-radius:10px;box-shadow:0 8px 24px rgba(13,43,94,0.12);min-width:220px;max-width:320px;overflow:hidden;">'
-          +'<div style="padding:10px 12px;border-bottom:1px solid #EEF2F8;">'
-            +'<input oninput="filterPDrillOptions(this)" placeholder="Search\u2026" style="width:100%;border:1px solid #E2E8F0;border-radius:6px;padding:6px 9px;font-size:12px;outline:none;font-family:inherit;box-sizing:border-box;" />'
-          +'</div>'
-          +'<div id="pdrill-colfilter-list" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;margin-bottom:10px;padding:6px 4px 0;">'
-          +uniqueVals.map(function(v){
-            var checked = active.indexOf(v)>-1;
-            return '<label class="pdrill-filter-opt" data-search="'+esc(v.toLowerCase())+'" style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;color:#374151;'+(checked?'background:#EEF3FC;':'')+'"><input type="checkbox" data-act="togglePDrillColVal" data-col="'+esc(fc.k)+'" data-val="'+esc(v)+'" '+(checked?'checked':'')+' style="accent-color:#1D5FCC;width:13px;height:13px;flex-shrink:0;cursor:pointer;" />'+esc(v||'(empty)')+'</label>';
-          }).join('')
-          +'</div>'
-          +'<div style="padding:6px 12px 10px;display:flex;justify-content:flex-end;">'
-            +'<button data-act="clearPDrillColFilter" data-col="'+esc(fc.k)+'" style="border:none;background:none;color:#9AAFC8;font-size:11px;cursor:pointer;padding:0;font-family:inherit;">Clear</button>'
-          +'</div>'
-        +'</div>';
-      }
-    }
 
+    var filterPopup = ''; // LOB filter applied globally
     bodyContent = '<div style="flex:1;overflow:auto;position:relative;-webkit-overflow-scrolling:touch;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:1400px;font-variant-numeric:tabular-nums;">'
         +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+COLS.map(th).join('')+'</tr></thead>'
