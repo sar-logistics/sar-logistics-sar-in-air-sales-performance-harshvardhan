@@ -2017,28 +2017,6 @@ module.exports = async function handler(req, res) {
       }
       return res.status(200).json({ counts, apr26AirSample: apr26Jobs, apr26SeaSample: apr26Sea });
     }
-      const sample = {};
-      sample.mapping_sales_targets = await db.collection("mapping_sales_targets").find({}).toArray();
-      sample.mapping_zone_targets  = await db.collection("mapping_zone_targets").find({}).toArray();
-      // Show key fields only for target debugging
-      sample._target_debug = {
-        zone_target_cols: sample.mapping_zone_targets[0] ? Object.keys(sample.mapping_zone_targets[0]) : [],
-        zone_sample: sample.mapping_zone_targets.slice(0,3).map(r => ({
-          Zone: r["Zone"], Monthly: r["Monthly Target (INR)"], Weekly: r["Weekly Target (INR)"],
-          Yearly: r["Yearly Target (INR)"], Daily: r["Daily Target (INR)"], ZonalMgr: r["Zonal Manager"], _fy: r._fy
-        })),
-        rep_target_cols: sample.mapping_sales_targets[0] ? Object.keys(sample.mapping_sales_targets[0]) : [],
-        rep_sample: sample.mapping_sales_targets.slice(0,3).map(r => ({
-          Name: r["Sales Rep Name"], Display: r["Display Name"], Zone: r["Zone"],
-          Monthly: r["Monthly Target (INR)"], Weekly: r["Weekly Target (INR)"],
-          Yearly: r["Yearly Target (INR)"], Daily: r["Daily Target (INR)"],
-          DOJ: r["Date of Joining"], DOE: r["Date Of Exit"], _fy: r._fy
-        })),
-      };
-      const cols = await db.listCollections().toArray();
-      sample._collections = cols.map(c=>c.name);
-      return res.status(200).json(sample);
-    }
 
     if (action === "srrProbe") {
       const cols = await db.listCollections().toArray();
