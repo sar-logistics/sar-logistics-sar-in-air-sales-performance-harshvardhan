@@ -5371,6 +5371,11 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       if (r._norm !== repNorm) continue;
     }
 
+    // LOB filter — restrict to active filterLobs (e.g. AIR EXPORT, AIR IMPORT)
+    if (state.filterLobs && state.filterLobs.length > 0) {
+      if (state.filterLobs.indexOf(r.lob) === -1) continue;
+    }
+
     // Lock status filter
     var isDone = isOL ? r.olDone : r.flDone;
     if (status === 'pending' && isDone) continue;
@@ -5514,13 +5519,14 @@ function pendencyDrillDrawer(){
     +'</div>';
   }
 
+  var pdFilteredCount = visibleRows ? visibleRows.length : (pd.count || 0);
   var subtitle = pd.loading ? 'Loading\u2026'
-    : pd.count!==undefined ? pd.count.toLocaleString()+' job'+(pd.count===1?'':'s') : '';
+    : pd.count!==undefined ? pdFilteredCount.toLocaleString()+' job'+(pdFilteredCount===1?'':'s') : '';
 
   var footer = (!pd.loading && !pd.error && pd.rows && pd.rows.length>0)
     ? '<div style="padding:10px 18px;border-top:1px solid #E8EDF6;background:#F8FAFC;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">'
-        +'<span style="font-size:11.5px;font-weight:600;color:#5B6678;">Total Jobs <span style="color:#9AAFC8;font-weight:500;">('+pd.count.toLocaleString()+')</span></span>'
-        +'<span style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:800;color:#0D2B5E;">'+pd.count.toLocaleString()+'</span>'
+        +'<span style="font-size:11.5px;font-weight:600;color:#5B6678;">Total Jobs <span style="color:#9AAFC8;font-weight:500;">('+pdFilteredCount.toLocaleString()+')</span></span>'
+        +'<span style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:800;color:#0D2B5E;">'+pdFilteredCount.toLocaleString()+'</span>'
       +'</div>'
     : '';
 
@@ -5890,7 +5896,7 @@ document.addEventListener('click', function(ev){
     } else {
       state.filterLobs = state.filterLobs.concat([lv]);
     }
-    _drillResultCache = {}; // clear drill cache when LOB filter changes
+    _drillResultCache = {}; _pendencyDrillCache = {}; // clear drill caches when LOB filter changes
     render(); requestAnimationFrame(positionAllDrops);
   }
   else if(act==='toggleFilterRep'){
