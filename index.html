@@ -304,7 +304,7 @@ function _showDashboardBody() {
     zonesRaw = cached.zones || [];
     syncDateRangeToData();
     dataReady = true;
-    // Restore lobData from localStorage so LOB filter works immediately on boot
+    // Restore lobData from localStorage OR from bundled sales cache
     try {
       var _lobRaw = localStorage.getItem('sar_lobdata_' + CACHE_VERSION);
       if (_lobRaw) {
@@ -313,6 +313,10 @@ function _showDashboardBody() {
         _lobDataFetched = true;
       }
     } catch(e) {}
+    // Also check if lobData came bundled in the cached sales response
+    if (!_lobDataFetched && repsRawOriginal[0] && repsRawOriginal[0].lobData) {
+      _lobDataFetched = true;
+    }
     // Drill rows are stored separately under 'drillrows' key (not bundled in sales)
   }
 
@@ -650,8 +654,10 @@ function fetchLiveData(callback, force){
             setTimeout(function(){ loadDrillData(null); }, 1000);
           }
           console.log('✅ Live data:', repsRawOriginal.length, 'reps, tgt[0]=', repsRawOriginal[0] && repsRawOriginal[0].tgt);
-          // Fetch lobData if LOB filter is active
-          if (state.filterLobs && state.filterLobs.length > 0 && !_lobDataFetched) {
+          // Check if lobData came bundled with sales response (Air keys always included)
+          if (repsRawOriginal[0] && repsRawOriginal[0].lobData) {
+            _lobDataFetched = true;
+          } else if (state.filterLobs && state.filterLobs.length > 0 && !_lobDataFetched) {
             fetchLobDataIfNeeded(null);
           }
           if (callback) callback();
@@ -6294,7 +6300,10 @@ window.addEventListener('load', function() {
               allDrillRows = d.sales.allDrillRows;
               lsSet('drillrows', { rows: allDrillRows });
             }
-            // Fetch lobData if LOB filter active and not yet loaded
+            // Check if lobData came bundled (Air keys always included in response)
+            if (repsRawOriginal[0] && repsRawOriginal[0].lobData) {
+              _lobDataFetched = true;
+            }
             if (state.filterLobs && state.filterLobs.length > 0 && !_lobDataFetched) {
               fetchLobDataIfNeeded(function(){ render(); });
             } else {
