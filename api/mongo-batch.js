@@ -1962,23 +1962,28 @@ module.exports = async function handler(req, res) {
   if (action === "ping") {
     const db = await getDB();
     const now2 = Date.now();
-    // Build salesCache synchronously if cold or expiring — this keeps the cache
-    // warm so that the next ?action=sales request is served instantly from memory.
-    if (!salesCache || (now2 - salesCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
-      await getSalesAggregate(db, false).catch(() => {});
-    }
-    // Also warm drillRowsCache if cold — avoids slow first drill click
+    const needsSales   = !salesCache   || (now2 - salesCacheTime)   > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
+    const needsFinance = !financeCache || (now2 - financeCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
+    const needsOp      = !opCache      || (now2 - opCacheTime)      > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
+
+    // Build all caches in parallel — finance+op bundled in ping response so
+    // client never needs a separate fetch for those pages on first load.
+    const [, financeResult, opResult] = await Promise.all([
+      needsSales   ? getSalesAggregate(db, false).catch(() => {})    : Promise.resolve(),
+      needsFinance ? getFinancePendency(db, false).catch(() => null) : Promise.resolve(financeCache),
+      needsOp      ? getOpPendency(db, false).catch(() => null)      : Promise.resolve(opCache),
+    ]);
+
+    // Warm drillRowsCache in background (large — dont block ping response)
     if (!drillRowsCache || (now2 - drillRowsCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
       getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => {});
     }
-    // Warm finance and op pendency caches in background — avoids slow first load on those pages
-    if (!financeCache || (now2 - financeCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
-      getFinancePendency(db, false).catch(() => {});
-    }
-    if (!opCache || (now2 - opCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
-      getOpPendency(db, false).catch(() => {});
-    }
-    return res.status(200).json({ ok: true, ts: now2, cached: !!salesCache });
+
+    return res.status(200).json({
+      ok: true, ts: now2, cached: !!salesCache,
+      finance: financeResult || null,
+      op:      opResult      || null,
+    });
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
