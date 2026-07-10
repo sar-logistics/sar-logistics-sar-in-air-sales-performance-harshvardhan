@@ -1930,13 +1930,22 @@ async function computeBothPendency(db) {
         }
       }
 
+      const lobKey = cls.kind + (cls.direction ? " " + cls.direction : "");
+
       ensureRep(olMap);
-      if (olDone) { olMap[norm].monthData[monthLabel].done++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && olMap[norm].jobOwners[jobOwner]) olMap[norm].jobOwners[jobOwner][monthLabel].done++; }
-      else        { olMap[norm].monthData[monthLabel].pending++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && olMap[norm].jobOwners[jobOwner]) olMap[norm].jobOwners[jobOwner][monthLabel].pending++; }
+      // Track per-LOB counts for client-side LOB filtering
+      if (!olMap[norm].lobMonthData) olMap[norm].lobMonthData = {};
+      if (!olMap[norm].lobMonthData[lobKey]) olMap[norm].lobMonthData[lobKey] = {};
+      if (!olMap[norm].lobMonthData[lobKey][monthLabel]) olMap[norm].lobMonthData[lobKey][monthLabel] = { pending:0, done:0 };
+      if (olDone) { olMap[norm].monthData[monthLabel].done++; olMap[norm].lobMonthData[lobKey][monthLabel].done++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && olMap[norm].jobOwners[jobOwner]) olMap[norm].jobOwners[jobOwner][monthLabel].done++; }
+      else        { olMap[norm].monthData[monthLabel].pending++; olMap[norm].lobMonthData[lobKey][monthLabel].pending++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && olMap[norm].jobOwners[jobOwner]) olMap[norm].jobOwners[jobOwner][monthLabel].pending++; }
 
       ensureRep(flMap);
-      if (flDone) { flMap[norm].monthData[monthLabel].done++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && flMap[norm].jobOwners[jobOwner]) flMap[norm].jobOwners[jobOwner][monthLabel].done++; }
-      else        { flMap[norm].monthData[monthLabel].pending++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && flMap[norm].jobOwners[jobOwner]) flMap[norm].jobOwners[jobOwner][monthLabel].pending++; }
+      if (!flMap[norm].lobMonthData) flMap[norm].lobMonthData = {};
+      if (!flMap[norm].lobMonthData[lobKey]) flMap[norm].lobMonthData[lobKey] = {};
+      if (!flMap[norm].lobMonthData[lobKey][monthLabel]) flMap[norm].lobMonthData[lobKey][monthLabel] = { pending:0, done:0 };
+      if (flDone) { flMap[norm].monthData[monthLabel].done++; flMap[norm].lobMonthData[lobKey][monthLabel].done++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && flMap[norm].jobOwners[jobOwner]) flMap[norm].jobOwners[jobOwner][monthLabel].done++; }
+      else        { flMap[norm].monthData[monthLabel].pending++; flMap[norm].lobMonthData[lobKey][monthLabel].pending++; if (jobOwner && jobOwner.toLowerCase() !== displayName.toLowerCase() && flMap[norm].jobOwners[jobOwner]) flMap[norm].jobOwners[jobOwner][monthLabel].pending++; }
 
       seenMonths.add(monthLabel);
     }
@@ -1956,7 +1965,7 @@ async function computeBothPendency(db) {
         for (const m of monthsInData) { op += ownerMonthData[m]?.pending||0; od += ownerMonthData[m]?.done||0; }
         return { name: ownerName, monthData: ownerMonthData, totalPending: op, totalDone: od, total: op+od };
       }).filter(o => o.total > 0).sort((a,b) => b.total - a.total);
-      return { name: rep.displayName, zone: rep.zone, monthData: rep.monthData, totalPending, totalDone, total: totalPending + totalDone, jobOwners };
+      return { name: rep.displayName, zone: rep.zone, monthData: rep.monthData, lobMonthData: rep.lobMonthData||{}, totalPending, totalDone, total: totalPending + totalDone, jobOwners };
     }).sort((a, b) => b.total - a.total);
 
     const zoneMap = {};
