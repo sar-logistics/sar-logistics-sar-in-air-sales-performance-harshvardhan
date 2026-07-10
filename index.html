@@ -2520,9 +2520,9 @@ function customerPage(){
   var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
   if (hasFilters && lobData.allCustomers) {
     var filteredCusts = lobData.allCustomers.filter(function(c) {
-      var _frLower = filterReps.map(function(x){ return x.toLowerCase(); });
+      var _frNorm = filterReps.map(function(x){ return normalizeName(x); });
       var repOk = filterReps.length === 0 || (c.salesReps || []).some(function(r){
-        return _frLower.indexOf((r||'').toLowerCase()) > -1;
+        return _frNorm.indexOf(normalizeName(r||'')) > -1;
       });
       var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
         var needle = LOB_KEY_TO_CUST[fk] || '';
@@ -2720,8 +2720,8 @@ function agentPage(){
   var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
   if (hasFilters && lobData.allAgents) {
     var filteredAgents = lobData.allAgents.filter(function(a) {
-      var _frLowerA = filterReps.map(function(x){ return x.toLowerCase(); });
-      var repOk = filterReps.length === 0 || (a.salesReps||[]).some(function(r){ return _frLowerA.indexOf((r||'').toLowerCase())>-1; });
+      var _frNorm = filterReps.map(function(x){ return normalizeName(x); });
+      var repOk = filterReps.length === 0 || (a.salesReps||[]).some(function(r){ return _frNorm.indexOf(normalizeName(r||''))>-1; });
       var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
         var needle = LOB_KEY_TO_CUST[fk]||'';
         return needle && (a.lobs||[]).indexOf(needle)>-1;
@@ -2918,8 +2918,8 @@ function tradelanePage(){
   var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
   if (hasFilters && lobData.allCountries) {
     var filtered = lobData.allCountries.filter(function(c) {
-      var _frLowerT = filterReps.map(function(x){ return x.toLowerCase(); });
-      var repOk = filterReps.length === 0 || (c.salesReps||[]).some(function(r){ return _frLowerT.indexOf((r||'').toLowerCase())>-1; });
+      var _frNorm = filterReps.map(function(x){ return normalizeName(x); });
+      var repOk = filterReps.length === 0 || (c.salesReps||[]).some(function(r){ return _frNorm.indexOf(normalizeName(r||''))>-1; });
       var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
         var needle = LOB_KEY_TO_LABEL[fk]||'';
         return needle && (c.lobs||[]).indexOf(needle)>-1;
