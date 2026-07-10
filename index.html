@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v25'; // v25: pendency drill rows bundled in op response
+var CACHE_VERSION = 'v26'; // v26: sales and drillrows saved separately, quota safe
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -290,10 +290,7 @@ function showDashboard() {
       zonesRaw = cached.zones || [];
       syncDateRangeToData();
       dataReady = true;
-      // Restore drill rows if bundled in sales cache
-      if (cached.allDrillRows && cached.allDrillRows.length > 0 && !allDrillRows) {
-        allDrillRows = cached.allDrillRows;
-      }
+      // Drill rows are stored separately under 'drillrows' key (not bundled in sales)
     }
 
     // Pre-populate all secondary data from localStorage before first render
@@ -596,6 +593,7 @@ function fetchLiveData(callback, force){
           if (months26.length === 0) months26 = liveMonths;
           syncDateRangeToData();
           dataReady = true;
+          // Save sales lean (no drill rows bundled — quota safe)
           setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
           if (data.allDrillRows && data.allDrillRows.length > 0 && !allDrillRows) {
             allDrillRows = data.allDrillRows;
@@ -727,8 +725,18 @@ function lsGet(key) {
 function lsSet(key, data) {
   try {
     data._cachedAt = Date.now();
-    localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, JSON.stringify(data));
-  } catch(e) { /* quota exceeded — ignore */ }
+    var serialized = JSON.stringify(data);
+    localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, serialized);
+  } catch(e) {
+    // Quota exceeded — try clearing old keys first then retry
+    try {
+      Object.keys(localStorage).filter(function(k){
+        return k.startsWith('sar_') && !k.includes('_' + CACHE_VERSION) && !k.includes('user_session');
+      }).forEach(function(k){ localStorage.removeItem(k); });
+      data._cachedAt = Date.now();
+      localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, JSON.stringify(data));
+    } catch(e2) { console.warn('lsSet quota exceeded for key:', key, 'size:', JSON.stringify(data).length); }
+  }
 }
 
 function lsSetDrill(key, data) {
@@ -6135,16 +6143,15 @@ window.addEventListener('load', function() {
             syncDateRangeToData();
             dataReady = true;
             // Save with drill rows bundled so next boot has everything
-            var toSave = { repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 };
+            // Save sales data WITHOUT drill rows (keep under quota)
+            setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
+            // Save drill rows separately
             if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0) {
-              toSave.allDrillRows = d.sales.allDrillRows;
               allDrillRows = d.sales.allDrillRows;
               lsSet('drillrows', { rows: allDrillRows });
             }
-            setCachedSalesData(toSave);
             render();
           } else if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0 && !allDrillRows) {
-            // Sales data fresh but drill rows not loaded yet — grab them
             allDrillRows = d.sales.allDrillRows;
             lsSet('drillrows', { rows: allDrillRows });
           }
