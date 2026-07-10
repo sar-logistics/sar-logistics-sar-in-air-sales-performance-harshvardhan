@@ -5790,22 +5790,19 @@ document.addEventListener('click', function(ev){
       // Add new user to orgData immediately
       if (!orgData) { orgData = { hierarchy:[], directReports:[], support:[] }; orgDataReady = true; }
       if (!orgData.support) orgData.support = [];
-      var _newUser = { name:newName, email:newEmail, role:newRole, zone:newZone, reportsTo:newRT, isActive:true, loginCount:0, lastLogin:null };
-      orgData.support = orgData.support.concat([_newUser]);
-      orgDataReady = true;
-      // Overwrite localStorage with fresh data including new user
-      // Set _cachedAt to NOW so lsGet won't mark it stale for 2 hours
-      orgData._cachedAt = Date.now();
-      orgData.success = true;
-      lsSet('org', orgData);
-      render();
-      // Re-fetch from server after 3s to get canonical data
-      setTimeout(function(){
-        fetch('/api/mongo-batch?action=org&force=1')
-          .then(function(r){ return r.json(); })
-          .then(function(fresh){ if(fresh.success){ orgData=fresh; orgDataReady=true; lsSet('org',fresh); render(); } })
-          .catch(function(){});
-      }, 3000);
+      // Fetch fresh org from server immediately — user was just written to DB
+      fetch('/api/mongo-batch?action=org&force=1')
+        .then(function(r){ return r.json(); })
+        .then(function(fresh){
+          if(fresh.success){
+            orgData = fresh;
+            orgDataReady = true;
+            lsSet('org', fresh);
+          }
+          state.page = 'admin';
+          render();
+        })
+        .catch(function(){ render(); });
     })
     .catch(function(e){ state.addUserError = e.message; render(); });
   }
