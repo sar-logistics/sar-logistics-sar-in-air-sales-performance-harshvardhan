@@ -1620,14 +1620,23 @@ function syncDateRangeToData(){
 
 function model(){
   var isWeekly = state.reportView === 'Weekly' && weekDataLoaded();
-  var realZones = zonesRaw.filter(function(z){ return z.zone !== 'Cross Sales'; });
+  // RLS: restrict zones for target calculation to match what repsRaw contains
+  var _mRole = (currentUser && currentUser.role || '').toLowerCase().trim();
+  var realZones = zonesRaw.filter(function(z){
+    if (z.zone === 'Cross Sales') return false;
+    if (_mRole === 'zonal manager') return z.zone === (currentUser.zone || '');
+    if (_mRole === 'sales rep') return false; // sales rep target comes from repEntity
+    return true;
+  });
   if (isWeekly) {
     var wkeys = filteredWeekKeys();
     var gpGrand   = sum(repsRaw.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0;}));}));
     var shipGrand = sum(repsRaw.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0;}));}));
     var tonsGrand = sum(repsRaw.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0;}));}));
     var teusGrand = sum(repsRaw.map(function(r){return sum(wkeys.map(function(k){return (r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0;}));}));
-    var tgtGrand  = sum(realZones.map(function(z){ return z.weeklyTarget||0; }));
+    var tgtGrand  = _mRole === 'sales rep'
+      ? sum(repsRaw.map(function(r){ return r.weeklyTgt||r.tgt||0; }))
+      : sum(realZones.map(function(z){ return z.weeklyTarget||0; }));
     var achGrand  = tgtGrand > 0 ? Math.round(gpGrand / tgtGrand * 100) : 0;
     return {gpGrand:gpGrand, shipGrand:shipGrand, tonsGrand:tonsGrand, tgtGrand:tgtGrand, achGrand:achGrand, teusGrand:teusGrand};
   }
@@ -1635,7 +1644,9 @@ function model(){
   var gpGrand   = sum(repsRaw.map(function(r){return sum(idxs.map(function(i){return r.gp[i]||0;}));}));
   var shipGrand = sum(repsRaw.map(function(r){return sum(idxs.map(function(i){return r.ship[i]||0;}));}));
   var tonsGrand = sum(repsRaw.map(function(r){return sum(idxs.map(function(i){return (r.tons&&r.tons[i])||0;}));}));
-  var tgtGrand  = sum(realZones.map(function(z){ return (z.monthlyTarget||0) * idxs.length; }));
+  var tgtGrand  = _mRole === 'sales rep'
+    ? sum(repsRaw.map(function(r){ return (r.tgt||0) * idxs.length; }))
+    : sum(realZones.map(function(z){ return (z.monthlyTarget||0) * idxs.length; }));
   var achGrand  = tgtGrand > 0 ? Math.round(gpGrand / tgtGrand * 100) : 0;
   var teusGrand = sum(repsRaw.map(function(r){return sum(idxs.map(function(i){return (r.teu&&r.teu[i])||0;}));}));
   return {gpGrand:gpGrand, shipGrand:shipGrand, tonsGrand:tonsGrand, tgtGrand:tgtGrand, achGrand:achGrand, teusGrand:teusGrand};
