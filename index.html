@@ -315,6 +315,11 @@ function showDashboard() {
       var dc = lsGet('drillrows');
       if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
 
+      // Start finance + op background fetch immediately on login.
+      // makeFetcher serves from localStorage if present (instant),
+      // otherwise fires a fetch now so data is ready before user navigates there.
+      if (!financeDataReady) fetchFinanceData(null);
+      if (!opDataReady)      fetchOpData(null);
     })();
 
     if (dataReady) {
@@ -791,34 +796,54 @@ function lsGetDrill(key, entity, metric, col) {
 }
 
 // ── Generic fetch-with-cache factory ─────────────────────────────────────────
+// Same pattern as Sales Performance: localStorage first, in-flight guard,
+// background refresh if stale. Never fires two parallel fetches for same action.
 function makeFetcher(action, lsKey, setReady) {
+  var _inFlight = false;        // true while a fetch is running
+  var _callbacks = [];          // queued callbacks waiting for the in-flight fetch
+
   return function(callback, force) {
-    // Serve from localStorage instantly if available and not forced
+    // 1. localStorage hit — instant, no network
     if (!force) {
       var cached = lsGet(lsKey);
       if (cached && cached.success) {
         setReady(cached);
         if (callback) callback();
-        // Background refresh if stale
-        if (cached._isStale) {
+        // Background refresh if DB has newer data
+        if (cached._isStale && !_inFlight) {
+          _inFlight = true;
           fetch('/api/mongo-batch?action=' + action + '&force=1')
             .then(function(r){ return r.json(); })
             .then(function(data){ if (data.success) { setReady(data); lsSet(lsKey, data); render(); } })
-            .catch(function(){});
+            .catch(function(){})
+            .finally(function(){ _inFlight = false; });
         }
         return;
       }
     }
-    // No cache or forced — fetch live
+
+    // 2. In-flight guard — if already fetching, just queue the callback
+    if (_inFlight && !force) {
+      if (callback) _callbacks.push(callback);
+      return;
+    }
+
+    // 3. No cache, not in-flight — fetch live
+    _inFlight = true;
+    if (callback) _callbacks.push(callback);
     fetch('/api/mongo-batch?action=' + action + (force ? '&force=1' : ''))
       .then(function(r){ return r.json(); })
       .then(function(data){
         if (data.success) { setReady(data); lsSet(lsKey, data); }
-        if (callback) callback();
+        _inFlight = false;
+        var cbs = _callbacks.splice(0);
+        cbs.forEach(function(cb){ cb(); });
       })
       .catch(function(e){
         console.warn('⚠️ ' + action + ' failed:', e.message);
-        if (callback) callback();
+        _inFlight = false;
+        var cbs = _callbacks.splice(0);
+        cbs.forEach(function(cb){ cb(); });
       });
   };
 }
