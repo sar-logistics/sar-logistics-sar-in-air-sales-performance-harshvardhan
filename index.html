@@ -5807,6 +5807,14 @@ document.addEventListener('click', function(ev){
       if(!data.success){ state.addUserError = data.error||'Failed to add user.'; render(); return; }
       state.addUserOpen = false;
       state.addUserError = '';
+      // Immediately add new user to in-memory orgData so the list updates instantly
+      if (orgData && orgDataReady) {
+        var newUser = { name:newName, email:newEmail, role:newRole, zone:newZone, reportsTo:newRT, isActive:true, loginCount:0, lastLogin:null };
+        if (!orgData.support) orgData.support = [];
+        orgData.support = orgData.support.concat([newUser]);
+        render();
+      }
+      // Then refresh from server in background to get canonical data
       fetchOrgData(function(){ render(); }, true);
     })
     .catch(function(e){ state.addUserError = e.message; render(); });
