@@ -3152,7 +3152,20 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     });
   }
 
-  var repsFiltered = (d.reps||[]).map(function(rep){
+  // RLS: filter reps by current user role before building pendency table
+  var _pendencyReps = (d.reps || []);
+  if (currentUser) {
+    var _pRole = (currentUser.role || '').toLowerCase().trim();
+    if (_pRole === 'zonal manager') {
+      var _pZone = currentUser.zone || '';
+      _pendencyReps = _pendencyReps.filter(function(rep){ return rep.zone === _pZone; });
+    } else if (_pRole === 'sales rep') {
+      var _pName = (currentUser.name || '').toLowerCase();
+      _pendencyReps = _pendencyReps.filter(function(rep){ return (rep.name||'').toLowerCase() === _pName; });
+    }
+  }
+
+  var repsFiltered = _pendencyReps.map(function(rep){
     var colData = activeCols.map(function(col){
       // Use LOB-filtered index when available — keyed by displayName = rep.name
       if (_pendencyLobIndex) {
