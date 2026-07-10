@@ -3152,7 +3152,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       var colCells = data.colData.map(function(cd, ci){
         var v = getV(cd);
         var col = activeCols[ci] || '';
-        var dtype = isGrand ? 'grand' : (isZone ? 'zone' : 'rep');
+        var dtype = isGrand ? 'grand'
+          : (entityName && entityName.indexOf('||') > -1) ? 'jobowner'
+          : (entityName === 'Cross Sales') ? 'crosssales'
+          : (zoneGroup === 'Cross Sales') ? 'branch'
+          : (zoneGroup && zoneGroup.startsWith('branch__')) ? 'branch'
+          : isZone ? 'zone' : 'rep';
         return numCell(v, null, entityName||null, col, drillStatus||null, lockType||null, dtype);
       }).join('');
       var nameAccent = leftAccent || 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';';
@@ -3162,7 +3167,13 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       var gtV = total;
       var gtColor = gtV>0?'#0D2B5E':'#C5D0E0'; var gtFw = gtV>0?'700':'400';
       var gtStyle = 'padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+gtFw+';color:'+gtColor+';white-space:nowrap;background:#FCF3DA;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;'+(isLast&&bottomBorderStyle?rowBottomBorder:'');
-      var gtDtype = isGrand ? 'grand' : (isZone ? 'zone' : 'rep');
+      // Determine drill type precisely for client-side filter
+      var gtDtype = isGrand ? 'grand'
+        : (entityName && entityName.indexOf('||') > -1) ? 'jobowner'
+        : (entityName === 'Cross Sales') ? 'crosssales'
+        : (zoneGroup === 'Cross Sales') ? 'branch'
+        : (zoneGroup && zoneGroup.startsWith('branch__')) ? 'branch'
+        : isZone ? 'zone' : 'rep';
       // Use active column range for GT drill so it matches what the table shows
       var gtMonth = activeCols.length > 0
         ? (activeCols.length === 1 ? activeCols[0] : 'RANGE:'+activeCols[0]+':'+activeCols[activeCols.length-1])
@@ -3311,7 +3322,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
                 +'<div style="font-size:10px;font-weight:500;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(jo.name)+'</div>'
                 +'<div style="font-size:8.5px;color:#94A3B8;font-weight:500;">Job Owner</div>'
               +'</div>';
-              bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, 'Cross Sales', repKey, false, jo.name, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';');
+              bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, 'Cross Sales', repKey, false, jo.name+'||'+rep.name, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';', jo.name+'||'+rep.name, lockType);
             });
           }
         });
@@ -3355,7 +3366,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
             +'<div style="font-size:10.5px;font-weight:500;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(jo.name)+'</div>'
             +'<div style="font-size:9px;color:#94A3B8;font-weight:500;">Job Owner</div>'
           +'</div>';
-          bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, zone, repKey, false, jo.name, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';');
+          bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, zone, repKey, false, jo.name+'||'+rep.name, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';', jo.name+'||'+rep.name, lockType);
         });
       }
     });
@@ -5167,12 +5178,11 @@ function openPendencyDrill(rep, col, status, lock, type){
     .catch(function(){ state.pendencyDrill.loading=false; state.pendencyDrill.error='Could not reach the server.'; render(); });
 }
 
-// Pure client-side pendency drill filter — mirrors server pendencyDrill logic
+// Pure client-side pendency drill filter — handles rep, zone, grand, branch, jobOwner
 function computePendencyDrillResult(rep, col, status, lock, type) {
   var isOL = lock === 'Operation Lock';
   var isFY = !col || col === 'FY Total';
   var isRange = col && col.startsWith('RANGE:');
-  var normRep = rep.toLowerCase().replace(/[|]/g, '').replace(/\s+/g, ' ').trim();
 
   var FY_ALL = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25',
     'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
@@ -5186,23 +5196,55 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
     if (fi >= 0 && ti >= 0) allowedMonths = new Set(FY_ALL.slice(fi, ti+1));
   }
 
+  // Build set of known rep norms from repsRawOriginal for Cross Sales detection
+  var knownRepNorms = new Set();
+  if (repsRawOriginal && repsRawOriginal.length) {
+    repsRawOriginal.forEach(function(r){ if (!r.isBranch) knownRepNorms.add(r.name); });
+  }
+
+  var repNorm = normalizeName(rep);
+
   var matched = [];
   for (var i = 0; i < allPendencyDrillRows.length; i++) {
     var r = allPendencyDrillRows[i];
+
     // Month filter
     if (allowedMonths && !allowedMonths.has(r._month)) continue;
+
     // Entity filter
-    if (type === 'rep') {
-      var rNorm = r._norm || '';
-      var repNorm = normalizeName(rep);
-      if (rNorm !== repNorm) continue;
+    if (type === 'grand') {
+      // Grand Total — all rows pass entity filter
     } else if (type === 'zone') {
       if (r._zone !== rep) continue;
+    } else if (type === 'rep') {
+      if (r._norm !== repNorm) continue;
+    } else if (type === 'jobowner') {
+      // Job owner row — match by jobOwner field, within the parent rep/zone
+      // rep param is "ownerName||parentRep" encoded
+      var parts2 = rep.split('||');
+      var ownerName = parts2[0]; var parentRep = parts2[1] || '';
+      if ((r.jobOwner || '').toLowerCase() !== ownerName.toLowerCase()) continue;
+      if (parentRep) {
+        var parentNorm = normalizeName(parentRep);
+        if (r._norm !== parentNorm && r._zone !== parentRep) continue;
+      }
+    } else if (type === 'crosssales') {
+      // Cross Sales zone — reps NOT in known mapped reps
+      if (knownRepNorms.has(r._norm)) continue;
+    } else if (type === 'branch') {
+      // Branch under Cross Sales — match by location field
+      if (r.location !== rep && r._zone !== rep) continue;
+      if (knownRepNorms.has(r._norm)) continue;
+    } else {
+      // Fallback: treat as rep name match
+      if (r._norm !== repNorm) continue;
     }
+
     // Lock status filter
     var isDone = isOL ? r.olDone : r.flDone;
     if (status === 'pending' && isDone) continue;
     if (status === 'done' && !isDone) continue;
+
     matched.push(Object.assign({}, r, { lockStatus: isDone ? 'Done' : 'Pending' }));
   }
   matched.sort(function(a,b){ return new Date(b.jobDate) - new Date(a.jobDate); });
