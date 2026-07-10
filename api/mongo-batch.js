@@ -995,6 +995,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
   const custMapAll   = {};
   // salesRepMap: customer → Set of sales rep display names
   const custSalesReps = {};
+  const custRepMap = {}; // customer → rep → {shipments,revenue,gp,tons,teu}
   // lobsMap: customer → Set of lob sub-labels (e.g. "Air Exp", "Sea Imp")
   const custLobLabels = {};
 
@@ -1070,6 +1071,14 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
       if (dispSP) {
         if (!custSalesReps[customer]) custSalesReps[customer] = new Set();
         custSalesReps[customer].add(dispSP);
+        // Per-rep metrics for zone-scoped filtering
+        if (!custRepMap[customer]) custRepMap[customer] = {};
+        if (!custRepMap[customer][dispSP]) custRepMap[customer][dispSP] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
+        custRepMap[customer][dispSP].shipments++;
+        custRepMap[customer][dispSP].revenue += revenue;
+        custRepMap[customer][dispSP].gp += gp;
+        custRepMap[customer][dispSP].tons += tons;
+        custRepMap[customer][dispSP].teu += teu;
       }
       // Track LOB sub-labels
       const lobLabel = lob === "Air"
@@ -1093,6 +1102,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
       gpPct:     d.revenue > 0 ? Math.round((d.gp / d.revenue) * 1000) / 10 : 0,
       salesReps: custSalesReps[name] ? [...custSalesReps[name]] : [],
       lobs:      custLobLabels[name] ? [...custLobLabels[name]].sort() : [],
+      repMetrics: custRepMap[name] || {},
     }));
     function top10(arr, key) { return [...arr].sort((a,b)=>b[key]-a[key]).slice(0,10); }
     return {
