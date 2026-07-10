@@ -5079,7 +5079,7 @@ var _drillResultCache = {}; // in-memory: entity||metric||col → full result ob
 function openDrill(entity, metric, col, valueFmt){
   var cacheKey = entity+'||'+metric+'||'+col;
 
-  // In-memory cache — instant repeat clicks within the same session
+  // 1. In-memory cache — instant repeat clicks
   var mem = _drillResultCache[cacheKey];
   if (mem && mem.rows) {
     state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
@@ -5090,7 +5090,21 @@ function openDrill(entity, metric, col, valueFmt){
     render(); return;
   }
 
-  // Show spinner and fetch from API — always correct, no stale cache risk
+  // 2. Client-side filter from allDrillRows — zero server round-trip, instant
+  if (allDrillRows && allDrillRows.length > 0) {
+    var result = computeDrillResult(entity, metric, col);
+    if (result) {
+      _drillResultCache[cacheKey] = result;
+      state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
+        rows:result.rows, count:result.count, totalMetric:result.totalMetric, totalGP:result.totalGP,
+        totalProvGP:result.totalProvGP||0, totalActualGP:result.totalActualGP||0,
+        totalRevenue:result.totalRevenue||0, totalCost:result.totalCost||0,
+        lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
+      render(); return;
+    }
+  }
+
+  // 3. Fallback: server fetch (only when allDrillRows not loaded yet)
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
     lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
   render();
