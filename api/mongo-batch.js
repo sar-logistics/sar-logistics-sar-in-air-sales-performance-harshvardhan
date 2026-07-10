@@ -1829,6 +1829,12 @@ async function computePendency(db, lockField) {
   }
 
   // Direct lean query across all collections in parallel
+  // Filter to FY date range at DB level — avoids pulling irrelevant rows
+  const FY_DATE_FILTER = { $or: [
+    { "ETD Loading Port": { $gte: "2025-04-01", $lte: "2027-03-31\uffff" } },
+    { "ETA Discharge":    { $gte: "2025-04-01", $lte: "2027-03-31\uffff" } },
+    { "Job Date":         { $gte: "2025-04-01", $lte: "2027-03-31\uffff" } },
+  ]};
   const ALL_JOB_COLLS = Object.values(COLLECTIONS);
   const repMonthMap = {}; // normalizedName → { zone, displayName, monthData: { monthLabel → { pending, done } } }
   const seenMonths = new Set();
@@ -1839,7 +1845,7 @@ async function computePendency(db, lockField) {
     const dateField = isExport ? "ETD Loading Port" : isImport ? "ETA Discharge" : "Job Date";
 
     const jobs = await db.collection(collName).find(
-      {},
+      FY_DATE_FILTER,
       { projection: { "Sales Person": 1, "Job Owner": 1, "Financial Lock": 1, "Operation Lock": 1, [dateField]: 1, "Job Date": 1 } }
     ).toArray();
 
