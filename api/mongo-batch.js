@@ -1994,25 +1994,34 @@ module.exports = async function handler(req, res) {
     const db = await getDB();
     const now2 = Date.now();
 
-    // Warm sales in background — it has its own fetch path on the client
-    if (!salesCache || (now2 - salesCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
-      getSalesAggregate(db, false).catch(() => {});
-    }
+    const needsSales   = !salesCache   || (now2 - salesCacheTime)   > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
+    const needsFinance = !financeCache || (now2 - financeCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
+    const needsOp      = !opCache      || (now2 - opCacheTime)      > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
+
+    // Await all three in parallel — bundle sales+finance+op in one response
+    // so client never needs any separate fetches after first load
+    const [salesResult, financeResult, opResult] = await Promise.all([
+      needsSales   ? getSalesAggregate(db, false).catch(() => null)   : Promise.resolve(salesCache),
+      needsFinance ? getFinancePendency(db, false).catch(() => null)  : Promise.resolve(financeCache),
+      needsOp      ? getOpPendency(db, false).catch(() => null)       : Promise.resolve(opCache),
+    ]);
+
+    // Warm drill rows in background (large — don't block ping)
     if (!drillRowsCache || (now2 - drillRowsCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
       getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => {});
     }
 
-    // Await finance+op in parallel and bundle in response — client stores to
-    // localStorage so Finance/Op Pendency pages are instant on first navigation
-    const needsFinance = !financeCache || (now2 - financeCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
-    const needsOp      = !opCache      || (now2 - opCacheTime)      > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
-    const [financeResult, opResult] = await Promise.all([
-      needsFinance ? getFinancePendency(db, false).catch(() => null) : Promise.resolve(financeCache),
-      needsOp      ? getOpPendency(db, false).catch(() => null)      : Promise.resolve(opCache),
-    ]);
+    // Include lastUpdated so client can skip checkForFreshData round-trip
+    let lastUpdated = null;
+    try {
+      const meta = await db.collection("_meta").findOne({ _id: "push_meta" });
+      if (meta && meta.lastUpdated) lastUpdated = meta.lastUpdated;
+    } catch(e) {}
 
     return res.status(200).json({
-      ok: true, ts: now2, cached: !!salesCache,
+      ok: true, ts: now2,
+      lastUpdated,
+      sales:   salesResult   || null,
       finance: financeResult || null,
       op:      opResult      || null,
     });
