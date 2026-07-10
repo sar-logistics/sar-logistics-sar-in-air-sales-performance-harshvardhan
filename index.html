@@ -5230,7 +5230,7 @@ function openDrill(entity, metric, col, valueFmt){
       rows:mem.rows, count:mem.count, totalMetric:mem.totalMetric, totalGP:mem.totalGP,
       totalProvGP:mem.totalProvGP||0, totalActualGP:mem.totalActualGP||0,
       totalRevenue:mem.totalRevenue||0, totalCost:mem.totalCost||0,
-      lobTab:_defaultDrillLobTab(), columnFilters:{}, openFilterCol:null, filterDraft:{} };
+      lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
     render(); return;
   }
 
@@ -5243,14 +5243,14 @@ function openDrill(entity, metric, col, valueFmt){
         rows:result.rows, count:result.count, totalMetric:result.totalMetric, totalGP:result.totalGP,
         totalProvGP:result.totalProvGP||0, totalActualGP:result.totalActualGP||0,
         totalRevenue:result.totalRevenue||0, totalCost:result.totalCost||0,
-        lobTab:_defaultDrillLobTab(), columnFilters:{}, openFilterCol:null, filterDraft:{} };
+        lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
       render(); return;
     }
   }
 
   // 3. Fallback: server fetch (only when allDrillRows not loaded yet)
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
-    lobTab:_defaultDrillLobTab(), columnFilters:{}, openFilterCol:null, filterDraft:{} };
+    lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
   render();
 
   var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col);
