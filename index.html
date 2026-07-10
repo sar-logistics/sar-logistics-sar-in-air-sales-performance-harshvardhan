@@ -3327,7 +3327,8 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var grandData = { colData: gtColData, totalPending: gtPending, totalDone: gtDone, total: gtTotal };
   var grandAvatar = '<div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#3B5BA5,#0D2B5E);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 6px rgba(13,43,94,0.25);">GT</div>';
   var grandLabel  = '<div style="font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Grand Total</div>';
-  var grandRows = metricRows(grandData, null, '#EEF3FC', false, null, null, true, 'Grand Total', grandAvatar, grandLabel, '', 'box-shadow:inset 3px 0 0 #0D2B5E, inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:2px solid '+PBORDER_STRONG+';', null, 'Grand Total', lockType);
+  var _showGrandTotal = !currentUser || !['zonal manager','sales rep'].includes((currentUser.role||'').toLowerCase().trim());
+  var grandRows = !_showGrandTotal ? '' : metricRows(grandData, null, '#EEF3FC', false, null, null, true, 'Grand Total', grandAvatar, grandLabel, '', 'box-shadow:inset 3px 0 0 #0D2B5E, inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:2px solid '+PBORDER_STRONG+';', null, 'Grand Total', lockType);
 
   // Zone + rep rows
   var bodyRows = '';
