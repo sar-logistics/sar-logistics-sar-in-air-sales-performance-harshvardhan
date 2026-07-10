@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v26'; // v26: sales and drillrows saved separately, quota safe
+var CACHE_VERSION = 'v27'; // v27: pendency drill rows with lob field, LOB filter on all drills
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5206,7 +5206,7 @@ function _defaultDrillLobTab() {
 }
 
 function openDrill(entity, metric, col, valueFmt){
-  var cacheKey = entity+'||'+metric+'||'+col;
+  var cacheKey = entity+'||'+metric+'||'+col+'||'+(state.filterLobs||[]).join(',');
 
   // 1. In-memory cache — instant repeat clicks
   var mem = _drillResultCache[cacheKey];
@@ -5260,7 +5260,7 @@ var _pendencyDrillCache = {}; // rep||month||status||lock → rows
 var allPendencyDrillRows = null; // loaded once with opData, filtered client-side
 
 function openPendencyDrill(rep, col, status, lock, type){
-  var cacheKey = rep+'||'+col+'||'+status+'||'+lock+'||'+(type||'rep');
+  var cacheKey = rep+'||'+col+'||'+status+'||'+lock+'||'+(type||'rep')+'||'+(state.filterLobs||[]).join(',');
   state.pendencyDrill = { rep:rep, col:col, status:status, lock:lock, type:type||'rep', loading:true, rows:null, error:null, columnFilters:{}, openFilterCol:null };
 
   // In-memory cache hit — instant
