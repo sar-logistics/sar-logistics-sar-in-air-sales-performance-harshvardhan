@@ -314,6 +314,8 @@ function showDashboard() {
       // Load drill rows from localStorage — avoids re-fetch on every session
       var dc = lsGet('drillrows');
       if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
+      var pdc = lsGet('pendencyDrillRows');
+      if (pdc && pdc.rows && pdc.rows.length > 0) { allPendencyDrillRows = pdc.rows; }
 
       // Start finance + op background fetch immediately on login.
       // makeFetcher serves from localStorage if present (instant),
@@ -982,7 +984,7 @@ function prefetchCustomerRanges() {
   setTimeout(next, 2000);
 }
 var fetchFinanceData  = makeFetcher('finance',   'finance',   function(d){ financeData  = d; financeDataReady  = true; });
-var fetchOpData       = makeFetcher('op',        'op',        function(d){ opData       = d; opDataReady       = true; });
+var fetchOpData       = makeFetcher('op',        'op',        function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows; lsSet('pendencyDrillRows', { rows: d.allDrillJobRows }); } });
 
 // ── Agent Insights fetch (mirrors customer fetch pattern) ─────────────────────
 var _agentCache = {};
@@ -5131,18 +5133,29 @@ function openDrill(entity, metric, col, valueFmt){
 
 // ── Pendency Drill-through ────────────────────────────────────────────────────
 var _pendencyDrillCache = {}; // rep||month||status||lock → rows
+var allPendencyDrillRows = null; // loaded once with opData, filtered client-side
 
 function openPendencyDrill(rep, col, status, lock, type){
   var cacheKey = rep+'||'+col+'||'+status+'||'+lock+'||'+(type||'rep');
-  state.pendencyDrill = { rep:rep, col:col, status:status, lock:lock, type:type||'rep', loading:true, rows:null, error:null };
-  render();
+  state.pendencyDrill = { rep:rep, col:col, status:status, lock:lock, type:type||'rep', loading:true, rows:null, error:null, columnFilters:{}, openFilterCol:null };
 
+  // In-memory cache hit — instant
   if (_pendencyDrillCache[cacheKey]) {
     var c = _pendencyDrillCache[cacheKey];
     state.pendencyDrill.loading=false; state.pendencyDrill.rows=c.rows; state.pendencyDrill.count=c.count;
     render(); return;
   }
 
+  // Client-side filtering from allPendencyDrillRows — zero server round-trip
+  if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+    var rows = computePendencyDrillResult(rep, col, status, lock, type||'rep');
+    _pendencyDrillCache[cacheKey] = { rows: rows, count: rows.length };
+    state.pendencyDrill.loading=false; state.pendencyDrill.rows=rows; state.pendencyDrill.count=rows.length;
+    render(); return;
+  }
+
+  // Fallback: fetch from server (first load before allPendencyDrillRows arrives)
+  render();
   var qs = '?action=pendencyDrill&rep='+encodeURIComponent(rep)+'&month='+encodeURIComponent(col)+'&status='+encodeURIComponent(status)+'&lock='+encodeURIComponent(lock)+'&type='+encodeURIComponent(type||'rep');
   fetch('/api/mongo-batch'+qs)
     .then(function(r){ return r.json(); })
@@ -5153,6 +5166,48 @@ function openPendencyDrill(rep, col, status, lock, type){
       render();
     })
     .catch(function(){ state.pendencyDrill.loading=false; state.pendencyDrill.error='Could not reach the server.'; render(); });
+}
+
+// Pure client-side pendency drill filter — mirrors server pendencyDrill logic
+function computePendencyDrillResult(rep, col, status, lock, type) {
+  var isOL = lock === 'Operation Lock';
+  var isFY = !col || col === 'FY Total';
+  var isRange = col && col.startsWith('RANGE:');
+  var normRep = rep.toLowerCase().replace(/[|]/g, '').replace(/\s+/g, ' ').trim();
+
+  var FY_ALL = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25',
+    'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
+    'Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
+
+  var allowedMonths = null;
+  if (!isFY && !isRange && col) allowedMonths = new Set([col]);
+  else if (isRange) {
+    var parts = col.split(':');
+    var fi = FY_ALL.indexOf(parts[1]), ti = FY_ALL.indexOf(parts[2]);
+    if (fi >= 0 && ti >= 0) allowedMonths = new Set(FY_ALL.slice(fi, ti+1));
+  }
+
+  var matched = [];
+  for (var i = 0; i < allPendencyDrillRows.length; i++) {
+    var r = allPendencyDrillRows[i];
+    // Month filter
+    if (allowedMonths && !allowedMonths.has(r._month)) continue;
+    // Entity filter
+    if (type === 'rep') {
+      var rNorm = r._norm || '';
+      var repNorm = normalizeName(rep);
+      if (rNorm !== repNorm) continue;
+    } else if (type === 'zone') {
+      if (r._zone !== rep) continue;
+    }
+    // Lock status filter
+    var isDone = isOL ? r.olDone : r.flDone;
+    if (status === 'pending' && isDone) continue;
+    if (status === 'done' && !isDone) continue;
+    matched.push(Object.assign({}, r, { lockStatus: isDone ? 'Done' : 'Pending' }));
+  }
+  matched.sort(function(a,b){ return new Date(b.jobDate) - new Date(a.jobDate); });
+  return matched;
 }
 
 function pendencyDrillDrawer(){
@@ -6001,7 +6056,9 @@ window.addEventListener('load', function() {
         }
         if (d.op && d.op.success && !opDataReady) {
           opData = d.op; opDataReady = true;
+          if (d.op.allDrillJobRows) allPendencyDrillRows = d.op.allDrillJobRows;
           lsSet('op', d.op);
+          lsSet('pendencyDrillRows', { rows: d.op.allDrillJobRows || [] });
         }
       })
       .catch(function(){});
