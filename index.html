@@ -4552,8 +4552,12 @@ function drawer(){
     var tabBar = '<div style="padding:10px 24px;border-bottom:1px solid #EEF2F8;background:#FFFFFF;flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
       + lobTabs.map(function(tab){
           var active = tab === activeLobTab;
+          var inFilter = !active && activeLobTab === 'ALL' && tab !== 'ALL' && (state.filterLobs||[]).indexOf(tab) > -1;
           var count = tab === 'ALL' ? d.rows.length : (lobCounts[tab]||0);
-          return '<button data-act="setDrillLobTab" data-val="'+esc(tab)+'" style="background:'+(active?BRAND_A1:'#F4F7FA')+';color:'+(active?'#FFFFFF':'#374151')+';border:none;border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;">'
+          var _bg = active ? BRAND_A1 : inFilter ? '#DBEAFE' : '#F4F7FA';
+          var _cl = active ? '#FFFFFF' : inFilter ? '#1D5FCC' : '#374151';
+          var _bo = inFilter ? 'border:1.5px solid #93B4F5;' : 'border:none;';
+          return '<button data-act="setDrillLobTab" data-val="'+esc(tab)+'" style="background:'+_bg+';color:'+_cl+';'+_bo+'border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;">'
             +esc(tab)+' <span style="opacity:0.75;font-weight:600;">'+count+'</span>'
           +'</button>';
         }).join('')
@@ -5186,6 +5190,15 @@ function computeDrillResult(entity, metric, month){
 
 var _drillResultCache = {}; // in-memory: entity||metric||col → full result object
 
+// Returns the default LOB tab for the drill drawer based on active filterLobs
+function _defaultDrillLobTab() {
+  var fl = state.filterLobs || [];
+  // If exactly one LOB selected, open on that tab directly
+  if (fl.length === 1) return fl[0];
+  // Multiple or none — stay on ALL (rows already pre-filtered by computeDrillResult)
+  return 'ALL';
+}
+
 function openDrill(entity, metric, col, valueFmt){
   var cacheKey = entity+'||'+metric+'||'+col;
 
@@ -5196,7 +5209,7 @@ function openDrill(entity, metric, col, valueFmt){
       rows:mem.rows, count:mem.count, totalMetric:mem.totalMetric, totalGP:mem.totalGP,
       totalProvGP:mem.totalProvGP||0, totalActualGP:mem.totalActualGP||0,
       totalRevenue:mem.totalRevenue||0, totalCost:mem.totalCost||0,
-      lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
+      lobTab:_defaultDrillLobTab(), columnFilters:{}, openFilterCol:null, filterDraft:{} };
     render(); return;
   }
 
@@ -5209,14 +5222,14 @@ function openDrill(entity, metric, col, valueFmt){
         rows:result.rows, count:result.count, totalMetric:result.totalMetric, totalGP:result.totalGP,
         totalProvGP:result.totalProvGP||0, totalActualGP:result.totalActualGP||0,
         totalRevenue:result.totalRevenue||0, totalCost:result.totalCost||0,
-        lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
+        lobTab:_defaultDrillLobTab(), columnFilters:{}, openFilterCol:null, filterDraft:{} };
       render(); return;
     }
   }
 
   // 3. Fallback: server fetch (only when allDrillRows not loaded yet)
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
-    lobTab:'ALL', columnFilters:{}, openFilterCol:null, filterDraft:{} };
+    lobTab:_defaultDrillLobTab(), columnFilters:{}, openFilterCol:null, filterDraft:{} };
   render();
 
   var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col);
@@ -5229,6 +5242,7 @@ function openDrill(entity, metric, col, valueFmt){
       state.drill.totalMetric=data.totalMetric; state.drill.totalGP=data.totalGP;
       state.drill.totalProvGP=data.totalProvGP||0; state.drill.totalActualGP=data.totalActualGP||0;
       state.drill.totalRevenue=data.totalRevenue||0; state.drill.totalCost=data.totalCost||0;
+      if (state.drill.lobTab === 'ALL') state.drill.lobTab = _defaultDrillLobTab();
       render();
     })
     .catch(function(){ state.drill.loading=false; state.drill.error='Could not reach the server.'; render(); });
