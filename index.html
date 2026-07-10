@@ -5234,8 +5234,8 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       // Regular Sales Performance zone
       if (r._zone !== rep) continue;
     } else if (type === 'rep') {
-      // Individual rep — match by normalized name
-      if (r._norm !== repNorm) continue;
+      // Match by normalized raw name OR normalized display name
+      if (r._norm !== repNorm && (r._displayNorm || '') !== repNorm) continue;
     } else if (type === 'jobowner') {
       // "ownerName||parentRepName" encoded
       var joParts = rep.split('||');
@@ -5246,7 +5246,7 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       if (!joMatch) continue;
       if (parentRep) {
         var parentNorm = normalizeName(parentRep);
-        if (r._norm !== parentNorm) continue;
+        if (r._norm !== parentNorm && (r._displayNorm || '') !== parentNorm) continue;
       }
     } else {
       // Fallback: rep name match
