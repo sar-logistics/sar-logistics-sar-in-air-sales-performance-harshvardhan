@@ -5787,18 +5787,21 @@ document.addEventListener('click', function(ev){
       if(!data.success){ state.addUserError = data.error||'Failed to add user.'; render(); return; }
       state.addUserOpen = false;
       state.addUserError = '';
-      // Instantly show new user — optimistic update, no wait
+      // Add new user to orgData immediately
       if (!orgData) { orgData = { hierarchy:[], directReports:[], support:[] }; orgDataReady = true; }
       if (!orgData.support) orgData.support = [];
-      orgData.support = orgData.support.concat([{ name:newName, email:newEmail, role:newRole, zone:newZone, reportsTo:newRT, isActive:true, loginCount:0, lastLogin:null }]);
+      var _newUser = { name:newName, email:newEmail, role:newRole, zone:newZone, reportsTo:newRT, isActive:true, loginCount:0, lastLogin:null };
+      orgData.support = orgData.support.concat([_newUser]);
+      // Update localStorage cache too — so bgPrefetchSecondary/makeFetcher won't overwrite with stale data
+      lsSet('org', orgData);
       render();
-      // Background refresh after delay (ensure server has committed the new user)
+      // Re-fetch from server after 2s to get canonical data
       setTimeout(function(){
         fetch('/api/mongo-batch?action=org&force=1')
           .then(function(r){ return r.json(); })
           .then(function(fresh){ if(fresh.success){ orgData=fresh; orgDataReady=true; lsSet('org',fresh); render(); } })
           .catch(function(){});
-      }, 1500);
+      }, 2000);
     })
     .catch(function(e){ state.addUserError = e.message; render(); });
   }
