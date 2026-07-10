@@ -2391,7 +2391,8 @@ module.exports = async function handler(req, res) {
       const existing = await db.collection("users").findOne({ email: newUser.email });
       if (existing) return res.status(400).json({ error: "User with this email already exists" });
       await db.collection("users").insertOne(newUser);
-      return res.status(200).json({ success: true });
+      const updatedOrg = await getOrgChart(db);
+      return res.status(200).json({ success: true, org: updatedOrg });
     }
 
     if (action === "updateUser") {
