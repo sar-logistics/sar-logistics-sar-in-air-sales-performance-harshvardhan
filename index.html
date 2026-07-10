@@ -260,140 +260,145 @@ function verifyWithBackend(userinfo) {
   });
 }
 
-function showDashboard() {
+function showDashboard(instant) {
   var loginScreen = document.getElementById('login-screen');
   var appEl = document.getElementById('app');
 
-  loginScreen.style.opacity = '0';
-  loginScreen.style.transition = 'opacity 0.25s ease';
+  if (!instant) {
+    loginScreen.style.opacity = '0';
+    loginScreen.style.transition = 'opacity 0.25s ease';
+  }
+
   setTimeout(function() {
     loginScreen.style.display = 'none';
     appEl.style.display = 'flex';
+    _showDashboardBody();
+  }, instant ? 1 : 260);
+}
 
-    // ── Instant boot: identical to Op/Finance ────────────────────────────────
-    // Migrate from old cache key if new key not yet populated
-    var cached = lsGet('sales');
-    if (!cached) {
-      try {
-        var oldRaw = localStorage.getItem('sar_sales_cache_' + CACHE_VERSION);
-        if (oldRaw) { cached = JSON.parse(oldRaw); }
-      } catch(e) {}
-    }
-    if (cached && cached.repsRaw && cached.repsRaw.length > 0) {
-      var ALL_FY = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25',
-        'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
-        'Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
-      var cachedMonths = cached.months || [];
-      months26 = ALL_FY.filter(function(m){ return cachedMonths.indexOf(m) >= 0; });
-      if (months26.length === 0) months26 = cachedMonths.length > 0 ? cachedMonths : ALL_FY;
-      repsRawOriginal = cached.repsRaw;
-      zonesRaw = cached.zones || [];
-      syncDateRangeToData();
-      dataReady = true;
-      // Drill rows are stored separately under 'drillrows' key (not bundled in sales)
-    }
+function _showDashboardBody() {
+  // ── Instant boot: identical to Op/Finance ────────────────────────────────
+  // Migrate from old cache key if new key not yet populated
+  var cached = lsGet('sales');
+  if (!cached) {
+    try {
+      var oldRaw = localStorage.getItem('sar_sales_cache_' + CACHE_VERSION);
+      if (oldRaw) { cached = JSON.parse(oldRaw); }
+    } catch(e) {}
+  }
+  if (cached && cached.repsRaw && cached.repsRaw.length > 0) {
+    var ALL_FY = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25',
+      'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
+      'Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
+    var cachedMonths = cached.months || [];
+    months26 = ALL_FY.filter(function(m){ return cachedMonths.indexOf(m) >= 0; });
+    if (months26.length === 0) months26 = cachedMonths.length > 0 ? cachedMonths : ALL_FY;
+    repsRawOriginal = cached.repsRaw;
+    zonesRaw = cached.zones || [];
+    syncDateRangeToData();
+    dataReady = true;
+    // Drill rows are stored separately under 'drillrows' key (not bundled in sales)
+  }
 
-    // Pre-populate all secondary data from localStorage before first render
-    (function bootstrapSecondaryCache() {
-      var cc = lsGet('customers'); if (cc && cc.success) { customerData = cc; customerDataReady = true; }
-      var fc = lsGet('finance');   if (fc && fc.success) { financeData  = fc; financeDataReady  = true; }
-      var oc = lsGet('op');        if (oc && oc.success) { opData = oc; opDataReady = true; if (oc.allDrillJobRows && oc.allDrillJobRows.length > 0) allPendencyDrillRows = oc.allDrillJobRows; }
-      var gc = lsGet('org');       if (gc && gc.success) { orgData      = gc; orgDataReady      = true; }
-      // Bootstrap agent + tradelane default range cache
-      var defKey = (state.dateFrom||'Jan-26') + '_' + (state.dateTo||'Jun-26');
-      // Also try the Apr-26 → current month key (what syncDateRangeToData will set)
-      var nowBoot = new Date();
-      var MONBOOT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      var curMonBoot = MONBOOT[nowBoot.getMonth()] + '-' + String(nowBoot.getFullYear()).slice(2);
-      var latestKey = 'Apr-26_' + curMonBoot;
-      var ac = lsGet('agents_' + latestKey) || lsGet('agents_' + defKey);
-      if (ac && ac.success) { agentData = ac; agentDataReady = true; _agentCache[latestKey] = ac; }
-      var tc = lsGet('tradelane_' + latestKey) || lsGet('tradelane_' + defKey);
-      if (tc && tc.success) { tradelaneData = tc; tradelaneDataReady = true; _tradelaneCache[latestKey] = tc; }
-      var cusc = lsGet('customers_' + latestKey) || lsGet('customers_' + defKey);
-      if (cusc && cusc.success) { customerData = cusc; customerDataReady = true; _customerCache[latestKey] = cusc; }
-      // Load drill rows from localStorage — avoids re-fetch on every session
-      var dc = lsGet('drillrows');
-      if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
-      // allPendencyDrillRows: prefer from opData (already extracted above), fallback to dedicated key
-      if (!allPendencyDrillRows) {
-        var pdc = lsGet('pendencyDrillRows');
-        if (pdc && pdc.rows && pdc.rows.length > 0) { allPendencyDrillRows = pdc.rows; }
-      }
-
-    })();
-
-    if (dataReady) {
-      render();
-    } else {
-      // No cache — render the full shell immediately so the page feels instant,
-      // then kick off a direct fetchLiveData (skip the meta round-trip).
-      render(); // render() handles isStillLoading state gracefully with skeleton
+  // Pre-populate all secondary data from localStorage before first render
+  (function bootstrapSecondaryCache() {
+    var cc = lsGet('customers'); if (cc && cc.success) { customerData = cc; customerDataReady = true; }
+    var fc = lsGet('finance');   if (fc && fc.success) { financeData  = fc; financeDataReady  = true; }
+    var oc = lsGet('op');        if (oc && oc.success) { opData = oc; opDataReady = true; if (oc.allDrillJobRows && oc.allDrillJobRows.length > 0) allPendencyDrillRows = oc.allDrillJobRows; }
+    var gc = lsGet('org');       if (gc && gc.success) { orgData      = gc; orgDataReady      = true; }
+    // Bootstrap agent + tradelane default range cache
+    var defKey = (state.dateFrom||'Jan-26') + '_' + (state.dateTo||'Jun-26');
+    // Also try the Apr-26 → current month key (what syncDateRangeToData will set)
+    var nowBoot = new Date();
+    var MONBOOT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var curMonBoot = MONBOOT[nowBoot.getMonth()] + '-' + String(nowBoot.getFullYear()).slice(2);
+    var latestKey = 'Apr-26_' + curMonBoot;
+    var ac = lsGet('agents_' + latestKey) || lsGet('agents_' + defKey);
+    if (ac && ac.success) { agentData = ac; agentDataReady = true; _agentCache[latestKey] = ac; }
+    var tc = lsGet('tradelane_' + latestKey) || lsGet('tradelane_' + defKey);
+    if (tc && tc.success) { tradelaneData = tc; tradelaneDataReady = true; _tradelaneCache[latestKey] = tc; }
+    var cusc = lsGet('customers_' + latestKey) || lsGet('customers_' + defKey);
+    if (cusc && cusc.success) { customerData = cusc; customerDataReady = true; _customerCache[latestKey] = cusc; }
+    // Load drill rows from localStorage — avoids re-fetch on every session
+    var dc = lsGet('drillrows');
+    if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
+    // allPendencyDrillRows: prefer from opData (already extracted above), fallback to dedicated key
+    if (!allPendencyDrillRows) {
+      var pdc = lsGet('pendencyDrillRows');
+      if (pdc && pdc.rows && pdc.rows.length > 0) { allPendencyDrillRows = pdc.rows; }
     }
 
-    if (currentUser) {
-      var ini = currentUser.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
-      var roleLabel = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
-      window._pendingUserPatch = { ini: ini, name: currentUser.name, role: roleLabel, photoUrl: currentUser.photoUrl };
-      if (cached) patchSidebarUser(ini, currentUser.name, roleLabel, currentUser.photoUrl);
-    }
+  })();
 
-    // bgPrefetchSecondary: prefetch secondary pages in background
-    function bgPrefetchSecondary() {
-        var m26 = months26 && months26.length > 0 ? months26 : [];
-        var nowBg = new Date();
-        var MONBG = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        var curMonBg = MONBG[nowBg.getMonth()] + '-' + String(nowBg.getFullYear()).slice(2);
-        var from = m26.indexOf('Apr-26') >= 0 ? 'Apr-26' : (m26[0] || '');
-        var to   = m26.indexOf(curMonBg) >= 0 ? curMonBg : (m26[m26.length-1] || '');
-        if (!from || !to) return;
-        var key = from + '_' + to;
-        // Fetch each secondary data source with the explicit range
-        // Finance and Op don't use a date range key — they use makeFetcher directly
-        setTimeout(function(){
-          if (!_customerCache[key]) {
-            var lsc = lsGet('customers_'+key);
-            if (lsc && lsc.success) { _customerCache[key]=lsc; customerData=lsc; customerDataReady=true; return; }
-            fetch('/api/mongo-batch?action=customers&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-              .then(function(r){return r.json();}).then(function(d){ if(d.success){_customerCache[key]=d;customerData=d;customerDataReady=true;lsSet('customers_'+key,d);} }).catch(function(){});
-          }
-        }, 300);
-        setTimeout(function(){
-          if (!_agentCache[key]) {
-            var lsa = lsGet('agents_'+key);
-            if (lsa && lsa.success) { _agentCache[key]=lsa; agentData=lsa; agentDataReady=true; return; }
-            fetch('/api/mongo-batch?action=agents&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-              .then(function(r){return r.json();}).then(function(d){ if(d.success){_agentCache[key]=d;agentData=d;agentDataReady=true;lsSet('agents_'+key,d);} }).catch(function(){});
-          }
-        }, 700);
-        setTimeout(function(){
-          if (!_tradelaneCache[key]) {
-            var lst = lsGet('tradelane_'+key);
-            if (lst && lst.success) { _tradelaneCache[key]=lst; tradelaneData=lst; tradelaneDataReady=true; return; }
-            fetch('/api/mongo-batch?action=tradelane&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-              .then(function(r){return r.json();}).then(function(d){ if(d.success){_tradelaneCache[key]=d;tradelaneData=d;tradelaneDataReady=true;lsSet('tradelane_'+key,d);} }).catch(function(){});
-          }
-        }, 1100);
-        setTimeout(function(){ fetchFinanceData(null);  }, 1500);
-        setTimeout(function(){ fetchOpData(null);       }, 1900);
-        setTimeout(function(){ fetchOrgData(null);      }, 2300);
-      }
-    bgPrefetchSecondary();
+  if (dataReady) {
+    render();
+  } else {
+    // No cache — render the full shell immediately so the page feels instant,
+    // then kick off a direct fetchLiveData (skip the meta round-trip).
+    render(); // render() handles isStillLoading state gracefully with skeleton
+  }
 
-    // If no cache, fetch live data immediately
-    if (!cached) {
-      fetchLiveData(function() {
-        render();
-        if (window._pendingUserPatch) {
-          var p = window._pendingUserPatch;
-          patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
+  if (currentUser) {
+    var ini = currentUser.name.split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+    var roleLabel = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+    window._pendingUserPatch = { ini: ini, name: currentUser.name, role: roleLabel, photoUrl: currentUser.photoUrl };
+    if (cached) patchSidebarUser(ini, currentUser.name, roleLabel, currentUser.photoUrl);
+  }
+
+  // bgPrefetchSecondary: prefetch secondary pages in background
+  function bgPrefetchSecondary() {
+      var m26 = months26 && months26.length > 0 ? months26 : [];
+      var nowBg = new Date();
+      var MONBG = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var curMonBg = MONBG[nowBg.getMonth()] + '-' + String(nowBg.getFullYear()).slice(2);
+      var from = m26.indexOf('Apr-26') >= 0 ? 'Apr-26' : (m26[0] || '');
+      var to   = m26.indexOf(curMonBg) >= 0 ? curMonBg : (m26[m26.length-1] || '');
+      if (!from || !to) return;
+      var key = from + '_' + to;
+      // Fetch each secondary data source with the explicit range
+      // Finance and Op don't use a date range key — they use makeFetcher directly
+      setTimeout(function(){
+        if (!_customerCache[key]) {
+          var lsc = lsGet('customers_'+key);
+          if (lsc && lsc.success) { _customerCache[key]=lsc; customerData=lsc; customerDataReady=true; return; }
+          fetch('/api/mongo-batch?action=customers&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){_customerCache[key]=d;customerData=d;customerDataReady=true;lsSet('customers_'+key,d);} }).catch(function(){});
         }
-        bgPrefetchSecondary();
-      });
+      }, 300);
+      setTimeout(function(){
+        if (!_agentCache[key]) {
+          var lsa = lsGet('agents_'+key);
+          if (lsa && lsa.success) { _agentCache[key]=lsa; agentData=lsa; agentDataReady=true; return; }
+          fetch('/api/mongo-batch?action=agents&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){_agentCache[key]=d;agentData=d;agentDataReady=true;lsSet('agents_'+key,d);} }).catch(function(){});
+        }
+      }, 700);
+      setTimeout(function(){
+        if (!_tradelaneCache[key]) {
+          var lst = lsGet('tradelane_'+key);
+          if (lst && lst.success) { _tradelaneCache[key]=lst; tradelaneData=lst; tradelaneDataReady=true; return; }
+          fetch('/api/mongo-batch?action=tradelane&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){_tradelaneCache[key]=d;tradelaneData=d;tradelaneDataReady=true;lsSet('tradelane_'+key,d);} }).catch(function(){});
+        }
+      }, 1100);
+      setTimeout(function(){ fetchFinanceData(null);  }, 1500);
+      setTimeout(function(){ fetchOpData(null);       }, 1900);
+      setTimeout(function(){ fetchOrgData(null);      }, 2300);
     }
-    // ping handles stale check and silent sales update in background
+  bgPrefetchSecondary();
 
-  }, 260);
+  // If no cache, fetch live data immediately
+  if (!cached) {
+    fetchLiveData(function() {
+      render();
+      if (window._pendingUserPatch) {
+        var p = window._pendingUserPatch;
+        patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
+      }
+      bgPrefetchSecondary();
+    });
+  }
+  // ping handles stale check and silent sales update in background
 }
 
 // Lightweight check — just reads a timestamp, no aggregation cost
@@ -6130,7 +6135,7 @@ window.addEventListener('load', function() {
       // Session valid for 8 hours
       if (sess && sess.user && sess._savedAt && (Date.now() - sess._savedAt) < 8 * 60 * 60 * 1000) {
         currentUser = sess.user;
-        showDashboard();
+        showDashboard(true); // true = instant, skip login animation
         // Still init Google auth in background for token refresh
         var interval2 = setInterval(function() {
           if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
