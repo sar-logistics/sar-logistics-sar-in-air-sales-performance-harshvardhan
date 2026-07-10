@@ -354,10 +354,9 @@ function _showDashboardBody() {
 
   if (dataReady) {
     render();
-    // If LOB filter active: fetch drillRows (for rep filtering) and lobData (for branch filtering)
-    if (state.filterLobs && state.filterLobs.length > 0) {
-      if (!allDrillRows) loadDrillData(function(){ render(); });
-      if (!_lobDataFetched) fetchLobDataIfNeeded(function(){ render(); });
+    // If LOB filter active: fetch lobData so table numbers are filtered correctly
+    if (state.filterLobs && state.filterLobs.length > 0 && !_lobDataFetched) {
+      fetchLobDataIfNeeded(function(){ render(); });
     }
   } else {
     // No cache — render the full shell immediately so the page feels instant,
@@ -562,51 +561,20 @@ function computeFilteredRepsRaw(){
     base = base.filter(function(r){ return filterReps.indexOf(r.name) > -1; });
   }
 
-  // LOB filter — recompute monthly arrays from allDrillRows when active
+  // LOB filter — use lobData (fetched via includeLob=1) to recompute monthly arrays
   var filterLobs = state.filterLobs || [];
-  if (filterLobs.length > 0 && allDrillRows && allDrillRows.length > 0) {
-    // Build index: normalized_repName -> month -> {gp, ship, tons, teu, lcl}
-    var _lobIdx = {};
-    for (var _i = 0; _i < allDrillRows.length; _i++) {
-      var _row = allDrillRows[_i];
-      if (filterLobs.indexOf(_row.lob) === -1) continue;
-      var _sp = _row._sp || normalizeName(_row.salesPerson || '');
-      if (!_sp) continue;
-      if (!_lobIdx[_sp]) _lobIdx[_sp] = {};
-      var _m = _row._ml;
-      if (!_lobIdx[_sp][_m]) _lobIdx[_sp][_m] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
-      var _md = _lobIdx[_sp][_m];
-      _md.gp   += _row.g   || 0;
-      _md.gpProv   += (_row.prov ? (_row.g||0) : 0);
-      _md.gpActual += (_row.prov ? 0 : (_row.g||0));
-      _md.ship += 1;
-      _md.tons += _row.vol || 0;
-      _md.teu  += _row.t   || 0;
-    }
+  if (filterLobs.length > 0 && _lobDataFetched) {
     base = base.map(function(r) {
+      if (!r.lobData) return r; // no lobData yet — keep original (will re-render when fetched)
+      var ld = r.lobData;
       var filtered = Object.assign({}, r);
-      if (r.isBranch && r.lobData && Object.keys(r.lobData).length > 0) {
-        // Branch reps with lobData: filter by lob
-        var ld = r.lobData;
-        filtered.gp       = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gp)||0); },0); });
-        filtered.gpProv   = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gpProv)||0); },0); });
-        filtered.gpActual = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gpActual)||0); },0); });
-        filtered.ship     = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].ship)||0); },0); });
-        filtered.tons     = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].tons)||0); },0); });
-        filtered.teu      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].teu)||0); },0); });
-        filtered.lcl      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].lcl)||0); },0); });
-      } else if (!r.isBranch) {
-        // Regular reps: use allDrillRows index
-        var rIdx = _lobIdx[normalizeName(r.name)] || {};
-        filtered.gp       = months26.map(function(m){ return (rIdx[m]&&rIdx[m].gp)      ||0; });
-        filtered.gpProv   = months26.map(function(m){ return (rIdx[m]&&rIdx[m].gpProv)   ||0; });
-        filtered.gpActual = months26.map(function(m){ return (rIdx[m]&&rIdx[m].gpActual) ||0; });
-        filtered.ship     = months26.map(function(m){ return (rIdx[m]&&rIdx[m].ship)     ||0; });
-        filtered.tons     = months26.map(function(m){ return (rIdx[m]&&rIdx[m].tons)     ||0; });
-        filtered.teu      = months26.map(function(m){ return (rIdx[m]&&rIdx[m].teu)      ||0; });
-        filtered.lcl      = months26.map(function(m){ return (rIdx[m]&&rIdx[m].lcl)      ||0; });
-      }
-      // isBranch with no lobData: keep original arrays (cannot filter without lobData)
+      filtered.gp       = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gp)   ||0); },0); });
+      filtered.gpProv   = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gpProv)||0); },0); });
+      filtered.gpActual = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gpActual)||0); },0); });
+      filtered.ship     = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].ship)  ||0); },0); });
+      filtered.tons     = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].tons)  ||0); },0); });
+      filtered.teu      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].teu)   ||0); },0); });
+      filtered.lcl      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].lcl)   ||0); },0); });
       return filtered;
     });
   }
