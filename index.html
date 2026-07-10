@@ -961,7 +961,7 @@ function prefetchCustomerRanges() {
   setTimeout(next, 2000);
 }
 var fetchFinanceData  = makeFetcher('finance',   'finance',   function(d){ financeData  = d; financeDataReady  = true; });
-var fetchOpData       = makeFetcher('op',        'op',        function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows; lsSet('pendencyDrillRows', { rows: d.allDrillJobRows }); } });
+var fetchOpData = makeFetcher('op', 'op', function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows; lsSet('pendencyDrillRows', { rows: d.allDrillJobRows }); delete d.allDrillJobRows; } });
 
 // ── Agent Insights fetch (mirrors customer fetch pattern) ─────────────────────
 var _agentCache = {};
@@ -3813,6 +3813,26 @@ function tableRows(){
   var ents = entities();
   var rows = [];
 
+  // Build a mapping: months26 index → position in filteredMonthIndices()
+  // Entity arrays (e.gp, e.ship etc) are indexed by position in filteredMonthIndices()
+  var _fidxs = filteredMonthIndices();
+  var _months26ToLocal = {};
+  _fidxs.forEach(function(m26idx, localPos){ _months26ToLocal[m26idx] = localPos; });
+
+  // Remap group idxs from months26-space to entity-local-space
+  var activeGroupsRemapped = null;
+  if (isQuarterly && qGroups) {
+    activeGroupsRemapped = qGroups.map(function(g){
+      return { key: g.key, label: g.label,
+        idxs: g.idxs.map(function(i){ return _months26ToLocal[i]; }).filter(function(i){ return i !== undefined; }) };
+    });
+  } else if (isYearly && yGroups) {
+    activeGroupsRemapped = yGroups.map(function(g){
+      return { key: g.key, label: g.label,
+        idxs: g.idxs.map(function(i){ return _months26ToLocal[i]; }).filter(function(i){ return i !== undefined; }) };
+    });
+  }
+
   ents.forEach(function(e){
     var isGrand = e.isGrand;
     var isZone  = e.isZone;
@@ -3828,7 +3848,7 @@ function tableRows(){
 
     // In Yearly/Quarterly view, aggregate monthly arrays into per-group totals
     var dispGp, dispShip, dispTons, dispTeus, dispLcl, dispTgt, dispAch, dispGpProv, dispGpActual;
-    var activeGroups = (isYearly && yGroups) ? yGroups : (isQuarterly && qGroups) ? qGroups : null;
+    var activeGroups = activeGroupsRemapped;
     if (activeGroups) {
       dispGp     = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return e.gp[i]||0; })); });
       dispGpProv = activeGroups.map(function(g){ return sum(g.idxs.map(function(i){ return (e.gpProv&&e.gpProv[i])||0; })); });
@@ -3840,7 +3860,7 @@ function tableRows(){
       dispTgt  = activeGroups.map(function(g){
         // Sum per-month targets prorated by join/exit date
         return sum(g.idxs.map(function(i){
-          var m = filteredMonths()[i];
+          var m = months26[_fidxs[i]] || filteredMonths()[i];
           if (!m) return e.tgt;
           if (e.joinDate || e.exitDate) {
             var bounds = monthBounds(m);
@@ -6180,9 +6200,14 @@ window.addEventListener('load', function() {
         // ── Op ───────────────────────────────────────────────────────────────
         if (d.op && d.op.success && !opDataReady) {
           opData = d.op; opDataReady = true;
-          if (d.op.allDrillJobRows) allPendencyDrillRows = d.op.allDrillJobRows;
-          lsSet('op', d.op);
-          lsSet('pendencyDrillRows', { rows: d.op.allDrillJobRows || [] });
+          if (d.op.allDrillJobRows) {
+            allPendencyDrillRows = d.op.allDrillJobRows;
+            lsSet('pendencyDrillRows', { rows: d.op.allDrillJobRows });
+          }
+          // Strip drill rows before saving op to localStorage (too large)
+          var opToSave = Object.assign({}, d.op);
+          delete opToSave.allDrillJobRows;
+          lsSet('op', opToSave);
         }
       })
       .catch(function(){});
