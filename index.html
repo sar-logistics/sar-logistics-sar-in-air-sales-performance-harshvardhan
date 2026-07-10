@@ -304,17 +304,8 @@ function _showDashboardBody() {
     zonesRaw = cached.zones || [];
     syncDateRangeToData();
     dataReady = true;
-    // Restore lobData from localStorage OR from bundled sales cache
-    try {
-      var _lobRaw = localStorage.getItem('sar_lobdata_' + CACHE_VERSION);
-      if (_lobRaw) {
-        var _lobMap = JSON.parse(_lobRaw);
-        repsRawOriginal.forEach(function(r){ var ld = _lobMap[r.name+'||'+r.zone]; if (ld) r.lobData = ld; });
-        _lobDataFetched = true;
-      }
-    } catch(e) {}
-    // Also check if lobData came bundled in the cached sales response
-    if (!_lobDataFetched && repsRawOriginal[0] && repsRawOriginal[0].lobData) {
+    // Check if lobData is present on cached repsRaw (bundled in response)
+    if (repsRawOriginal[0] && repsRawOriginal[0].lobData) {
       _lobDataFetched = true;
     }
     // Drill rows are stored separately under 'drillrows' key (not bundled in sales)
@@ -354,7 +345,8 @@ function _showDashboardBody() {
 
   if (dataReady) {
     render();
-    // If LOB filter active: fetch lobData so table numbers are filtered correctly
+    // If LOB filter active and lobData not yet available, fetch it
+    // (normally bundled in sales response, but fallback for edge cases)
     if (state.filterLobs && state.filterLobs.length > 0 && !_lobDataFetched) {
       fetchLobDataIfNeeded(function(){ render(); });
     }
@@ -453,7 +445,23 @@ function checkForFreshData(cached, callback) {
 }
 
 function getCachedSalesData() { return lsGet('sales'); }
-function setCachedSalesData(data) { lsSet('sales', data); }
+function setCachedSalesData(data) {
+  // Bundle lobData into sales cache so next boot has it immediately
+  if (!data.repsRaw[0] || !data.repsRaw[0].lobData) {
+    // Attach lobData from repsRawOriginal if available
+    var byKey = {};
+    repsRawOriginal.forEach(function(r){ if (r.lobData) byKey[r.name+'||'+r.zone] = r.lobData; });
+    if (Object.keys(byKey).length > 0) {
+      data = Object.assign({}, data, {
+        repsRaw: data.repsRaw.map(function(r){
+          var ld = byKey[r.name+'||'+r.zone];
+          return ld ? Object.assign({}, r, {lobData: ld}) : r;
+        })
+      });
+    }
+  }
+  lsSet('sales', data);
+}
 
 function loadingScreen() {
   return '<div style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:#F4F7FB;">'
@@ -647,6 +655,14 @@ function fetchLiveData(callback, force){
           if (months26.length === 0) months26 = liveMonths;
           syncDateRangeToData();
           dataReady = true;
+          // lobData comes bundled (Air keys only) — set immediately on repsRawOriginal
+          if (data.repsRaw[0] && data.repsRaw[0].lobData) {
+            data.repsRaw.forEach(function(dr){
+              var rep = repsRawOriginal.find(function(r){ return r.name===dr.name && r.zone===dr.zone; });
+              if (rep && dr.lobData) rep.lobData = dr.lobData;
+            });
+            _lobDataFetched = true;
+          }
           // Save sales lean (no drill rows bundled — quota safe)
           setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
           if (data.allDrillRows && data.allDrillRows.length > 0 && !allDrillRows) {
