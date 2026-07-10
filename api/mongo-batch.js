@@ -1848,6 +1848,7 @@ async function computeBothPendency(db) {
     { "Job Date":         { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
   ]};
   const ALL_JOB_COLLS = Object.values(COLLECTIONS);
+  const allDrillJobRows = []; // all job rows for client-side drill filtering
   // Two independent maps — one per lock type — built in the same loop
   const olMap = {}; // OL: norm → { zone, displayName, monthData: { month → { pending, done } }, jobOwners }
   const flMap = {}; // FL: same structure
@@ -1860,7 +1861,9 @@ async function computeBothPendency(db) {
 
     const jobs = await db.collection(collName).find(
       FY_DATE_FILTER,
-      { projection: { "Sales Person": 1, "Job Owner": 1, "Financial Lock": 1, "Operation Lock": 1, [dateField]: 1, "Job Date": 1 } }
+      { projection: { "Sales Person": 1, "Job Owner": 1, "Financial Lock": 1, "Operation Lock": 1,
+        [dateField]: 1, "Job Date": 1, "Shipment No": 1, "Customer": 1, "Location": 1,
+        "Carrier": 1, "Carrier Name": 1, "ETD Loading Port": 1, "ETA Discharge": 1, "LOB": 1 } }
     ).toArray();
 
     for (const job of jobs) {
@@ -1892,6 +1895,24 @@ async function computeBothPendency(db) {
       const jobOwner = String(job["Job Owner"] || "").trim().split("|")[0].trim() || "";
       const olDone = job["Operation Lock"] && String(job["Operation Lock"]).trim() !== "";
       const flDone = job["Financial Lock"]  && String(job["Financial Lock"]).trim()  !== "";
+      const cls = classifyRow(job, collName);
+
+      // Store compact drill row — shared across OL and FL, lock status derived client-side
+      allDrillJobRows.push({
+        _norm: norm, _zone: zone, _month: monthLabel,
+        olDone, flDone,
+        shipmentNo:  job["Shipment No"]     || "—",
+        jobDate:     job["Job Date"]        || "",
+        lob:         cls.kind + (cls.direction ? " " + cls.direction : ""),
+        customer:    String(job["Customer"] || "").trim() || "—",
+        salesPerson: cleanName,
+        jobOwner:    jobOwner || "—",
+        carrier:     job["Carrier"] || job["Carrier Name"] || "—",
+        location:    job["Location"]        || "—",
+        etdLoading:  job["ETD Loading Port"]|| "",
+        etaDischarge:job["ETA Discharge"]   || "",
+        month:       monthLabel,
+      });
 
       // Helper: ensure rep entry exists in a map
       function ensureRep(map) {
@@ -1943,7 +1964,11 @@ async function computeBothPendency(db) {
     return { success: true, months: monthsInData, reps, zones, pushedAt: new Date().toISOString() };
   }
 
-  return { op: buildResult(olMap), finance: buildResult(flMap) };
+  const opResult  = buildResult(olMap);
+  const finResult = buildResult(flMap);
+  // Attach drill rows to op only — client shares them for both OL and FL filtering
+  opResult.allDrillJobRows = allDrillJobRows;
+  return { op: opResult, finance: finResult };
 }
 
 module.exports = async function handler(req, res) {
