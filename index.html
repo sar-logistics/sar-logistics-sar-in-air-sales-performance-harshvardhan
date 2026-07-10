@@ -270,8 +270,15 @@ function showDashboard() {
     loginScreen.style.display = 'none';
     appEl.style.display = 'flex';
 
-    // ── Instant boot: same pattern as Op/Finance — lsGet then render immediately ──
+    // ── Instant boot: identical to Op/Finance ────────────────────────────────
+    // Migrate from old cache key if new key not yet populated
     var cached = lsGet('sales');
+    if (!cached) {
+      try {
+        var oldRaw = localStorage.getItem('sar_sales_cache_' + CACHE_VERSION);
+        if (oldRaw) { cached = JSON.parse(oldRaw); }
+      } catch(e) {}
+    }
     if (cached && cached.repsRaw && cached.repsRaw.length > 0) {
       var ALL_FY = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25',
         'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
@@ -283,6 +290,10 @@ function showDashboard() {
       zonesRaw = cached.zones || [];
       syncDateRangeToData();
       dataReady = true;
+      // Restore drill rows if bundled in sales cache
+      if (cached.allDrillRows && cached.allDrillRows.length > 0 && !allDrillRows) {
+        allDrillRows = cached.allDrillRows;
+      }
     }
 
     // Pre-populate all secondary data from localStorage before first render
@@ -6091,32 +6102,47 @@ window.addEventListener('load', function() {
     fetch('/api/mongo-batch?action=ping')
       .then(function(r){ return r.json(); })
       .then(function(d){
-        // Sales data — store to localStorage, skip checkForFreshData if already rendered
+        var ALL_FY_P = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25',
+          'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
+          'Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
+
+        // ── Sales ────────────────────────────────────────────────────────────
         if (d.sales && d.sales.repsRaw && d.sales.repsRaw.length > 0) {
-          var ALL_FY_P = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25',
-            'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
-            'Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
           var liveMonths = d.sales.months || [];
           var newMonths = ALL_FY_P.filter(function(m){ return liveMonths.indexOf(m) >= 0; });
           if (newMonths.length === 0) newMonths = liveMonths;
-          // Only update if data changed or not yet loaded
-          var cacheBuiltAt = d.sales._cachedAt || 0;
           var dbUpdated = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
-          var isStale = dbUpdated > cacheBuiltAt;
-          if (!dataReady || isStale) {
+          var cacheBuiltAt = d.sales._cachedAt || 0;
+          var salesChanged = dbUpdated > cacheBuiltAt;
+          if (!dataReady || salesChanged) {
             repsRawOriginal = d.sales.repsRaw;
-            zonesRaw  = d.sales.zones  || [];
+            zonesRaw  = d.sales.zones || [];
             months26  = newMonths;
             syncDateRangeToData();
             dataReady = true;
-            setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
+            // Save with drill rows bundled so next boot has everything
+            var toSave = { repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 };
+            if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0) {
+              toSave.allDrillRows = d.sales.allDrillRows;
+              allDrillRows = d.sales.allDrillRows;
+              lsSet('drillrows', { rows: allDrillRows });
+            }
+            setCachedSalesData(toSave);
             render();
+          } else if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0 && !allDrillRows) {
+            // Sales data fresh but drill rows not loaded yet — grab them
+            allDrillRows = d.sales.allDrillRows;
+            lsSet('drillrows', { rows: allDrillRows });
           }
         }
+
+        // ── Finance ──────────────────────────────────────────────────────────
         if (d.finance && d.finance.success && !financeDataReady) {
           financeData = d.finance; financeDataReady = true;
           lsSet('finance', d.finance);
         }
+
+        // ── Op ───────────────────────────────────────────────────────────────
         if (d.op && d.op.success && !opDataReady) {
           opData = d.op; opDataReady = true;
           if (d.op.allDrillJobRows) allPendencyDrillRows = d.op.allDrillJobRows;
