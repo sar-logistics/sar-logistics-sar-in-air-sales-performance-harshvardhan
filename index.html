@@ -319,7 +319,9 @@ function showDashboard() {
     if (dataReady) {
       render();
     } else {
-      appEl.innerHTML = loadingScreen();
+      // No cache — render the full shell immediately so the page feels instant,
+      // then kick off a direct fetchLiveData (skip the meta round-trip).
+      render(); // render() handles isStillLoading state gracefully with skeleton
     }
 
     if (currentUser) {
@@ -329,12 +331,28 @@ function showDashboard() {
       if (cached) patchSidebarUser(ini, currentUser.name, roleLabel, currentUser.photoUrl);
     }
 
+    // If no cache at all, skip the meta round-trip and fetch live data immediately
+    if (!cached) {
+      fetchLiveData(function() {
+        render();
+        if (window._pendingUserPatch) {
+          var p = window._pendingUserPatch;
+          patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
+        }
+        // bgPrefetchSecondary defined below — call after data is ready
+        if (typeof bgPrefetchSecondaryFn === 'function') bgPrefetchSecondaryFn();
+      });
+      return; // skip checkForFreshData — we're already fetching
+    }
+
     // Cheap check: has MongoDB data changed since our cache was built?
     checkForFreshData(cached, function(needsRefresh) {
       // Always background-prefetch secondary pages so navigation is instant.
       // We fetch with explicit date range matching what syncDateRangeToData will set,
       // WITHOUT touching state (which would blank the current view).
+      var bgPrefetchSecondaryFn; // allow no-cache path to call it
       function bgPrefetchSecondary() {
+      bgPrefetchSecondaryFn = bgPrefetchSecondary;
         var m26 = months26 && months26.length > 0 ? months26 : [];
         var nowBg = new Date();
         var MONBG = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
