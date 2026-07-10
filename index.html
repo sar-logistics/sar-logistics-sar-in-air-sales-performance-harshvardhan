@@ -2519,8 +2519,9 @@ function customerPage(){
   };
   var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
   if (hasFilters && lobData.allCustomers) {
+    var _frNorm = filterReps.map(function(x){ return normalizeName(x); });
+    // For zone-scoped RLS: re-aggregate metrics using only zone reps' contributions
     var filteredCusts = lobData.allCustomers.filter(function(c) {
-      var _frNorm = filterReps.map(function(x){ return normalizeName(x); });
       var repOk = filterReps.length === 0 || (c.salesReps || []).some(function(r){
         return _frNorm.indexOf(normalizeName(r||'')) > -1;
       });
@@ -2529,7 +2530,20 @@ function customerPage(){
         return needle && (c.lobs || []).indexOf(needle) > -1;
       });
       return repOk && lobOk;
-    });
+    }).map(function(c) {
+      // Re-sum metrics from only the allowed reps' contributions
+      if (filterReps.length === 0 || !c.repMetrics) return c;
+      var ship=0, rev=0, gp=0, tons=0, teu=0;
+      Object.keys(c.repMetrics).forEach(function(rep){
+        if (_frNorm.indexOf(normalizeName(rep)) === -1) return;
+        var m = c.repMetrics[rep];
+        ship += m.shipments||0; rev += m.revenue||0; gp += m.gp||0;
+        tons += m.tons||0; teu += m.teu||0;
+      });
+      return Object.assign({}, c, { shipments:ship, revenue:Math.round(rev), gp:Math.round(gp),
+        tons:Math.round(tons*100)/100, teu:Math.round(teu*100)/100,
+        gpPct: rev>0 ? Math.round((gp/rev)*1000)/10 : 0 });
+    }).filter(function(c){ return c.shipments > 0; });
     function top10f(arr, key) { return arr.slice().sort(function(a,b){ return b[key]-a[key]; }).slice(0,10); }
     lobData = {
       allCustomers:   filteredCusts,
@@ -2719,8 +2733,9 @@ function agentPage(){
   };
   var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
   if (hasFilters && lobData.allAgents) {
+    var _frNormA = filterReps.map(function(x){ return normalizeName(x); });
     var filteredAgents = lobData.allAgents.filter(function(a) {
-      var _frNorm = filterReps.map(function(x){ return normalizeName(x); });
+      var _frNorm = _frNormA;
       var repOk = filterReps.length === 0 || (a.salesReps||[]).some(function(r){ return _frNorm.indexOf(normalizeName(r||''))>-1; });
       var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
         var needle = LOB_KEY_TO_CUST[fk]||'';
@@ -2917,8 +2932,9 @@ function tradelanePage(){
   };
   var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
   if (hasFilters && lobData.allCountries) {
+    var _frNormT = filterReps.map(function(x){ return normalizeName(x); });
     var filtered = lobData.allCountries.filter(function(c) {
-      var _frNorm = filterReps.map(function(x){ return normalizeName(x); });
+      var _frNorm = _frNormT;
       var repOk = filterReps.length === 0 || (c.salesReps||[]).some(function(r){ return _frNorm.indexOf(normalizeName(r||''))>-1; });
       var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
         var needle = LOB_KEY_TO_LABEL[fk]||'';
