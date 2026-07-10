@@ -353,10 +353,12 @@ function _showDashboardBody() {
   console.log('[PERF] bootstrapSecondaryCache total', (performance.now()-_tBoot).toFixed(1)+'ms');
 
   if (dataReady) {
-    render();
-    // Always fetch lobData eagerly — it's stripped from sales cache to save quota
-    // Server returns only Air Export + Air Import keys (small, fast)
-    if (!_lobDataFetched) {
+    if (_lobDataFetched) {
+      // lobData available — render immediately with correct filtered numbers
+      render();
+    } else {
+      // Fetch lobData first, then render — avoids showing wrong numbers briefly
+      render(); // render skeleton/unfiltered while fetching
       fetchLobDataIfNeeded(function(){ render(); });
     }
   } else {
@@ -784,7 +786,7 @@ function fetchLobDataIfNeeded(callback){
           if (ld) r.lobData = ld;
         });
         _lobDataFetched = true;
-        // Save compact Air-only lobData to localStorage (small enough to fit quota)
+        // Save Air-only lobData to localStorage
         try {
           var lobStore = {};
           repsRawOriginal.forEach(function(r){
@@ -795,8 +797,12 @@ function fetchLobDataIfNeeded(callback){
             if (Object.keys(airOnly).length > 0) lobStore[r.name+'||'+r.zone] = airOnly;
           });
           var serialized = JSON.stringify(lobStore);
-          console.log('[LOB] saving lobData, size='+serialized.length);
-          localStorage.setItem('sar_lobdata_' + CACHE_VERSION, serialized);
+          if (serialized.length < 2000000) { // only save if under 2MB
+            localStorage.setItem('sar_lobdata_' + CACHE_VERSION, serialized);
+            console.log('[LOB] lobData saved, size='+serialized.length);
+          } else {
+            console.warn('[LOB] lobData too large to cache:', serialized.length);
+          }
         } catch(e) { console.warn('[LOB] lobData save failed:', e.message); }
       }
       if (callback) callback();
@@ -5807,15 +5813,18 @@ document.addEventListener('click', function(ev){
       if(!data.success){ state.addUserError = data.error||'Failed to add user.'; render(); return; }
       state.addUserOpen = false;
       state.addUserError = '';
-      // Immediately add new user to in-memory orgData so the list updates instantly
-      if (orgData && orgDataReady) {
-        var newUser = { name:newName, email:newEmail, role:newRole, zone:newZone, reportsTo:newRT, isActive:true, loginCount:0, lastLogin:null };
-        if (!orgData.support) orgData.support = [];
-        orgData.support = orgData.support.concat([newUser]);
-        render();
-      }
-      // Then refresh from server in background to get canonical data
-      fetchOrgData(function(){ render(); }, true);
+      // Fetch fresh org data directly (bypass makeFetcher cache/inFlight guards)
+      fetch('/api/mongo-batch?action=org&force=1')
+        .then(function(r){ return r.json(); })
+        .then(function(fresh){
+          if (fresh.success) {
+            orgData = fresh;
+            orgDataReady = true;
+            lsSet('org', fresh);
+          }
+          render();
+        })
+        .catch(function(){ render(); });
     })
     .catch(function(e){ state.addUserError = e.message; render(); });
   }
@@ -5855,7 +5864,14 @@ document.addEventListener('click', function(ev){
       }
       orgEditTarget = null;
       state.orgEditError='';
-      fetchOrgData(function(){ render(); }, true);
+      // Direct fetch bypasses makeFetcher cache/inFlight guards
+      fetch('/api/mongo-batch?action=org&force=1')
+        .then(function(r){ return r.json(); })
+        .then(function(fresh){
+          if (fresh.success) { orgData = fresh; orgDataReady = true; lsSet('org', fresh); }
+          render();
+        })
+        .catch(function(){ render(); });
     });
   }
   else if(act==='setFrom'){
