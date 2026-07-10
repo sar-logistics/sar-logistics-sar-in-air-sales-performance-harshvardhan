@@ -304,10 +304,19 @@ function _showDashboardBody() {
     zonesRaw = cached.zones || [];
     syncDateRangeToData();
     dataReady = true;
-    // Check if lobData is present on cached repsRaw (bundled in response)
-    if (repsRawOriginal[0] && repsRawOriginal[0].lobData) {
-      _lobDataFetched = true;
-    }
+    // Restore Air lobData from dedicated localStorage key (small, quota-safe)
+    try {
+      var _lobRaw = localStorage.getItem('sar_lobdata_' + CACHE_VERSION);
+      if (_lobRaw) {
+        var _lobMap = JSON.parse(_lobRaw);
+        repsRawOriginal.forEach(function(r){
+          var ld = _lobMap[r.name+'||'+r.zone];
+          if (ld) r.lobData = ld;
+        });
+        _lobDataFetched = true;
+        console.log('[LOB] restored lobData from localStorage for', Object.keys(_lobMap).length, 'reps');
+      }
+    } catch(e) {}
     // Drill rows are stored separately under 'drillrows' key (not bundled in sales)
   }
 
@@ -345,9 +354,9 @@ function _showDashboardBody() {
 
   if (dataReady) {
     render();
-    // If LOB filter active and lobData not yet available, fetch it
-    // (normally bundled in sales response, but fallback for edge cases)
-    if (state.filterLobs && state.filterLobs.length > 0 && !_lobDataFetched) {
+    // Always fetch lobData eagerly — it's stripped from sales cache to save quota
+    // Server returns only Air Export + Air Import keys (small, fast)
+    if (!_lobDataFetched) {
       fetchLobDataIfNeeded(function(){ render(); });
     }
   } else {
@@ -446,21 +455,17 @@ function checkForFreshData(cached, callback) {
 
 function getCachedSalesData() { return lsGet('sales'); }
 function setCachedSalesData(data) {
-  // Bundle lobData into sales cache so next boot has it immediately
-  if (!data.repsRaw[0] || !data.repsRaw[0].lobData) {
-    // Attach lobData from repsRawOriginal if available
-    var byKey = {};
-    repsRawOriginal.forEach(function(r){ if (r.lobData) byKey[r.name+'||'+r.zone] = r.lobData; });
-    if (Object.keys(byKey).length > 0) {
-      data = Object.assign({}, data, {
-        repsRaw: data.repsRaw.map(function(r){
-          var ld = byKey[r.name+'||'+r.zone];
-          return ld ? Object.assign({}, r, {lobData: ld}) : r;
-        })
-      });
-    }
-  }
-  lsSet('sales', data);
+  // Strip lobData before saving — too large for localStorage quota
+  // lobData is always re-fetched at boot via fetchLobDataIfNeeded
+  var lean = Object.assign({}, data, {
+    repsRaw: data.repsRaw.map(function(r){
+      if (!r.lobData) return r;
+      var copy = Object.assign({}, r);
+      delete copy.lobData;
+      return copy;
+    })
+  });
+  lsSet('sales', lean);
 }
 
 function loadingScreen() {
@@ -655,12 +660,8 @@ function fetchLiveData(callback, force){
           if (months26.length === 0) months26 = liveMonths;
           syncDateRangeToData();
           dataReady = true;
-          // lobData comes bundled (Air keys only) — set immediately on repsRawOriginal
-          if (data.repsRaw[0] && data.repsRaw[0].lobData) {
-            data.repsRaw.forEach(function(dr){
-              var rep = repsRawOriginal.find(function(r){ return r.name===dr.name && r.zone===dr.zone; });
-              if (rep && dr.lobData) rep.lobData = dr.lobData;
-            });
+          // lobData is bundled in repsRawOriginal (Air keys) from server response
+          if (repsRawOriginal[0] && repsRawOriginal[0].lobData) {
             _lobDataFetched = true;
           }
           // Save sales lean (no drill rows bundled — quota safe)
@@ -766,7 +767,12 @@ function fetchWeekDataIfNeeded(callback){
 // Lazily fetch the heavy per-rep lobData breakdown — only called the first
 // time the user opens the Filters panel (where LOB selection lives).
 function fetchLobDataIfNeeded(callback){
-  if (_lobDataFetched || repsRawOriginal.length === 0) { if (callback) callback(); return; }
+  if (_lobDataFetched) { if (callback) callback(); return; }
+  if (repsRawOriginal.length === 0) {
+    // Sales data not loaded yet — wait for it then retry
+    setTimeout(function(){ fetchLobDataIfNeeded(callback); }, 200);
+    return;
+  }
   fetch('/api/mongo-batch?action=sales&includeLob=1', { priority: 'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
@@ -778,12 +784,20 @@ function fetchLobDataIfNeeded(callback){
           if (ld) r.lobData = ld;
         });
         _lobDataFetched = true;
-        // Persist lobData to localStorage so next boot applies LOB filter instantly
+        // Save compact Air-only lobData to localStorage (small enough to fit quota)
         try {
           var lobStore = {};
-          repsRawOriginal.forEach(function(r){ if (r.lobData) lobStore[r.name+'||'+r.zone] = r.lobData; });
-          localStorage.setItem('sar_lobdata_' + CACHE_VERSION, JSON.stringify(lobStore));
-        } catch(e) {}
+          repsRawOriginal.forEach(function(r){
+            if (!r.lobData) return;
+            var airOnly = {};
+            if (r.lobData['AIR EXPORT']) airOnly['AIR EXPORT'] = r.lobData['AIR EXPORT'];
+            if (r.lobData['AIR IMPORT']) airOnly['AIR IMPORT'] = r.lobData['AIR IMPORT'];
+            if (Object.keys(airOnly).length > 0) lobStore[r.name+'||'+r.zone] = airOnly;
+          });
+          var serialized = JSON.stringify(lobStore);
+          console.log('[LOB] saving lobData, size='+serialized.length);
+          localStorage.setItem('sar_lobdata_' + CACHE_VERSION, serialized);
+        } catch(e) { console.warn('[LOB] lobData save failed:', e.message); }
       }
       if (callback) callback();
     })
