@@ -337,28 +337,8 @@ function showDashboard() {
       if (cached) patchSidebarUser(ini, currentUser.name, roleLabel, currentUser.photoUrl);
     }
 
-    // If no cache at all, skip the meta round-trip and fetch live data immediately
-    if (!cached) {
-      fetchLiveData(function() {
-        render();
-        if (window._pendingUserPatch) {
-          var p = window._pendingUserPatch;
-          patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
-        }
-        // bgPrefetchSecondary defined below — call after data is ready
-        if (typeof bgPrefetchSecondaryFn === 'function') bgPrefetchSecondaryFn();
-      });
-      return; // skip checkForFreshData — we're already fetching
-    }
-
-    // Cheap check: has MongoDB data changed since our cache was built?
-    checkForFreshData(cached, function(needsRefresh) {
-      // Always background-prefetch secondary pages so navigation is instant.
-      // We fetch with explicit date range matching what syncDateRangeToData will set,
-      // WITHOUT touching state (which would blank the current view).
-      var bgPrefetchSecondaryFn; // allow no-cache path to call it
-      function bgPrefetchSecondary() {
-      bgPrefetchSecondaryFn = bgPrefetchSecondary;
+    // bgPrefetchSecondary: prefetch secondary pages in background
+    function bgPrefetchSecondary() {
         var m26 = months26 && months26.length > 0 ? months26 : [];
         var nowBg = new Date();
         var MONBG = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -397,23 +377,21 @@ function showDashboard() {
         setTimeout(function(){ fetchOpData(null);       }, 1900);
         setTimeout(function(){ fetchOrgData(null);      }, 2300);
       }
-      bgPrefetchSecondary();
+    bgPrefetchSecondary();
 
-      if (!needsRefresh) return; // sales data is fresh — nothing more to do
-      // Small delay: the meta check already woke the container — give it
-      // 500ms to finish initializing before hitting it with the heavy fetch.
-      setTimeout(function() {
-        fetchLiveData(function() {
-          render();
-          if (window._pendingUserPatch) {
-            var p = window._pendingUserPatch;
-            patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
-          }
-          // Re-prefetch with correct months after fresh sales data arrives
-          bgPrefetchSecondary();
-        });
-      }, 500);
-    });
+    // If no cache, fetch live data immediately
+    if (!cached) {
+      fetchLiveData(function() {
+        render();
+        if (window._pendingUserPatch) {
+          var p = window._pendingUserPatch;
+          patchSidebarUser(p.ini, p.name, p.role, p.photoUrl);
+        }
+        bgPrefetchSecondary();
+      });
+    }
+    // ping handles stale check and silent sales update in background
+
   }, 260);
 }
 
@@ -6107,6 +6085,28 @@ window.addEventListener('load', function() {
     fetch('/api/mongo-batch?action=ping')
       .then(function(r){ return r.json(); })
       .then(function(d){
+        // Sales data — store to localStorage, skip checkForFreshData if already rendered
+        if (d.sales && d.sales.repsRaw && d.sales.repsRaw.length > 0) {
+          var ALL_FY_P = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25',
+            'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
+            'Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
+          var liveMonths = d.sales.months || [];
+          var newMonths = ALL_FY_P.filter(function(m){ return liveMonths.indexOf(m) >= 0; });
+          if (newMonths.length === 0) newMonths = liveMonths;
+          // Only update if data changed or not yet loaded
+          var cacheBuiltAt = d.sales._cachedAt || 0;
+          var dbUpdated = d.lastUpdated ? new Date(d.lastUpdated).getTime() : 0;
+          var isStale = dbUpdated > cacheBuiltAt;
+          if (!dataReady || isStale) {
+            repsRawOriginal = d.sales.repsRaw;
+            zonesRaw  = d.sales.zones  || [];
+            months26  = newMonths;
+            syncDateRangeToData();
+            dataReady = true;
+            setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
+            render();
+          }
+        }
         if (d.finance && d.finance.success && !financeDataReady) {
           financeData = d.finance; financeDataReady = true;
           lsSet('finance', d.finance);
