@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v27'; // v27: pendency drill rows with lob field, LOB filter on all drills
+var CACHE_VERSION = 'v28'; // v28: lobData bundled in sales cache for instant correct filtering
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -304,19 +304,23 @@ function _showDashboardBody() {
     zonesRaw = cached.zones || [];
     syncDateRangeToData();
     dataReady = true;
-    // Restore Air lobData from dedicated localStorage key (small, quota-safe)
-    try {
-      var _lobRaw = localStorage.getItem('sar_lobdata_' + CACHE_VERSION);
-      if (_lobRaw) {
-        var _lobMap = JSON.parse(_lobRaw);
-        repsRawOriginal.forEach(function(r){
-          var ld = _lobMap[r.name+'||'+r.zone];
-          if (ld) r.lobData = ld;
-        });
-        _lobDataFetched = true;
-        console.log('[LOB] restored lobData from localStorage for', Object.keys(_lobMap).length, 'reps');
-      }
-    } catch(e) {}
+    // Check if lobData is bundled in the cached sales data
+    if (repsRawOriginal[0] && repsRawOriginal[0].lobData) {
+      _lobDataFetched = true;
+    } else {
+      // Fallback: try dedicated lobData localStorage key
+      try {
+        var _lobRaw = localStorage.getItem('sar_lobdata_' + CACHE_VERSION);
+        if (_lobRaw) {
+          var _lobMap = JSON.parse(_lobRaw);
+          repsRawOriginal.forEach(function(r){
+            var ld = _lobMap[r.name+'||'+r.zone];
+            if (ld) r.lobData = ld;
+          });
+          _lobDataFetched = true;
+        }
+      } catch(e) {}
+    }
     // Drill rows are stored separately under 'drillrows' key (not bundled in sales)
   }
 
@@ -457,17 +461,8 @@ function checkForFreshData(cached, callback) {
 
 function getCachedSalesData() { return lsGet('sales'); }
 function setCachedSalesData(data) {
-  // Strip lobData before saving — too large for localStorage quota
-  // lobData is always re-fetched at boot via fetchLobDataIfNeeded
-  var lean = Object.assign({}, data, {
-    repsRaw: data.repsRaw.map(function(r){
-      if (!r.lobData) return r;
-      var copy = Object.assign({}, r);
-      delete copy.lobData;
-      return copy;
-    })
-  });
-  lsSet('sales', lean);
+  // Save WITH lobData (Air Export + Air Import only — ~150KB, fits in localStorage)
+  lsSet('sales', data);
 }
 
 function loadingScreen() {
@@ -662,11 +657,11 @@ function fetchLiveData(callback, force){
           if (months26.length === 0) months26 = liveMonths;
           syncDateRangeToData();
           dataReady = true;
-          // lobData is bundled in repsRawOriginal (Air keys) from server response
+          // lobData (Air keys) is bundled in server response — set flag immediately
           if (repsRawOriginal[0] && repsRawOriginal[0].lobData) {
             _lobDataFetched = true;
           }
-          // Save sales lean (no drill rows bundled — quota safe)
+          // Save with lobData included so next boot has correct numbers from first render
           setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
           if (data.allDrillRows && data.allDrillRows.length > 0 && !allDrillRows) {
             allDrillRows = data.allDrillRows;
@@ -6359,7 +6354,7 @@ window.addEventListener('load', function() {
             syncDateRangeToData();
             dataReady = true;
             // Save with drill rows bundled so next boot has everything
-            // Save sales data WITHOUT drill rows (keep under quota)
+            // Save with lobData (Air keys bundled from server) so next boot is instant+filtered
             setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
             // Save drill rows separately
             if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0) {
