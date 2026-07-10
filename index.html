@@ -3130,23 +3130,25 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var salesZoneSet = {};
   salesZones.forEach(function(z){ salesZoneSet[z] = true; });
 
-  // Build LOB-filtered monthData from allPendencyDrillRows if filter is active
+  // LOB filter using lobMonthData from server (pre-computed per LOB, no drill rows needed)
   var _flobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
-  var _pendencyLobIndex = null; // displayName -> month -> {pending, done}
-  if (_flobs && allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+  // _pendencyLobIndex: repName -> month -> {pending, done} filtered by active LOBs
+  var _pendencyLobIndex = null;
+  if (_flobs) {
     _pendencyLobIndex = {};
-    var _isOL = lockType === 'Operation Lock';
-    allPendencyDrillRows.forEach(function(r){
-      if (_flobs.indexOf(r.lob) === -1) return;
-      // Use _repName (displayName from mapping) — matches rep.name in d.reps
-      var key = r._repName || r.salesPerson || '';
-      if (!key) return;
-      if (!_pendencyLobIndex[key]) _pendencyLobIndex[key] = {};
-      var m = r._month;
-      if (!_pendencyLobIndex[key][m]) _pendencyLobIndex[key][m] = { pending:0, done:0 };
-      var isDone = _isOL ? r.olDone : r.flDone;
-      if (isDone) _pendencyLobIndex[key][m].done++;
-      else _pendencyLobIndex[key][m].pending++;
+    (d.reps || []).forEach(function(rep) {
+      if (!rep.lobMonthData) return;
+      var merged = {};
+      _flobs.forEach(function(lob) {
+        var lobData = rep.lobMonthData[lob];
+        if (!lobData) return;
+        Object.keys(lobData).forEach(function(m) {
+          if (!merged[m]) merged[m] = { pending: 0, done: 0 };
+          merged[m].pending += lobData[m].pending || 0;
+          merged[m].done    += lobData[m].done    || 0;
+        });
+      });
+      _pendencyLobIndex[rep.name] = merged;
     });
   }
 
@@ -3170,39 +3172,16 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     return { name: rep.name, zone: zone, originalZone: originalZone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
   }).filter(function(r){ return r.total > 0; });
 
-  // Grand totals — compute directly from allPendencyDrillRows when LOB filter active
-  // (same source as drill-through, so numbers always match)
-  var gtPending, gtDone, gtTotal, gtColData;
-  if (_flobs && allPendencyDrillRows && allPendencyDrillRows.length > 0) {
-    var _isOLgt = lockType === 'Operation Lock';
-    var _activeColSet = {};
-    activeCols.forEach(function(m){ _activeColSet[m] = true; });
-    var _gtIdx = {}; // month -> {pending, done}
-    allPendencyDrillRows.forEach(function(r){
-      if (_flobs.indexOf(r.lob) === -1) return;
-      if (!_activeColSet[r._month]) return;
-      if (!_gtIdx[r._month]) _gtIdx[r._month] = { pending:0, done:0 };
-      var isDone = _isOLgt ? r.olDone : r.flDone;
-      if (isDone) _gtIdx[r._month].done++;
-      else _gtIdx[r._month].pending++;
-    });
-    gtColData = activeCols.map(function(m){
-      return _gtIdx[m] || { pending:0, done:0 };
-    });
-    gtPending = gtColData.reduce(function(s,c){ return s+c.pending; }, 0);
-    gtDone    = gtColData.reduce(function(s,c){ return s+c.done;    }, 0);
-    gtTotal   = gtPending + gtDone;
-  } else {
-    gtPending = repsFiltered.reduce(function(s,r){ return s+r.totalPending; }, 0);
-    gtDone    = repsFiltered.reduce(function(s,r){ return s+r.totalDone;    }, 0);
-    gtTotal   = gtPending + gtDone;
-    gtColData = activeCols.map(function(_,ci){
-      return {
-        pending: repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
-        done:    repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
-      };
-    });
-  }
+  // Grand totals — sum from repsFiltered (already LOB-filtered via _pendencyLobIndex)
+  var gtPending = repsFiltered.reduce(function(s,r){ return s+r.totalPending; }, 0);
+  var gtDone    = repsFiltered.reduce(function(s,r){ return s+r.totalDone;    }, 0);
+  var gtTotal   = gtPending + gtDone;
+  var gtColData = activeCols.map(function(_,ci){
+    return {
+      pending: repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
+      done:    repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
+    };
+  });
 
   // Build zone aggregates purely from repsFiltered (filtered period only)
   var zoneTotals = {};
