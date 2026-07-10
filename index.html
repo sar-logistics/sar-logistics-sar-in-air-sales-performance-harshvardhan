@@ -3672,52 +3672,86 @@ function orgCard(person, opts){
 
 function teamsPage(){
   if (!orgDataReady) {
-    return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'
-      +'<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">'
-        +'<div class="login-spinner" style="width:24px;height:24px;border-width:3px;"></div>'
-        +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading org chart…</div>'
+    fetchOrgData(function(){ render(); });
+    return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;"><div style="display:flex;flex-direction:column;align-items:center;gap:14px;"><div class="login-spinner" style="width:24px;height:24px;border-width:3px;"></div><div style="font-size:12px;color:#64748B;font-weight:600;">Loading team…</div></div></div>';
+  }
+
+  var allUsers = (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]);
+  var AVATAR_COLORS = ['#15875A','#2563EB','#7C3AED','#D97706','#0891B2','#DC2626','#059669','#EA580C','#9333EA','#0284C7'];
+  function avColor(name){ var h=0; for(var i=0;i<(name||'').length;i++) h=(h*31+name.charCodeAt(i))&0xffff; return AVATAR_COLORS[h%AVATAR_COLORS.length]; }
+  var ROLE_COLORS = {'regional manager':'#D97706','zonal manager':'#7C3AED','sales rep':'#2563EB','admin':'#15875A','hr':'#DC2626'};
+
+  function memberCard(u, isZM){
+    var ini=(u.name||'?').split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+    var rc=ROLE_COLORS[(u.role||'').toLowerCase()]||'#6B7280';
+    var ac=avColor(u.name);
+    return '<div style="display:flex;align-items:center;gap:10px;padding:'+(isZM?'12px 14px':'8px 12px')+';background:'+(isZM?'#EEF3FF':'#FFFFFF')+';border-radius:10px;border:1px solid '+(isZM?'#C7D7F9':'#EEF2F8')+';">'
+      +'<div style="width:'+(isZM?'42px':'34px')+';height:'+(isZM?'42px':'34px')+';border-radius:50%;background:'+ac+';display:flex;align-items:center;justify-content:center;font-size:'+(isZM?'13px':'11px')+';font-weight:700;color:#fff;flex-shrink:0;">'+esc(ini)+'</div>'
+      +'<div style="min-width:0;flex:1;">'
+        +'<div style="font-size:'+(isZM?'13px':'12px')+';font-weight:'+(isZM?'700':'600')+';color:#0D2B5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(u.name||'—')+'</div>'
+        +'<div style="font-size:10px;color:#9AAFC8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(u.email||'—')+'</div>'
+        +'<span style="font-size:9px;font-weight:700;color:'+rc+';background:'+rc+'18;border-radius:4px;padding:1px 6px;display:inline-block;margin-top:2px;text-transform:capitalize;">'+esc(u.role||'')+'</span>'
       +'</div>'
     +'</div>';
   }
 
-  var d = orgData;
+  // Group by zone
+  var zoneMap = {}, noZone = [];
+  allUsers.forEach(function(u){
+    var role=(u.role||'').toLowerCase();
+    if(role==='admin'||role==='hr') return;
+    var z=u.zone||'';
+    if(!z){ noZone.push(u); return; }
+    if(!zoneMap[z]) zoneMap[z]=[];
+    zoneMap[z].push(u);
+  });
 
-  var hierarchyCards = d.hierarchy.map(function(p){
-    return '<div style="display:flex;flex-direction:column;align-items:center;">'
-      + orgCard(p, { reportCount: p.reportCount })
-    +'</div>';
-  }).join('<div style="width:1px;background:#E2E8F0;height:24px;margin:0 auto;"></div>');
+  var zones = sortZones(Object.keys(zoneMap));
+  var regionalManagers = allUsers.filter(function(u){ return (u.role||'').toLowerCase()==='regional manager'; });
+  var admins = allUsers.filter(function(u){ var r=(u.role||'').toLowerCase(); return r==='admin'||r==='hr'; });
 
-  var directCards = d.directReports.map(function(p){
-    return orgCard(p, { compact:true, minWidth:'180px' });
-  }).join('');
-
-  var supportCards = d.support.map(function(p){
-    return orgCard(p, { compact:true, minWidth:'0' });
-  }).join('');
-
-  return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
-    +'<div>'
-      +'<span style="font-size:13.5px;font-weight:700;color:#15233B;">Org Chart</span>'
-      +'<span style="font-size:11px;color:#94A3B8;font-weight:500;margin-left:8px;">'+d.totalUsers+' users · '+d.hierarchy.length+' in hierarchy · '+d.support.length+' support</span>'
-    +'</div>'
-  +'</div>'
-  +'<div style="display:flex;gap:16px;align-items:flex-start;">'
-    +'<div style="flex:1;min-width:0;">'
-      +'<div style="display:flex;flex-direction:column;align-items:center;gap:0;margin-bottom:18px;">'
-        + hierarchyCards
-      +'</div>'
-      +(directCards
-        ? '<div style="border-top:1px solid #E2E8F0;padding-top:16px;display:flex;gap:12px;flex-wrap:wrap;">'+directCards+'</div>'
-        : '')
-    +'</div>'
-    +'<div style="width:230px;flex-shrink:0;">'
-      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.06em;color:#94A3B8;text-transform:uppercase;margin-bottom:10px;">Support Roles</div>'
-      +'<div style="display:flex;flex-direction:column;gap:8px;">'+supportCards+'</div>'
-    +'</div>'
+  var html = '<div style="margin-bottom:20px;">'
+    +'<div style="font-size:22px;font-weight:800;color:#0D2B5E;">Teams</div>'
+    +'<div style="font-size:12px;color:#9AAFC8;margin-top:2px;">'+allUsers.length+' members across '+zones.length+' zones</div>'
   +'</div>';
-}
 
+  if(regionalManagers.length>0){
+    html+='<div style="margin-bottom:24px;">'
+      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#D97706;text-transform:uppercase;margin-bottom:10px;">Regional Management</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">'
+      +regionalManagers.map(function(u){return memberCard(u,false);}).join('')
+      +'</div></div>';
+  }
+
+  zones.forEach(function(zone){
+    var members=zoneMap[zone]||[];
+    var zm=members.filter(function(u){return (u.role||'').toLowerCase()==='zonal manager';});
+    var reps=members.filter(function(u){return (u.role||'').toLowerCase()!=='zonal manager';});
+    html+='<div style="margin-bottom:20px;background:#FAFBFD;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'
+      +'<div style="padding:10px 16px;background:#F0F4FA;border-bottom:1px solid #E8EDF6;display:flex;align-items:center;gap:8px;">'
+        +'<span style="font-size:11px;font-weight:700;color:#1E3A66;">'+esc(zone)+'</span>'
+        +'<span style="font-size:10px;color:#9AAFC8;">'+members.length+' member'+(members.length!==1?'s':'')+'</span>'
+      +'</div>'
+      +'<div style="padding:12px 16px;display:flex;flex-direction:column;gap:8px;">';
+    zm.forEach(function(u){html+=memberCard(u,true);});
+    if(reps.length>0){
+      html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;'+(zm.length?'margin-top:4px;':'')+'"">';
+      reps.forEach(function(u){html+=memberCard(u,false);});
+      html+='</div>';
+    }
+    html+='</div></div>';
+  });
+
+  if(admins.length>0){
+    html+='<div style="margin-bottom:24px;">'
+      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#15875A;text-transform:uppercase;margin-bottom:10px;">Admin & HR</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">'
+      +admins.map(function(u){return memberCard(u,false);}).join('')
+      +'</div></div>';
+  }
+
+  return html;
+}
 function orgEditModal(){
   if (!orgEditTarget || !orgDataReady) return '';
   var allPeople = (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]);
