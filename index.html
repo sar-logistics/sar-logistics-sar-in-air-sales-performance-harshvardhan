@@ -5790,19 +5790,14 @@ document.addEventListener('click', function(ev){
       // Add new user to orgData immediately
       if (!orgData) { orgData = { hierarchy:[], directReports:[], support:[] }; orgDataReady = true; }
       if (!orgData.support) orgData.support = [];
-      // Fetch fresh org from server immediately — user was just written to DB
-      fetch('/api/mongo-batch?action=org&force=1')
-        .then(function(r){ return r.json(); })
-        .then(function(fresh){
-          if(fresh.success){
-            orgData = fresh;
-            orgDataReady = true;
-            lsSet('org', fresh);
-          }
-          state.page = 'admin';
-          render();
-        })
-        .catch(function(){ render(); });
+      // org data returned directly from addUser response — zero extra round trip
+      if (data.org && data.org.success) {
+        orgData = data.org;
+        orgDataReady = true;
+        lsSet('org', data.org);
+      }
+      state.page = 'admin';
+      render();
     })
     .catch(function(e){ state.addUserError = e.message; render(); });
   }
