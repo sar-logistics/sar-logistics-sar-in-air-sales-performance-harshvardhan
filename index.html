@@ -304,6 +304,15 @@ function _showDashboardBody() {
     zonesRaw = cached.zones || [];
     syncDateRangeToData();
     dataReady = true;
+    // Restore lobData from localStorage so LOB filter works immediately on boot
+    try {
+      var _lobRaw = localStorage.getItem('sar_lobdata_' + CACHE_VERSION);
+      if (_lobRaw) {
+        var _lobMap = JSON.parse(_lobRaw);
+        repsRawOriginal.forEach(function(r){ var ld = _lobMap[r.name+'||'+r.zone]; if (ld) r.lobData = ld; });
+        _lobDataFetched = true;
+      }
+    } catch(e) {}
     // Drill rows are stored separately under 'drillrows' key (not bundled in sales)
   }
 
@@ -743,6 +752,12 @@ function fetchLobDataIfNeeded(callback){
           if (ld) r.lobData = ld;
         });
         _lobDataFetched = true;
+        // Persist lobData to localStorage so next boot applies LOB filter instantly
+        try {
+          var lobStore = {};
+          repsRawOriginal.forEach(function(r){ if (r.lobData) lobStore[r.name+'||'+r.zone] = r.lobData; });
+          localStorage.setItem('sar_lobdata_' + CACHE_VERSION, JSON.stringify(lobStore));
+        } catch(e) {}
       }
       if (callback) callback();
     })
@@ -6279,7 +6294,12 @@ window.addEventListener('load', function() {
               allDrillRows = d.sales.allDrillRows;
               lsSet('drillrows', { rows: allDrillRows });
             }
-            render();
+            // Fetch lobData if LOB filter active and not yet loaded
+            if (state.filterLobs && state.filterLobs.length > 0 && !_lobDataFetched) {
+              fetchLobDataIfNeeded(function(){ render(); });
+            } else {
+              render();
+            }
           } else if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0 && !allDrillRows) {
             allDrillRows = d.sales.allDrillRows;
             lsSet('drillrows', { rows: allDrillRows });
