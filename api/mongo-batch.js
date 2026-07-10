@@ -1987,22 +1987,23 @@ module.exports = async function handler(req, res) {
   if (action === "ping") {
     const db = await getDB();
     const now2 = Date.now();
-    const needsSales   = !salesCache   || (now2 - salesCacheTime)   > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
-    const needsFinance = !financeCache || (now2 - financeCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
-    const needsOp      = !opCache      || (now2 - opCacheTime)      > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
 
-    // Build all caches in parallel — finance+op bundled in ping response so
-    // client never needs a separate fetch for those pages on first load.
-    const [, financeResult, opResult] = await Promise.all([
-      needsSales   ? getSalesAggregate(db, false).catch(() => {})    : Promise.resolve(),
-      needsFinance ? getFinancePendency(db, false).catch(() => null) : Promise.resolve(financeCache),
-      needsOp      ? getOpPendency(db, false).catch(() => null)      : Promise.resolve(opCache),
-    ]);
-
-    // Warm drillRowsCache in background (large — dont block ping response)
+    // Warm sales in background — it has its own fetch path on the client
+    if (!salesCache || (now2 - salesCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
+      getSalesAggregate(db, false).catch(() => {});
+    }
     if (!drillRowsCache || (now2 - drillRowsCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000)) {
       getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => {});
     }
+
+    // Await finance+op in parallel and bundle in response — client stores to
+    // localStorage so Finance/Op Pendency pages are instant on first navigation
+    const needsFinance = !financeCache || (now2 - financeCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
+    const needsOp      = !opCache      || (now2 - opCacheTime)      > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
+    const [financeResult, opResult] = await Promise.all([
+      needsFinance ? getFinancePendency(db, false).catch(() => null) : Promise.resolve(financeCache),
+      needsOp      ? getOpPendency(db, false).catch(() => null)      : Promise.resolve(opCache),
+    ]);
 
     return res.status(200).json({
       ok: true, ts: now2, cached: !!salesCache,
@@ -2166,13 +2167,15 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "finance") {
-      const result = await getFinancePendency(db, forceRefresh);
-      return res.status(200).json(result);
+      // Always trigger both pendency caches in one pass
+      await _ensurePendencyCache(db, forceRefresh);
+      return res.status(200).json(financeCache);
     }
 
     if (action === "op") {
-      const result = await getOpPendency(db, forceRefresh);
-      return res.status(200).json(result);
+      // Always trigger both pendency caches in one pass — includes allDrillJobRows
+      await _ensurePendencyCache(db, forceRefresh);
+      return res.status(200).json(opCache);
     }
 
     if (action === "pendencyDrill") {
