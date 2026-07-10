@@ -2011,11 +2011,18 @@ module.exports = async function handler(req, res) {
       await getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => null);
     }
 
-    // Strip weekData/lobData from sales (same as ?action=sales)
+    // Strip weekData from sales, keep Air lobData for default LOB filter
     let salesStripped = null;
     if (salesResult && salesResult.repsRaw) {
       salesStripped = { ...salesResult, repsRaw: salesResult.repsRaw.map(r => {
-        const c = { ...r }; delete c.weekData; delete c.lobData; return c;
+        const c = { ...r }; delete c.weekData;
+        if (c.lobData) {
+          const airOnly = {};
+          if (c.lobData['AIR EXPORT']) airOnly['AIR EXPORT'] = c.lobData['AIR EXPORT'];
+          if (c.lobData['AIR IMPORT']) airOnly['AIR IMPORT'] = c.lobData['AIR IMPORT'];
+          c.lobData = airOnly;
+        }
+        return c;
       })};
       // Bundle allDrillRows from drillRowsCache so client never needs a separate drill fetch
       if (drillRowsCache && drillRowsCache.allRows && drillRowsCache.allRows.length > 0) {
@@ -2125,7 +2132,18 @@ module.exports = async function handler(req, res) {
       const strip = (result) => ({ ...result, repsRaw: result.repsRaw.map(r => {
         const copy = { ...r };
         if (!includeWeek) delete copy.weekData;
-        if (!includeLob)  delete copy.lobData;
+        if (includeLob) {
+          // Full lobData requested — keep as-is
+        } else {
+          // Always include Air Export + Air Import lobData (needed for default filter)
+          // Strip all other LOBs to keep response small
+          if (copy.lobData) {
+            const airOnly = {};
+            if (copy.lobData['AIR EXPORT']) airOnly['AIR EXPORT'] = copy.lobData['AIR EXPORT'];
+            if (copy.lobData['AIR IMPORT']) airOnly['AIR IMPORT'] = copy.lobData['AIR IMPORT'];
+            copy.lobData = airOnly;
+          }
+        }
         return copy;
       })});
 
