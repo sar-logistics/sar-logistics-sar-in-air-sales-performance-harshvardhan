@@ -642,10 +642,15 @@ async function computeSalesAggregate(db) {
     var key = isoYear + '-W' + String(weekNum).padStart(2, '0');
     return { key: key, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
   }
-  // Fetch all collections IN PARALLEL with a small projection — this is the
-  // biggest single performance lever for initial load time.
+  // Fetch all collections IN PARALLEL — filter to FY date range at DB level
+  // so only relevant rows come over the wire (prevents Vercel timeout on large datasets)
+  const SALES_FY_FILTER = { $or: [
+    { "ETD Loading Port": { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
+    { "ETA Discharge":    { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
+    { "Job Date":         { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
+  ]};
   const allJobResults = await Promise.all(JOB_COLLECTIONS.map(cn =>
-    db.collection(cn).find({}, { projection: {
+    db.collection(cn).find(SALES_FY_FILTER, { projection: {
       "Sales Person":1, "Job Date":1, "LOB":1, "Location":1, "Customer":1,
       "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
       "Financial Lock":1, "Operation Lock":1,
