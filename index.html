@@ -557,24 +557,6 @@ function computeFilteredRepsRaw(){
     base = base.filter(function(r){ return filterReps.indexOf(r.name) > -1; });
   }
 
-  // LOB filter — recompute monthly arrays from lobData when active
-  var filterLobs = state.filterLobs || [];
-  if (filterLobs.length > 0 && _lobDataFetched) {
-    base = base.map(function(r) {
-      if (!r.lobData) return r;
-      // Sum monthly values across selected LOBs only
-      var filtered = Object.assign({}, r);
-      filtered.gp       = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0); }, 0); });
-      filtered.gpProv   = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gpProv)||0); }, 0); });
-      filtered.gpActual = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gpActual)||0); }, 0); });
-      filtered.ship     = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].ship)||0); }, 0); });
-      filtered.tons     = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].tons)||0); }, 0); });
-      filtered.teu      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].teu)||0); }, 0); });
-      filtered.lcl      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s + ((r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].lcl)||0); }, 0); });
-      return filtered;
-    });
-  }
-
   repsRaw = base;
 }
 var zonesRaw = [];
@@ -3095,8 +3077,32 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var salesZoneSet = {};
   salesZones.forEach(function(z){ salesZoneSet[z] = true; });
 
+  // Build LOB-filtered monthData from allPendencyDrillRows if filter is active
+  var _flobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
+  var _pendencyLobIndex = null; // repName -> month -> {pending, done}
+  if (_flobs && allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+    _pendencyLobIndex = {};
+    var _isOL = lockType === 'Operation Lock';
+    allPendencyDrillRows.forEach(function(r){
+      if (_flobs.indexOf(r.lob) === -1) return; // skip non-matching LOBs
+      var sp = r.salesPerson || r._repName || '';
+      if (!sp) return;
+      if (!_pendencyLobIndex[sp]) _pendencyLobIndex[sp] = {};
+      var m = r._month;
+      if (!_pendencyLobIndex[sp][m]) _pendencyLobIndex[sp][m] = { pending:0, done:0 };
+      var isDone = _isOL ? r.olDone : r.flDone;
+      if (isDone) _pendencyLobIndex[sp][m].done++;
+      else _pendencyLobIndex[sp][m].pending++;
+    });
+  }
+
   var repsFiltered = (d.reps||[]).map(function(rep){
     var colData = activeCols.map(function(col){
+      // Use LOB-filtered index when available
+      if (_pendencyLobIndex) {
+        var md = (_pendencyLobIndex[rep.name] && _pendencyLobIndex[rep.name][col]) || { pending:0, done:0 };
+        return md;
+      }
       if (isWeekly) {
         var m = state.weeklyMonth || months26[months26.length-1];
         return rep.monthData[m] || { pending:0, done:0 };
