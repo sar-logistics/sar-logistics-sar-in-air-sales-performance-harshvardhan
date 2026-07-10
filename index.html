@@ -5178,7 +5178,7 @@ function openPendencyDrill(rep, col, status, lock, type){
     .catch(function(){ state.pendencyDrill.loading=false; state.pendencyDrill.error='Could not reach the server.'; render(); });
 }
 
-// Pure client-side pendency drill filter — handles rep, zone, grand, branch, jobOwner
+// Pure client-side pendency drill filter — handles rep, zone, grand, branch, crosssales, jobowner
 function computePendencyDrillResult(rep, col, status, lock, type) {
   var isOL = lock === 'Operation Lock';
   var isFY = !col || col === 'FY Total';
@@ -5196,10 +5196,18 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
     if (fi >= 0 && ti >= 0) allowedMonths = new Set(FY_ALL.slice(fi, ti+1));
   }
 
-  // Build set of known rep norms from repsRawOriginal for Cross Sales detection
-  var knownRepNorms = new Set();
-  if (repsRawOriginal && repsRawOriginal.length) {
-    repsRawOriginal.forEach(function(r){ if (!r.isBranch) knownRepNorms.add(r.name); });
+  // salesZoneSet: zones that appear in Sales Performance (repsRaw)
+  // Cross Sales reps have _zone = their original mapping zone (NOT "Cross Sales")
+  // A rep is "Cross Sales" if their _zone is NOT in salesZoneSet
+  var salesZoneSet = {};
+  if (zonesRaw && zonesRaw.length) {
+    zonesRaw.forEach(function(z){ if (z.zone) salesZoneSet[z.zone] = true; });
+  } else if (repsRawOriginal && repsRawOriginal.length) {
+    repsRawOriginal.forEach(function(r){ if (r.zone) salesZoneSet[r.zone] = true; });
+  }
+  function isCrossSalesRep(drillRow) {
+    // A row belongs to Cross Sales if its zone is not a known Sales Performance zone
+    return !salesZoneSet[drillRow._zone];
   }
 
   var repNorm = normalizeName(rep);
@@ -5213,30 +5221,35 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
 
     // Entity filter
     if (type === 'grand') {
-      // Grand Total — all rows pass entity filter
+      // Grand Total — all rows pass
+    } else if (type === 'crosssales') {
+      // All Cross Sales rows (rep zone not in salesZoneSet)
+      if (!isCrossSalesRep(r)) continue;
+    } else if (type === 'branch') {
+      // Branch = specific originalZone under Cross Sales
+      // rep = branch name (= originalZone value stored as _zone in drill row)
+      if (r._zone !== rep) continue;
+      if (!isCrossSalesRep(r)) continue;
     } else if (type === 'zone') {
+      // Regular Sales Performance zone
       if (r._zone !== rep) continue;
     } else if (type === 'rep') {
+      // Individual rep — match by normalized name
       if (r._norm !== repNorm) continue;
     } else if (type === 'jobowner') {
-      // Job owner row — match by jobOwner field, within the parent rep/zone
-      // rep param is "ownerName||parentRep" encoded
-      var parts2 = rep.split('||');
-      var ownerName = parts2[0]; var parentRep = parts2[1] || '';
-      if ((r.jobOwner || '').toLowerCase() !== ownerName.toLowerCase()) continue;
+      // "ownerName||parentRepName" encoded
+      var joParts = rep.split('||');
+      var ownerName = (joParts[0] || '').trim();
+      var parentRep = (joParts[1] || '').trim();
+      var joMatch = (r.jobOwner || '').toLowerCase() === ownerName.toLowerCase()
+                 || normalizeName(r.jobOwner) === normalizeName(ownerName);
+      if (!joMatch) continue;
       if (parentRep) {
         var parentNorm = normalizeName(parentRep);
-        if (r._norm !== parentNorm && r._zone !== parentRep) continue;
+        if (r._norm !== parentNorm) continue;
       }
-    } else if (type === 'crosssales') {
-      // Cross Sales zone — reps NOT in known mapped reps
-      if (knownRepNorms.has(r._norm)) continue;
-    } else if (type === 'branch') {
-      // Branch under Cross Sales — match by location field
-      if (r.location !== rep && r._zone !== rep) continue;
-      if (knownRepNorms.has(r._norm)) continue;
     } else {
-      // Fallback: treat as rep name match
+      // Fallback: rep name match
       if (r._norm !== repNorm) continue;
     }
 
