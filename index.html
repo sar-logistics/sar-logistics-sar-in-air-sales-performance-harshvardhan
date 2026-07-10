@@ -4425,8 +4425,12 @@ function drawer(){
 
     // ── Apply LOB tab + per-column filters to determine the visible row set ──
     var columnFilters = state.drill.columnFilters || {};
+    var _activeDrillLobs = (state.filterLobs && state.filterLobs.length > 0) ? state.filterLobs : null;
     var visibleRows = d.rows.filter(function(s){
+      // LOB tab filter
       if (activeLobTab !== 'ALL' && s.lob !== activeLobTab) return false;
+      // Global LOB filter — when ALL tab selected, still restrict to active filterLobs
+      if (activeLobTab === 'ALL' && _activeDrillLobs && _activeDrillLobs.indexOf(s.lob) === -1) return false;
       for (var colKey in columnFilters) {
         var allowed = columnFilters[colKey];
         if (!allowed || allowed.length === 0) continue; // no restriction
@@ -4553,7 +4557,7 @@ function drawer(){
       + lobTabs.map(function(tab){
           var active = tab === activeLobTab;
           var inFilter = !active && activeLobTab === 'ALL' && tab !== 'ALL' && (state.filterLobs||[]).indexOf(tab) > -1;
-          var count = tab === 'ALL' ? d.rows.length : (lobCounts[tab]||0);
+          var count = tab === 'ALL' ? (_activeDrillLobs ? d.rows.filter(function(r){ return _activeDrillLobs.indexOf(r.lob)>-1; }).length : d.rows.length) : (lobCounts[tab]||0);
           var _bg = active ? BRAND_A1 : inFilter ? '#DBEAFE' : '#F4F7FA';
           var _cl = active ? '#FFFFFF' : inFilter ? '#1D5FCC' : '#374151';
           var _bo = inFilter ? 'border:1.5px solid #93B4F5;' : 'border:none;';
