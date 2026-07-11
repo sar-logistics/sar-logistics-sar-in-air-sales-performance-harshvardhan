@@ -6387,24 +6387,25 @@ function positionAllDrops(){
   });
 }
 window.addEventListener('resize', positionAllDrops);
-window.addEventListener('scroll', function(e){
-  // If a dropdown is open and scroll happens outside it, close all dropdowns
-  var anyOpen = state.viewDropOpen||state.fromDropOpen||state.toDropOpen||state.weeklyDropOpen||state.quarterDropOpen||state.qyrDropOpen||state.yearTypeDropOpen;
-  if(!anyOpen) return;
-  var target = e.target;
-  // Allow scrolling inside a dropdown panel itself
-  var isInsideDrop = target && (
-    target.id==='from-drop'||target.id==='to-drop'||target.id==='weekly-drop'||
-    target.id==='view-drop'||target.id==='qyr-drop'||target.id==='quarter-drop'||target.id==='yeartype-drop'||
-    (target.closest && (target.closest('#from-drop')||target.closest('#to-drop')||target.closest('#weekly-drop')||
-    target.closest('#view-drop')||target.closest('#qyr-drop')||target.closest('#quarter-drop')||target.closest('#yeartype-drop')))
-  );
-  if(!isInsideDrop){
-    state.viewDropOpen=false; state.fromDropOpen=false; state.toDropOpen=false;
-    state.weeklyDropOpen=false; state.quarterDropOpen=false; state.qyrDropOpen=false; state.yearTypeDropOpen=false;
-    render();
+// Close dropdowns when the main content area scrolls (not inner table divs)
+// Use capture=false so inner div scrolls don't trigger this
+document.getElementById && (function(){
+  var _mainSlot = null;
+  function attachMainScroll(){
+    _mainSlot = document.getElementById('main-slot');
+    if(!_mainSlot) return;
+    _mainSlot.addEventListener('scroll', function(){
+      var anyOpen = state.viewDropOpen||state.fromDropOpen||state.toDropOpen||state.weeklyDropOpen||state.quarterDropOpen||state.qyrDropOpen||state.yearTypeDropOpen;
+      if(!anyOpen) return;
+      state.viewDropOpen=false; state.fromDropOpen=false; state.toDropOpen=false;
+      state.weeklyDropOpen=false; state.quarterDropOpen=false; state.qyrDropOpen=false; state.yearTypeDropOpen=false;
+      render();
+    }, false);
   }
-}, true);
+  // Attach after DOM ready
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', attachMainScroll);
+  else setTimeout(attachMainScroll, 500);
+})();
 document.addEventListener('click', function(e){
   if (state.customCalOpen) {
     var insideCal = e.target.closest('#custom-cal-drop');
