@@ -5147,6 +5147,10 @@ function render(){
   var scrollTop=mainEl?mainEl.scrollTop:0;
   var innerScrollEl=mainEl&&mainEl.querySelector('div[style*="overflow-y:auto"]');
   var innerScrollTop=innerScrollEl?innerScrollEl.scrollTop:0;
+  // Don't restore inner scroll if view/page changed — reset to top
+  var _prevRenderKey = mainEl && mainEl.getAttribute('data-render-key');
+  var _curRenderKey = state.page+'|'+state.reportView;
+  var _sameView = _prevRenderKey === _curRenderKey;
   document.getElementById('topbar-slot').innerHTML=topbar();
   var _tHtml = performance.now();
   mainEl.innerHTML = state.page==='customers' ? customerPage()
@@ -5163,7 +5167,11 @@ function render(){
   requestAnimationFrame(function(){ console.log('[PERF] First RAF at', performance.now().toFixed(1)+'ms (page visible)'); });
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
   if(scrollTop) mainEl.scrollTop=scrollTop;
-  if(innerScrollTop){ var newInner=mainEl.querySelector('div[style*="overflow-y:auto"]'); if(newInner) newInner.scrollTop=innerScrollTop; }
+  var _newInner=mainEl.querySelector('div[style*="overflow-y:auto"]');
+  if(_newInner) _newInner.setAttribute('data-render-key',_curRenderKey);
+  // Hack: store key on main-slot too for next render comparison
+  mainEl.setAttribute('data-render-key',_curRenderKey);
+  if(_sameView && innerScrollTop && _newInner) _newInner.scrollTop=innerScrollTop;
   requestAnimationFrame(positionAllDrops);
 }
 function renderKeepTopbar(){
