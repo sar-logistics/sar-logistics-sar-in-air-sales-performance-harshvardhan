@@ -3586,7 +3586,8 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     +'</div>'
   +'</div>';
 
-  return kpis + table;
+  var _showKpi = state.reportView === 'Monthly' || state.reportView === 'Custom';
+  return (_showKpi ? kpis : '') + table;
 }
 
 function financePage(){
@@ -5156,7 +5157,7 @@ function render(){
     : state.page==='admin' ? adminPage()
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
-    : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
+    : ((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
   console.log('[PERF] mainEl.innerHTML took', (performance.now()-_tHtml).toFixed(1)+'ms');
   console.log('[PERF] render() total', (performance.now()-_tRender).toFixed(1)+'ms');
   requestAnimationFrame(function(){ console.log('[PERF] First RAF at', performance.now().toFixed(1)+'ms (page visible)'); });
@@ -5178,7 +5179,7 @@ function renderKeepTopbar(){
     : state.page==='teams' ? teamsPage()
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
-    : (state.reportView==='Weekly' ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
+    : ((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
   var drawerEl=document.getElementById('drawer-slot');
   if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
