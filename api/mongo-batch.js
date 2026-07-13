@@ -345,6 +345,37 @@ async function getDrillRows(db, entity, metric, month) {
       normByDisplayByFY[fy][displayName] = norm;
     }
 
+    // ── Build SRR tradelane lookup: shipmentNo → tradelane label ────────────
+    // Same SRR collections used by getTradelaneAggregate — keyed by Shipment No
+    const SRR_DRILL_CONFIG = [
+      { coll: "srr_sea_export",  countryField: "Discharge Country", fromPort: false },
+      { coll: "srr_sea_import",  countryField: "Loading Port",       fromPort: true  },
+      { coll: "srr_air_export",  countryField: "Discharge Port",     fromPort: true  },
+      { coll: "srr_air_import",  countryField: "Loading Port",       fromPort: true  },
+    ];
+    const srrDrillMap = {}; // shipmentNo → tradelane string
+    await Promise.all(SRR_DRILL_CONFIG.map(async (cfg) => {
+      try {
+        const rows = await db.collection(cfg.coll).find({}, {
+          projection: { "Shipment No": 1, [cfg.countryField]: 1 }
+        }).toArray();
+        for (const r of rows) {
+          const sno = String(r["Shipment No"] || "").trim();
+          if (!sno || srrDrillMap[sno]) continue; // first match wins
+          const raw = String(r[cfg.countryField] || "").trim();
+          let tradelane = "";
+          if (cfg.fromPort) {
+            tradelane = portToInfo(raw).tradelane;
+          } else {
+            const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
+            tradelane = entry ? entry.tradelane : raw;
+          }
+          if (tradelane) srrDrillMap[sno] = tradelane;
+        }
+      } catch (e) { /* collection may not exist */ }
+    }));
+    console.log(`[drill] SRR map built: ${Object.keys(srrDrillMap).length} entries`);
+
     // Always load ALL FY rows — no date pre-filter.
     // drillRowsCache is reused across all drill requests, so it must be complete.
     // Date/entity filtering happens in-memory below.
@@ -420,6 +451,7 @@ async function getDrillRows(db, entity, metric, month) {
           vol: chargeable,
           prov: isProvisional ? 1 : 0,
           customer: String(job["Customer"] || "").trim(),
+          _tl: srrDrillMap[String(job["Shipment No"] || "").trim()] || "",
         });
       }
     }

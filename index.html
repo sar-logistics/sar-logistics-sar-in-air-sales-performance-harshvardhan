@@ -5425,12 +5425,8 @@ function openInsightDrill(drillType, name) {
       match = (row.destAgent || '').toLowerCase() === nameLower ||
               (row.originAgent || '').toLowerCase() === nameLower;
     } else if (drillType === 'tradelane') {
-      // tradelane name is "Origin → Destination" or just country
-      var tl = ((row.etdLoading||row.location||'') + ' → ' + (row.etaDischarge||'')).trim();
-      match = tl.toLowerCase() === nameLower ||
-              (row.location || '').toLowerCase() === nameLower ||
-              (row.etdLoading || '').toLowerCase() === nameLower ||
-              (row.etaDischarge || '').toLowerCase() === nameLower;
+      // _tl is the tradelane label stamped from SRR lookup (e.g. "India", "China - CN")
+      match = (row._tl || '').toLowerCase() === nameLower;
     }
     if (!match) continue;
     matched.push(row);
