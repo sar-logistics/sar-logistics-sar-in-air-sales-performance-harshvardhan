@@ -5097,9 +5097,6 @@ function computeDrillResult(entity, metric, month){
   var isAir  = metric === 'Tons (Air)';
   var isTeu  = metric === 'TEUs (Ocean)' || metric === 'LCL (Ocean in CBM)';
 
-  // DEBUG
-  var dbg = { total: allDrillRows.length, lobFail:0, dateFail:0, entityFail:0, passed:0 };
-  console.log('[drill] START entity='+entity+' metric='+metric+' month='+month+' allDrillRows='+allDrillRows.length);
 
   var rangeBits = isRange ? month.split(':') : null;
   var yearSuf   = isYear  ? month.split(':')[1] : null;
@@ -5147,32 +5144,32 @@ function computeDrillResult(entity, metric, month){
     }
 
     // Collection/metric filter
-    if (isAir && !row._cl.includes('air')) { dbg.lobFail++; continue; }
-    if (isTeu && !row._cl.includes('sea') && !row._cl.includes('isotank')) { dbg.lobFail++; continue; }
+    if (isAir && !row._cl.includes('air')) { continue; }
+    if (isTeu && !row._cl.includes('sea') && !row._cl.includes('isotank')) { continue; }
 
     // Date filter
     var ml = row._ml;
-    if (!isFY && !isYear && !isRange && !isWeek && !isDR && ml !== month) { dbg.dateFail++; continue; }
-    if (isYear && yearSuf && !ml.endsWith('-'+yearSuf)) { dbg.dateFail++; continue; }
-    if (isRange){ var mi=FY_MONTHS_ALL.indexOf(ml); if(mi<rangeStart||mi>rangeEnd){ dbg.dateFail++; continue; } }
-    if (isWeek){ var rd=new Date(row._d); if(rd<weekMon||rd>weekSun){ dbg.dateFail++; continue; } }
-    if (isDR){ var rd2=new Date(row._d); if(rd2<drStart||rd2>drEnd){ dbg.dateFail++; continue; } }
+    if (!isFY && !isYear && !isRange && !isWeek && !isDR && ml !== month) { continue; }
+    if (isYear && yearSuf && !ml.endsWith('-'+yearSuf)) { continue; }
+    if (isRange){ var mi=FY_MONTHS_ALL.indexOf(ml); if(mi<rangeStart||mi>rangeEnd){ continue; } }
+    if (isWeek){ var rd=new Date(row._d); if(rd<weekMon||rd>weekSun){ continue; } }
+    if (isDR){ var rd2=new Date(row._d); if(rd2<drStart||rd2>drEnd){ continue; } }
 
     // Entity filter
     if (isGT) {
       if (row._dn !== undefined) {
-        if (!row._dn) { dbg.entityFail++; continue; }
+        if (!row._dn) { continue; }
         var _inRepsRaw = false;
         for (var ri = 0; ri < repsRaw.length; ri++) {
           if (!repsRaw[ri].isBranch && repsRaw[ri].name === row._dn) { _inRepsRaw = true; break; }
         }
-        if (!_inRepsRaw) { dbg.entityFail++; continue; }
+        if (!_inRepsRaw) { continue; }
       }
     } else {
       var spNorm = row._sp;
       if (entity === 'Cross Sales'){
         var isMapped = repsRawOriginal.some(function(r){ return !r.isBranch && r.name === row.salesPerson; });
-        if (isMapped) { dbg.entityFail++; continue; }
+        if (isMapped) { continue; }
       } else {
         var normEntity = entity.toLowerCase().split('|')[0].trim();
         var normSP     = (row._sp || '').toLowerCase();
@@ -5187,11 +5184,9 @@ function computeDrillResult(entity, metric, month){
           });
         }
         var isBranchMatch = row._loc === entity;
-        if (!repInZone && !isRepMatch && !isBranchMatch) { dbg.entityFail++; continue; }
+        if (!repInZone && !isRepMatch && !isBranchMatch) { continue; }
       }
     }
-
-    dbg.passed++;
     var metricVal = metric==='Shipments' ? 1 : isAir ? (row.vol||0) : (row.t||0);
     matched.push({ row:row, m:metricVal });
   }
@@ -5219,9 +5214,6 @@ function computeDrillResult(entity, metric, month){
     else              allActualGP += r.g||0;
   });
 
-  console.log("[drill] RESULT lobFail="+dbg.lobFail+" dateFail="+dbg.dateFail+" entityFail="+dbg.entityFail+" passed="+dbg.passed);
-  if (matched.length>0){var s=matched[0].row;console.log("[drill] sample _d="+s._d+" _dn="+JSON.stringify(s._dn)+" _sp="+s._sp+" _ml="+s._ml);}
-  if (isWeek) console.log("[drill] weekMon="+weekMon+" weekSun="+weekSun);
   return {
     success:true, entity:entity, metric:metric, month:month,
     count: matched.length,
@@ -5342,7 +5334,8 @@ function openDrill(entity, metric, col, valueFmt){
     lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
   render();
 
-  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col);
+  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col)
+         +(state.filterLobs&&state.filterLobs.length>0?'&lobs='+encodeURIComponent(state.filterLobs.join(',')):'');
   fetch('/api/mongo-batch'+qs, { priority:'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){

@@ -316,7 +316,18 @@ const DRILL_CACHE_VERSION = 2; // bump to force rebuild when row schema changes
 let drillRowsCache = null; // { rows: [...], mappingData: {...}, cachedAt, version }
 let drillRowsCacheTime = 0;
 
-async function getDrillRows(db, entity, metric, month) {
+async function getDrillRows(db, entity, metric, month, lobsParam) {
+  // Parse active LOB filter sent from client
+  const activeLobs = lobsParam ? lobsParam.split(',').map(s=>s.trim()).filter(Boolean) : [];
+  // LOB key → collection name substring matcher
+  const LOB_CL_MAP = {
+    'AIR EXPORT':     cl => cl.includes('air') && cl.includes('export'),
+    'AIR IMPORT':     cl => cl.includes('air') && cl.includes('import'),
+    'SEA EXPORT':     cl => cl.includes('sea') && cl.includes('export'),
+    'SEA IMPORT':     cl => cl.includes('sea') && cl.includes('import'),
+    'ISOTANK EXPORT': cl => cl.includes('isotank') && cl.includes('export'),
+    'ISOTANK IMPORT': cl => cl.includes('isotank') && cl.includes('import'),
+  };
   const CROSS_SALES_ZONE = "Cross Sales";
 
   // ── Use drillRowsCache (pre-classified rows from computeSalesAggregate) ──
@@ -525,6 +536,11 @@ async function getDrillRows(db, entity, metric, month) {
   for (const row of allRows) {
     if (isAirMetric    && !row._cl.includes("air")) continue;
     if (isTeuLclMetric && !row._cl.includes("sea") && !row._cl.includes("isotank")) continue;
+    // Apply client LOB filter
+    if (activeLobs.length > 0) {
+      const lobOk = activeLobs.some(lob => LOB_CL_MAP[lob] && LOB_CL_MAP[lob](row._cl));
+      if (!lobOk) continue;
+    }
 
     const d=row._d, ml=row._ml;
     if (!isFYTotal && !isYearGroup && !isRange && !isWeek && !isDateRange && ml !== month) continue;
@@ -541,7 +557,8 @@ async function getDrillRows(db, entity, metric, month) {
     const mapped = repLookupByFY[fy]?.[sp] || repLookupByFY.FY26?.[sp] || repLookupByFY.FY27?.[sp];
 
     if (isGrandTotal) {
-      // all pass
+      // Only include rows belonging to mapped reps (same as table Grand Total)
+      if (!mapped) continue;
     } else if (useCrossSalesPath) {
       if (mapped) continue;
       if (isCrossSalesBranch && row.location !== entity) continue;
@@ -2304,10 +2321,11 @@ module.exports = async function handler(req, res) {
       const entity = req.query?.entity || req.body?.entity;
       const metric = req.query?.metric || req.body?.metric;
       const month  = req.query?.month  || req.body?.month;
+      const lobsParam = req.query?.lobs || req.body?.lobs || "";
       if (!entity || !metric || !month) {
         return res.status(400).json({ error: "entity, metric, and month are required." });
       }
-      const result = await getDrillRows(db, entity, metric, month);
+      const result = await getDrillRows(db, entity, metric, month, lobsParam);
       return res.status(200).json(result);
     }
 
