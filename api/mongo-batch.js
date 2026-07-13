@@ -344,7 +344,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1840-isoweek-utc-fix"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13T1850-lob-week-filter"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -856,7 +856,7 @@ async function computeSalesAggregate(db) {
         repWeekData[repKey][wk].gp += gp; repWeekData[repKey][wk].gpProv += gpProv; repWeekData[repKey][wk].gpActual += gpActual; repWeekData[repKey][wk].ship += 1;
         repWeekData[repKey][wk].tons += tons; repWeekData[repKey][wk].teu += teu; repWeekData[repKey][wk].lcl += lcl;
       }
-      // LOB accumulation
+      // LOB accumulation (monthly + weekly)
       {
         const lobKey = cls.kind + (cls.direction ? " " + cls.direction : "");
         if (!repLobData[repKey]) repLobData[repKey] = {};
@@ -869,6 +869,19 @@ async function computeSalesAggregate(db) {
         repLobData[repKey][lobKey][monthLabel].tons += tons;
         repLobData[repKey][lobKey][monthLabel].teu  += teu;
         repLobData[repKey][lobKey][monthLabel].lcl  += lcl;
+        // Week-level LOB data for LOB-filtered weekly view
+        if (rowDate) {
+          const wk = isoWeekInfo(rowDate).key;
+          if (!repLobData[repKey][lobKey]._week) repLobData[repKey][lobKey]._week = {};
+          if (!repLobData[repKey][lobKey]._week[wk]) repLobData[repKey][lobKey]._week[wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+          repLobData[repKey][lobKey]._week[wk].gp += gp;
+          repLobData[repKey][lobKey]._week[wk].gpProv += gpProv;
+          repLobData[repKey][lobKey]._week[wk].gpActual += gpActual;
+          repLobData[repKey][lobKey]._week[wk].ship += 1;
+          repLobData[repKey][lobKey]._week[wk].tons += tons;
+          repLobData[repKey][lobKey]._week[wk].teu += teu;
+          repLobData[repKey][lobKey]._week[wk].lcl += lcl;
+        }
       }
 
       if (!repMeta[repKey]) repMeta[repKey] = mapped;

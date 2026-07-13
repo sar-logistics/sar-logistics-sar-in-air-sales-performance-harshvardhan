@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v43'; // v43: bust stale weekData localStorage (sar_week_cache_v3)
+var CACHE_VERSION = 'v44'; // v44: weekData recomputed from lobData._week when LOB filter active
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -580,7 +580,7 @@ function computeFilteredRepsRaw(){
   var filterLobs = state.filterLobs || [];
   if (filterLobs.length > 0 && _lobDataFetched) {
     base = base.map(function(r) {
-      if (!r.lobData) return r; // no lobData yet — keep original (will re-render when fetched)
+      if (!r.lobData) return r;
       var ld = r.lobData;
       var filtered = Object.assign({}, r);
       filtered.gp       = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gp)   ||0); },0); });
@@ -590,6 +590,23 @@ function computeFilteredRepsRaw(){
       filtered.tons     = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].tons)  ||0); },0); });
       filtered.teu      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].teu)   ||0); },0); });
       filtered.lcl      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].lcl)   ||0); },0); });
+      // Also recompute weekData from LOB week-level data
+      if (r.weekData) {
+        var allWks = Object.keys(r.weekData);
+        var filteredWeekData = {};
+        allWks.forEach(function(wk) {
+          filteredWeekData[wk] = {
+            gp:      filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].gp)      ||0); },0),
+            gpProv:  filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].gpProv)  ||0); },0),
+            gpActual:filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].gpActual)||0); },0),
+            ship:    filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].ship)    ||0); },0),
+            tons:    filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].tons)    ||0); },0),
+            teu:     filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].teu)     ||0); },0),
+            lcl:     filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob]._week&&ld[lob]._week[wk]&&ld[lob]._week[wk].lcl)     ||0); },0),
+          };
+        });
+        filtered.weekData = filteredWeekData;
+      }
       return filtered;
     });
   }
