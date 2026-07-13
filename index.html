@@ -2358,7 +2358,7 @@ var IC_KPI = {
 };
 
 /* ====================== CUSTOMER INSIGHTS ====================== */
-function horizontalBarPanel(title, items, valueKey, fmtFn, barColor, drillType){
+function horizontalBarPanel(title, items, valueKey, fmtFn, barColor, drillType, drillLob){
   if (!items || items.length === 0) {
     return '<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;padding:18px;">'
       +'<div style="font-size:13px;font-weight:700;color:#15233B;margin-bottom:14px;">'+title+'</div>'
@@ -2369,7 +2369,7 @@ function horizontalBarPanel(title, items, valueKey, fmtFn, barColor, drillType){
   var rows = items.map(function(it){
     var pct = maxVal > 0 ? Math.max(2, (it[valueKey] / maxVal) * 100) : 0;
     var label = it.name.length > 28 ? it.name.slice(0,26)+'…' : it.name;
-    var _dAttr = drillType ? ' data-act="insightDrill" data-drill-type="'+esc(drillType)+'" data-drill-name="'+esc(it.name)+'"' : '';
+    var _dAttr = drillType ? ' data-act="insightDrill" data-drill-type="'+esc(drillType)+'" data-drill-name="'+esc(it.name)+'"'+(drillLob?' data-drill-lob="'+esc(drillLob)+'"':'') : '';
     var _dStyle = drillType ? 'cursor:pointer;border-radius:6px;padding:2px 4px;transition:background 0.15s;' : '';
     return '<div'+_dAttr+' style="display:flex;align-items:center;gap:10px;margin-bottom:9px;'+_dStyle+'">'
       +'<div style="width:130px;flex-shrink:0;font-size:11px;color:#374151;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(it.name)+'">'+esc(label)+'</div>'
@@ -2614,13 +2614,13 @@ function customerPage(){
             'ISO Tank':['#7C3AED','#6D28D9','#5B21B6','#4C1D95','#A78BFA']}[activeLob]||['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
 
   var charts = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
-    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'customer')
+    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'customer', activeLob)
     + (activeLob==='Air'
-        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'customer')
-        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'customer'))
-    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'customer')
-    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'customer')
-    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'customer')
+        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'customer', activeLob)
+        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'customer', activeLob))
+    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'customer', activeLob)
+    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'customer', activeLob)
+    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'customer', activeLob)
   +'</div>';
 
   return header + charts;
@@ -2813,13 +2813,13 @@ function agentPage(){
             'ISO Tank':['#7C3AED','#6D28D9','#5B21B6','#4C1D95','#A78BFA']}[activeLob]||['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
 
   var charts = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
-    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'agent')
+    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'agent', activeLob)
     + (activeLob==='Air'
-        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'agent')
-        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'agent'))
-    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'agent')
-    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'agent')
-    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'agent')
+        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'agent', activeLob)
+        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'agent', activeLob))
+    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'agent', activeLob)
+    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'agent', activeLob)
+    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'agent', activeLob)
   +'</div>';
 
   return header + charts;
@@ -2995,13 +2995,13 @@ function tradelanePage(){
             'ISO Tank':['#7C3AED','#6D28D9','#5B21B6','#4C1D95','#A78BFA']}[activeLob]||['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
 
   return header + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
-    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'tradelane')
+    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'tradelane', activeLob)
     + (activeLob==='Air'
-        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'tradelane')
-        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'tradelane'))
-    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'tradelane')
-    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'tradelane')
-    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'tradelane')
+        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'tradelane', activeLob)
+        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'tradelane', activeLob))
+    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'tradelane', activeLob)
+    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'tradelane', activeLob)
+    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'tradelane', activeLob)
   +'</div>';
 }
 
@@ -5399,23 +5399,35 @@ function _defaultDrillLobTab() {
   return 'ALL';
 }
 
-function openInsightDrill(drillType, name) {
+function openInsightDrill(drillType, name, drillLob) {
   // Filter allDrillRows by customer / agent / tradelane name
   if (!allDrillRows || !allDrillRows.length) {
     // Load drill rows first then retry
-    fetchDrillData(function(){ openInsightDrill(drillType, name); });
+    fetchDrillData(function(){ openInsightDrill(drillType, name, drillLob); });
     return;
   }
   var nameLower = (name || '').toLowerCase();
+
+  // Map insight LOB tab label → row.lob values (cls.kind + ' ' + cls.direction)
+  var LOB_TAB_TO_ROW_LOBS = {
+    'Air':      ['AIR EXPORT', 'AIR IMPORT'],
+    'Ocean':    ['SEA EXPORT', 'SEA IMPORT'],
+    'ISO Tank': ['ISOTANK EXPORT', 'ISOTANK IMPORT'],
+  };
+  // Effective LOB filter: prefer the insight page's active LOB tab, fall back to global filterLobs
+  var tabLobs = drillLob ? LOB_TAB_TO_ROW_LOBS[drillLob] : null;
   var activeLobFilter = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
+
+  var idxs = filteredMonthIndices();
+  var allowedMonths = idxs.map(function(i){ return months26[i]; });
+
   var matched = [];
   for (var i = 0; i < allDrillRows.length; i++) {
     var row = allDrillRows[i];
-    // LOB filter
-    if (activeLobFilter && activeLobFilter.indexOf(row.lob) === -1) continue;
-    // Date range filter
-    var idxs = filteredMonthIndices();
-    var allowedMonths = idxs.map(function(i){ return months26[i]; });
+    // LOB filter — insight tab takes priority, then global filterLobs
+    if (tabLobs && tabLobs.indexOf(row.lob) === -1) continue;
+    if (!tabLobs && activeLobFilter && activeLobFilter.indexOf(row.lob) === -1) continue;
+    // Date range filter (hoisted out of loop)
     if (allowedMonths.length > 0 && allowedMonths.indexOf(row._ml) === -1) continue;
     // Entity match
     var match = false;
@@ -5425,7 +5437,6 @@ function openInsightDrill(drillType, name) {
       match = (row.destAgent || '').toLowerCase() === nameLower ||
               (row.originAgent || '').toLowerCase() === nameLower;
     } else if (drillType === 'tradelane') {
-      // _tl is the tradelane label stamped from SRR lookup (e.g. "India", "China - CN")
       match = (row._tl || '').toLowerCase() === nameLower;
     }
     if (!match) continue;
@@ -6239,7 +6250,7 @@ document.addEventListener('click', function(ev){
     render();
   }
   else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
-  else if(act==='insightDrill'){ ev.stopPropagation(); openInsightDrill(el.getAttribute('data-drill-type'), el.getAttribute('data-drill-name')); }
+  else if(act==='insightDrill'){ ev.stopPropagation(); openInsightDrill(el.getAttribute('data-drill-type'), el.getAttribute('data-drill-name'), el.getAttribute('data-drill-lob')); }
   else if(act==='pendencyDrill'){ ev.stopPropagation(); openPendencyDrill(el.getAttribute('data-rep'),el.getAttribute('data-col'),el.getAttribute('data-status'),el.getAttribute('data-lock'),el.getAttribute('data-type')||'rep'); }
   else if(act==='closePendencyDrill'){ if(el.getAttribute('data-stop')) return; state.pendencyDrill=null; render(); }
   else if(act==='pendencyDrillShowAll'){ ev.stopPropagation(); if(state.pendencyDrill){ state.pendencyDrill._showAll=true; var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():''); } }
