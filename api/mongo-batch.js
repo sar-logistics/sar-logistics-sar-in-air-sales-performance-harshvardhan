@@ -536,8 +536,8 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
   for (const row of allRows) {
     if (isAirMetric    && !row._cl.includes("air")) continue;
     if (isTeuLclMetric && !row._cl.includes("sea") && !row._cl.includes("isotank")) continue;
-    // Apply client LOB filter
-    if (activeLobs.length > 0) {
+    // Apply client LOB filter — but NOT for weekly/daterange since weekData is not LOB-filtered
+    if (activeLobs.length > 0 && !isWeek && !isDateRange) {
       const lobOk = activeLobs.some(lob => LOB_CL_MAP[lob] && LOB_CL_MAP[lob](row._cl));
       if (!lobOk) continue;
     }
