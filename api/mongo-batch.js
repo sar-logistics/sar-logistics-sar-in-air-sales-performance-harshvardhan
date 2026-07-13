@@ -333,7 +333,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1545-data-refresh"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13T1600-handler-bust"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2055,6 +2055,10 @@ module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // Bust stale in-memory caches immediately if this deployment changed logic
+  if (salesCache?._deployTs !== DEPLOY_TS) { salesCache = null; salesCacheTime = 0; }
+  if (drillRowsCache?.deployTs !== DEPLOY_TS) { drillRowsCache = null; drillRowsCacheTime = 0; }
 
   if (req.method === "OPTIONS") return res.status(200).end();
 
