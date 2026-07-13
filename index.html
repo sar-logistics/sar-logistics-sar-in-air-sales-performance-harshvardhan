@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v40'; // v40: branch match requires unmapped row (_zone null)
+var CACHE_VERSION = 'v41'; // v41: _wk stamped on drill rows, weekly filter uses _wk exact match
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5231,13 +5231,6 @@ function computeDrillResult(entity, metric, month){
   var yearSuf   = isYear  ? month.split(':')[1] : null;
   var drBits    = isDR    ? month.split(':')    : null;
 
-  // Week boundaries using same isoWeekFromKey the table uses
-  var weekMon = null, weekSun = null;
-  if (isWeek){
-    var _wk = isoWeekFromKey(month.slice(5));
-    weekMon = _wk.monday;
-    weekSun = new Date(_wk.sunday); weekSun.setUTCHours(23,59,59,999);
-  }
   var drStart = isDR ? new Date(drBits[1]+'T00:00:00Z') : null;
   var drEnd   = isDR ? new Date(drBits[2]+'T23:59:59Z') : null;
 
@@ -5290,15 +5283,16 @@ function computeDrillResult(entity, metric, month){
     // 2. Metric/collection filter — no row exclusion based on metric
     // The LOB filter already restricts rows. Metric only affects the value summed.
 
-    // 3. Date filter — use row._d converted to IST (UTC+5:30) to match server bucketing
+    // 3. Date filter
     var ml = row._ml;
-    var rd = null; // IST-adjusted date, only when needed
     if (!isFY && !isYear && !isRange && !isWeek && !isDR && ml !== month) continue;
     if (isYear && yearSuf && !ml.endsWith('-'+yearSuf)) continue;
     if (isRange){ var mi=FY_MONTHS_ALL.indexOf(ml); if(mi<rangeStart||mi>rangeEnd) continue; }
-    if (isWeek || isDR){ rd = new Date(new Date(row._d).getTime() + (5.5*60*60*1000)); }
-    if (isWeek && (rd<weekMon||rd>weekSun)) continue;
-    if (isDR  && (rd<drStart ||rd>drEnd))  continue;
+    if (isWeek && row._wk !== month.slice(5)) continue;
+    if (isDR){
+      var rd = new Date(new Date(row._d).getTime() + (5.5*60*60*1000));
+      if (rd<drStart||rd>drEnd) continue;
+    }
 
     // 4. Entity filter
     var sp = row._sp; // normalizeName(rawSalesPersonName) from server

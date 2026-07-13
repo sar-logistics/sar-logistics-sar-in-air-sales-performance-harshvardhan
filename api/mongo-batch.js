@@ -344,7 +344,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1820-zone-dn-stamp"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13T1830-wk-stamp"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -447,6 +447,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           _sp: salesPerson,  // normalized
           _ml: monthLabel,
           _d:  d,
+          _wk: isoWeekInfo(d).key, // ISO week key — same as weekData bucketing
           _cl: collName,
           _cls: cls,
           shipmentNo: job["Shipment No"]    || "—",
@@ -554,7 +555,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
       const fi=FY_MONTHS.indexOf(rangeParts.start), ti=FY_MONTHS.indexOf(rangeParts.end), mi=FY_MONTHS.indexOf(ml);
       if (fi<0||ti<0||mi<fi||mi>ti) continue;
     }
-    if (isWeek     && weekRange && (d<weekRange.start || d>weekRange.end)) continue;
+    if (isWeek && row._wk !== month.slice(5)) continue;
     if (isDateRange && drParts  && (d<drParts.start   || d>drParts.end))  continue;
 
     const sp  = row._sp;
