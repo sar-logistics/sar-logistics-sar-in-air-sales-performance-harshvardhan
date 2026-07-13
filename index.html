@@ -666,6 +666,7 @@ function fetchLiveData(callback, force){
           if (data.allDrillRows && data.allDrillRows.length > 0 && !allDrillRows) {
             allDrillRows = data.allDrillRows;
             lsSet('drillrows', { rows: allDrillRows });
+            _drillResultCache = {};
           }
           // If allDrillRows not in sales response, fetch it silently in background
           if (!allDrillRows) {
@@ -5227,6 +5228,7 @@ function loadDrillData(callback){
       if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
         allDrillRows = data.sales.allDrillRows;
         lsSet('drillrows', { rows: allDrillRows });
+        _drillResultCache = {};
       }
       _drillDataLoading = false;
       _drillDataCallbacks.forEach(function(cb){ cb(); });
@@ -6534,6 +6536,7 @@ window.addEventListener('load', function() {
             if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0) {
               allDrillRows = d.sales.allDrillRows;
               lsSet('drillrows', { rows: allDrillRows });
+              _drillResultCache = {};
             }
             // Check if lobData came bundled (Air keys always included in response)
             if (repsRawOriginal[0] && repsRawOriginal[0].lobData) {
@@ -6547,6 +6550,7 @@ window.addEventListener('load', function() {
           } else if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0 && !allDrillRows) {
             allDrillRows = d.sales.allDrillRows;
             lsSet('drillrows', { rows: allDrillRows });
+            _drillResultCache = {};
           }
         }
 
