@@ -333,7 +333,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1600-handler-bust"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13T1620-no-db-date-filter"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -703,15 +703,10 @@ async function computeSalesAggregate(db) {
     var key = isoYear + '-W' + String(weekNum).padStart(2, '0');
     return { key: key, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
   }
-  // Fetch all collections IN PARALLEL — filter to FY date range at DB level
-  // so only relevant rows come over the wire (prevents Vercel timeout on large datasets)
-  const SALES_FY_FILTER = { $or: [
-    { "ETD Loading Port": { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
-    { "ETA Discharge":    { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
-    { "Job Date":         { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
-  ]};
+  // Fetch all collections IN PARALLEL — no DB-level date filter since dates may be in
+  // DD/MM/YYYY format which breaks string comparison. parseSheetDate handles filtering in memory.
   const allJobResults = await Promise.all(JOB_COLLECTIONS.map(cn =>
-    db.collection(cn).find(SALES_FY_FILTER, { projection: {
+    db.collection(cn).find({}, { projection: {
       "Sales Person":1, "Job Date":1, "LOB":1, "Location":1, "Customer":1,
       "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
       "Financial Lock":1, "Operation Lock":1,
@@ -1912,11 +1907,8 @@ async function computeBothPendency(db) {
   // Direct lean query across all collections in parallel
   // Filter to FY date range at DB level — avoids pulling irrelevant rows
   // Single DB pass — track OL and FL simultaneously in same loop
-  const FY_DATE_FILTER = { $or: [
-    { "ETD Loading Port": { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
-    { "ETA Discharge":    { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
-    { "Job Date":         { $gte: "2025-04-01", $lte: "2027-03-31￿" } },
-  ]};
+  // No DB-level date filter — DD/MM/YYYY format breaks string comparison.
+  // FY_MONTHS check in parseSheetDate handles in-memory filtering.
   const ALL_JOB_COLLS = Object.values(COLLECTIONS);
   const allDrillJobRows = []; // all job rows for client-side drill filtering
   // Two independent maps — one per lock type — built in the same loop
@@ -1930,7 +1922,7 @@ async function computeBothPendency(db) {
     const dateField = isExport ? "ETD Loading Port" : isImport ? "ETA Discharge" : "Job Date";
 
     const jobs = await db.collection(collName).find(
-      FY_DATE_FILTER,
+      {},
       { projection: { "Sales Person": 1, "Job Owner": 1, "Financial Lock": 1, "Operation Lock": 1,
         [dateField]: 1, "Job Date": 1, "Shipment No": 1, "Customer": 1, "Location": 1,
         "Carrier": 1, "Carrier Name": 1, "ETD Loading Port": 1, "ETA Discharge": 1, "LOB": 1 } }
