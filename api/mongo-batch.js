@@ -333,7 +333,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13-etd-strict-v3"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13-etd-revert-v4"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -405,7 +405,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
       for (const job of rows) {
         const cls = classifyRow(job, collName);
         const dateCol = getDateColumnFor(cls);
-        const rawDate = job[dateCol]; // ETD/ETA only — no Job Date fallback
+        const rawDate = job[dateCol] || job["Job Date"];
         if (!rawDate) continue;
         const d = parseSheetDate(rawDate);
         if (!d) continue;
@@ -735,9 +735,10 @@ async function computeSalesAggregate(db) {
       let monthLabel = null;
       let rowDate = null;
       const primaryDate = job[dateCol];
-      // ETD/ETA only — no Job Date fallback
-      if (primaryDate) {
-        const d = parseSheetDate(primaryDate);
+      const fallbackDate = job["Job Date"];
+      const rawDate = primaryDate || fallbackDate;
+      if (rawDate) {
+        const d = parseSheetDate(rawDate);
         if (d) {
           monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
           rowDate = d;
