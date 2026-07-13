@@ -312,29 +312,17 @@ const SALES_CACHE_TTL_MS = 120 * 60 * 1000; // 2 hours — data pushed from shee
 // 30 minutes and is shared across all requests to the same container, and
 // since the ping endpoint pre-warms salesCache proactively, drill queries
 // after the first sales load are served in <50ms.
-const DRILL_CACHE_VERSION = 2; // bump to force rebuild when row schema changes
-let drillRowsCache = null; // { rows: [...], mappingData: {...}, cachedAt, version }
+let drillRowsCache = null; // { rows: [...], mappingData: {...}, cachedAt }
 let drillRowsCacheTime = 0;
 
-async function getDrillRows(db, entity, metric, month, lobsParam) {
-  // Parse active LOB filter sent from client
-  const activeLobs = lobsParam ? lobsParam.split(',').map(s=>s.trim()).filter(Boolean) : [];
-  // LOB key → collection name substring matcher
-  const LOB_CL_MAP = {
-    'AIR EXPORT':     cl => cl.includes('air') && cl.includes('export'),
-    'AIR IMPORT':     cl => cl.includes('air') && cl.includes('import'),
-    'SEA EXPORT':     cl => cl.includes('sea') && cl.includes('export'),
-    'SEA IMPORT':     cl => cl.includes('sea') && cl.includes('import'),
-    'ISOTANK EXPORT': cl => cl.includes('isotank') && cl.includes('export'),
-    'ISOTANK IMPORT': cl => cl.includes('isotank') && cl.includes('import'),
-  };
+async function getDrillRows(db, entity, metric, month) {
   const CROSS_SALES_ZONE = "Cross Sales";
 
   // ── Use drillRowsCache (pre-classified rows from computeSalesAggregate) ──
   // If salesCache has already loaded the full dataset, drillRowsCache is
   // already populated. No MongoDB queries needed — just filter in memory.
   const now = Date.now();
-  const cacheStale = (now - drillRowsCacheTime) > SALES_CACHE_TTL_MS || drillRowsCache?.version !== DRILL_CACHE_VERSION;
+  const cacheStale = (now - drillRowsCacheTime) > SALES_CACHE_TTL_MS;
 
   if (!drillRowsCache || cacheStale) {
     // Build drill rows cache from scratch (same DB pass as aggregate)
@@ -357,38 +345,6 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
       normByDisplayByFY[fy][displayName] = norm;
     }
 
-    // ── Build SRR tradelane lookup: shipmentNo → tradelane label ────────────
-    // Same SRR collections used by getTradelaneAggregate — keyed by Shipment No
-    const SRR_DRILL_CONFIG = [
-      { coll: "srr_sea_export",  countryField: "Discharge Country", fromPort: false },
-      { coll: "srr_sea_import",  countryField: "Loading Port",       fromPort: true  },
-      { coll: "srr_air_export",  countryField: "Discharge Port",     fromPort: true  },
-      { coll: "srr_air_import",  countryField: "Loading Port",       fromPort: true  },
-      // ISO Tank has no dedicated SRR collections — rows will use job-field fallback below
-    ];
-    const srrDrillMap = {}; // shipmentNo → tradelane string
-    await Promise.all(SRR_DRILL_CONFIG.map(async (cfg) => {
-      try {
-        const rows = await db.collection(cfg.coll).find({}, {
-          projection: { "Shipment No": 1, [cfg.countryField]: 1 }
-        }).toArray();
-        for (const r of rows) {
-          const sno = String(r["Shipment No"] || "").trim();
-          if (!sno || srrDrillMap[sno]) continue; // first match wins
-          const raw = String(r[cfg.countryField] || "").trim();
-          let tradelane = "";
-          if (cfg.fromPort) {
-            tradelane = portToInfo(raw).tradelane;
-          } else {
-            const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === raw.toLowerCase());
-            tradelane = entry ? entry.tradelane : raw;
-          }
-          if (tradelane) srrDrillMap[sno] = tradelane;
-        }
-      } catch (e) { /* collection may not exist */ }
-    }));
-    console.log(`[drill] SRR map built: ${Object.keys(srrDrillMap).length} entries`);
-
     // Always load ALL FY rows — no date pre-filter.
     // drillRowsCache is reused across all drill requests, so it must be complete.
     // Date/entity filtering happens in-memory below.
@@ -409,11 +365,6 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         if (!FY_MONTHS.includes(monthLabel)) continue;
         const salesPerson = normalizeName(job["Sales Person"]);
         if (!salesPerson) continue;
-
-        // Resolve display name from mapping — used client-side for Grand Total matching
-        const fy = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25","Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"].includes(monthLabel) ? "FY26" : "FY27";
-        const _repMeta = repLookupByFY[fy]?.[salesPerson] || repLookupByFY["FY26"]?.[salesPerson] || repLookupByFY["FY27"]?.[salesPerson];
-        const _dn = _repMeta ? _repMeta.displayName : null; // null = unmapped/branch
 
         const { gp: rowGP, isProvisional } = pickGP(job, cls);
         const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
@@ -469,28 +420,11 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           vol: chargeable,
           prov: isProvisional ? 1 : 0,
           customer: String(job["Customer"] || "").trim(),
-          _dn,  // display name from mapping — null if unmapped
-          _tl: (function(){
-            const sno = String(job["Shipment No"] || "").trim();
-            if (srrDrillMap[sno]) return srrDrillMap[sno];
-            // Fallback for Ocean/ISO Tank (no SRR): derive from job port fields
-            const isExport = collName.includes("export");
-            if (!isExport) {
-              return portToInfo(job["ETD Loading Port"] || job["Loading Port"] || "").tradelane || "";
-            }
-            // Export: try Discharge Country (plain text, Sea Export) then ETA Discharge (port code)
-            const dc = String(job["Discharge Country"] || "").trim();
-            if (dc) {
-              const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === dc.toLowerCase());
-              return entry ? entry.tradelane : dc;
-            }
-            return portToInfo(job["ETA Discharge"] || "").tradelane || "";
-          })(),
         });
       }
     }
 
-    drillRowsCache = { allRows, repLookupByFY, repsByZoneByFY, normByDisplayByFY, version: DRILL_CACHE_VERSION };
+    drillRowsCache = { allRows, repLookupByFY, repsByZoneByFY, normByDisplayByFY };
     drillRowsCacheTime = now;
     console.log(`[drill] Built row cache: ${allRows.length} rows in ${Date.now()-t0}ms`);
   }
@@ -536,11 +470,6 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
   for (const row of allRows) {
     if (isAirMetric    && !row._cl.includes("air")) continue;
     if (isTeuLclMetric && !row._cl.includes("sea") && !row._cl.includes("isotank")) continue;
-    // Apply client LOB filter — but NOT for weekly/daterange since weekData is not LOB-filtered
-    if (activeLobs.length > 0 && !isWeek && !isDateRange) {
-      const lobOk = activeLobs.some(lob => LOB_CL_MAP[lob] && LOB_CL_MAP[lob](row._cl));
-      if (!lobOk) continue;
-    }
 
     const d=row._d, ml=row._ml;
     if (!isFYTotal && !isYearGroup && !isRange && !isWeek && !isDateRange && ml !== month) continue;
@@ -557,8 +486,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
     const mapped = repLookupByFY[fy]?.[sp] || repLookupByFY.FY26?.[sp] || repLookupByFY.FY27?.[sp];
 
     if (isGrandTotal) {
-      // Only include rows belonging to mapped reps (same as table Grand Total)
-      if (!mapped) continue;
+      // all pass
     } else if (useCrossSalesPath) {
       if (mapped) continue;
       if (isCrossSalesBranch && row.location !== entity) continue;
@@ -575,15 +503,13 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
 
   matchedRows.sort((a,b) => b._d - a._d);
   const totalGP      = matchedRows.reduce((s,r)=>s+(r.g||0),0);
-  const totalProvGP  = matchedRows.reduce((s,r)=>s+(r.prov===1?(r.g||0):0),0);
-  const totalActualGP= matchedRows.reduce((s,r)=>s+(r.prov!==1?(r.g||0):0),0);
   const totalRevenue = matchedRows.reduce((s,r)=>s+(r.r||0),0);
   const totalMetric  = matchedRows.reduce((s,r)=>s+(r.m||0),0);
 
   return {
     success: true, entity, metric, month,
     count: matchedRows.length,
-    totalMetric, totalGP, totalProvGP, totalActualGP,
+    totalMetric, totalGP,
     totalRevenue, totalCost: totalRevenue - totalGP,
     rows: matchedRows,
   };
@@ -1489,7 +1415,6 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     "Sales Person": 1, "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
     "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
-    "Discharge Country": 1, "Loading Port": 1,
   };
 
   // countryMap: country → { shipments, revenue, gp, tons, teu, salesReps, lobs }
@@ -1518,33 +1443,10 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
 
       const sno = String(job["Shipment No"] || "").trim();
       const srrEntry = srrMap[sno];
+      if (!srrEntry) continue; // no SRR match → skip
 
-      let tradelane = "", country = "";
-      if (srrEntry) {
-        tradelane = srrEntry.tradelane || srrEntry.country;
-        country   = srrEntry.country;
-      } else {
-        // Fallback: derive tradelane from job fields directly
-        // Export: use discharge port/country; Import: use loading port
-        if (cfg.dir === "Export") {
-          // Sea Export has "Discharge Country" (plain text); Air/ISO Tank Export has "ETA Discharge" (port code)
-          const dischargeCountry = String(job["Discharge Country"] || "").trim();
-          if (dischargeCountry) {
-            // Plain country name — look up tradelane
-            const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === dischargeCountry.toLowerCase());
-            tradelane = entry ? entry.tradelane : dischargeCountry;
-            country   = dischargeCountry;
-          } else {
-            // Port code field (Air/ISO Tank export)
-            const info = portToInfo(job["ETA Discharge"] || "");
-            tradelane = info.tradelane; country = info.country;
-          }
-        } else {
-          // Import: loading port field
-          const info = portToInfo(job["ETD Loading Port"] || job["Loading Port"] || "");
-          tradelane = info.tradelane; country = info.country;
-        }
-      }
+      const tradelane = srrEntry.tradelane || srrEntry.country;
+      const country   = srrEntry.country;
       if (!tradelane) continue;
 
       const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
@@ -2321,11 +2223,10 @@ module.exports = async function handler(req, res) {
       const entity = req.query?.entity || req.body?.entity;
       const metric = req.query?.metric || req.body?.metric;
       const month  = req.query?.month  || req.body?.month;
-      const lobsParam = req.query?.lobs || req.body?.lobs || "";
       if (!entity || !metric || !month) {
         return res.status(400).json({ error: "entity, metric, and month are required." });
       }
-      const result = await getDrillRows(db, entity, metric, month, lobsParam);
+      const result = await getDrillRows(db, entity, metric, month);
       return res.status(200).json(result);
     }
 

@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v30'; // v30: _dn field on drill rows for accurate rep matching
+var CACHE_VERSION = 'v28'; // v28: lobData bundled in sales cache for instant correct filtering
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -666,7 +666,6 @@ function fetchLiveData(callback, force){
           if (data.allDrillRows && data.allDrillRows.length > 0 && !allDrillRows) {
             allDrillRows = data.allDrillRows;
             lsSet('drillrows', { rows: allDrillRows });
-            _drillResultCache = {};
           }
           // If allDrillRows not in sales response, fetch it silently in background
           if (!allDrillRows) {
@@ -2359,7 +2358,7 @@ var IC_KPI = {
 };
 
 /* ====================== CUSTOMER INSIGHTS ====================== */
-function horizontalBarPanel(title, items, valueKey, fmtFn, barColor, drillType, drillLob){
+function horizontalBarPanel(title, items, valueKey, fmtFn, barColor, drillType){
   if (!items || items.length === 0) {
     return '<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;padding:18px;">'
       +'<div style="font-size:13px;font-weight:700;color:#15233B;margin-bottom:14px;">'+title+'</div>'
@@ -2370,7 +2369,7 @@ function horizontalBarPanel(title, items, valueKey, fmtFn, barColor, drillType, 
   var rows = items.map(function(it){
     var pct = maxVal > 0 ? Math.max(2, (it[valueKey] / maxVal) * 100) : 0;
     var label = it.name.length > 28 ? it.name.slice(0,26)+'…' : it.name;
-    var _dAttr = drillType ? ' data-act="insightDrill" data-drill-type="'+esc(drillType)+'" data-drill-name="'+esc(it.name)+'"'+(drillLob?' data-drill-lob="'+esc(drillLob)+'"':'') : '';
+    var _dAttr = drillType ? ' data-act="insightDrill" data-drill-type="'+esc(drillType)+'" data-drill-name="'+esc(it.name)+'"' : '';
     var _dStyle = drillType ? 'cursor:pointer;border-radius:6px;padding:2px 4px;transition:background 0.15s;' : '';
     return '<div'+_dAttr+' style="display:flex;align-items:center;gap:10px;margin-bottom:9px;'+_dStyle+'">'
       +'<div style="width:130px;flex-shrink:0;font-size:11px;color:#374151;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(it.name)+'">'+esc(label)+'</div>'
@@ -2615,13 +2614,13 @@ function customerPage(){
             'ISO Tank':['#7C3AED','#6D28D9','#5B21B6','#4C1D95','#A78BFA']}[activeLob]||['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
 
   var charts = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
-    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'customer', activeLob)
+    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'customer')
     + (activeLob==='Air'
-        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'customer', activeLob)
-        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'customer', activeLob))
-    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'customer', activeLob)
-    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'customer', activeLob)
-    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'customer', activeLob)
+        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'customer')
+        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'customer'))
+    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'customer')
+    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'customer')
+    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'customer')
   +'</div>';
 
   return header + charts;
@@ -2814,13 +2813,13 @@ function agentPage(){
             'ISO Tank':['#7C3AED','#6D28D9','#5B21B6','#4C1D95','#A78BFA']}[activeLob]||['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
 
   var charts = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
-    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'agent', activeLob)
+    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'agent')
     + (activeLob==='Air'
-        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'agent', activeLob)
-        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'agent', activeLob))
-    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'agent', activeLob)
-    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'agent', activeLob)
-    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'agent', activeLob)
+        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'agent')
+        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'agent'))
+    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'agent')
+    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'agent')
+    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'agent')
   +'</div>';
 
   return header + charts;
@@ -2902,13 +2901,13 @@ function tradelanePage(){
     +'</div>';
   }
 
-  var activeLob  = 'Air';
+  var activeLob  = state.tradelaneLob  || 'Air';
   var activeView = state.tradelaneView || 'chart';
   var fmtInt  = function(v){ return Math.round(v).toLocaleString('en-US'); };
   var fmtPct  = function(v){ return v+'%'; };
   var fmtTons = function(v){ return v >= 1000 ? (v/1000).toFixed(1)+'k T' : v.toFixed(1)+' T'; };
   var fmtTEU  = function(v){ return v.toFixed(2)+' TEU'; };
-  var LOBS = ['Air'];
+  var LOBS = ['Air','Ocean','ISO Tank'];
   var LOB_COLORS = {'Air':'#1D5FCC','Ocean':'#0891B2','ISO Tank':'#7C3AED'};
   var LOB_SUBTITLES = {'Air':'Air Export + Air Import','Ocean':'Sea Export + Sea Import','ISO Tank':'ISO Tank Export + Import'};
 
@@ -2984,6 +2983,7 @@ function tradelanePage(){
     +(periodLabel ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+periodLabel+'</span>' : '')
     +(activeView==='table' ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+(allC.length)+' tradelanes \u00b7 '+fmtCur(totalRev)+' Rev \u00b7 '+overallGPPct+'% GP%</span>' : '')
     +'<div style="display:flex;align-items:center;gap:6px;margin-left:auto;">'
+      +(activeView==='chart' ? '<div style="display:flex;gap:6px;">'+tabs+'</div>' : '')
       +viewToggle
     +'</div>'
   +'</div>';
@@ -2995,13 +2995,13 @@ function tradelanePage(){
             'ISO Tank':['#7C3AED','#6D28D9','#5B21B6','#4C1D95','#A78BFA']}[activeLob]||['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
 
   return header + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
-    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'tradelane', activeLob)
+    + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'tradelane')
     + (activeLob==='Air'
-        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'tradelane', activeLob)
-        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'tradelane', activeLob))
-    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'tradelane', activeLob)
-    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'tradelane', activeLob)
-    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'tradelane', activeLob)
+        ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'tradelane')
+        : horizontalBarPanel('Top 10 by TEUs', lobData.topByTEU||[], 'teu', fmtTEU, sc[1], 'tradelane'))
+    + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'tradelane')
+    + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'tradelane')
+    + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'tradelane')
   +'</div>';
 }
 
@@ -4603,15 +4603,24 @@ function drawer(){
 
     function cellVal(c, s){ return c.derived ? c.derived(s) : s[c.k]; }
 
-    // ── Apply global LOB filter + per-column filters to determine the visible row set ──
+    // ── LOB tabs — computed from whatever LOB values actually appear ──
+    var lobCounts = {};
+    d.rows.forEach(function(r){ lobCounts[r.lob] = (lobCounts[r.lob]||0) + 1; });
+    var lobTabs = ['ALL'].concat(Object.keys(lobCounts).sort());
+    var activeLobTab = state.drill.lobTab || 'ALL';
+    if (lobTabs.indexOf(activeLobTab) === -1) activeLobTab = 'ALL';
+
+    // ── Apply LOB tab + per-column filters to determine the visible row set ──
     var columnFilters = state.drill.columnFilters || {};
     var _activeDrillLobs = (state.filterLobs && state.filterLobs.length > 0) ? state.filterLobs : null;
     var visibleRows = d.rows.filter(function(s){
-      // Global LOB filter — always restrict to active filterLobs
-      if (_activeDrillLobs && _activeDrillLobs.indexOf(s.lob) === -1) return false;
+      // LOB tab filter
+      if (activeLobTab !== 'ALL' && s.lob !== activeLobTab) return false;
+      // Global LOB filter — when ALL tab selected, still restrict to active filterLobs
+      if (activeLobTab === 'ALL' && _activeDrillLobs && _activeDrillLobs.indexOf(s.lob) === -1) return false;
       for (var colKey in columnFilters) {
         var allowed = columnFilters[colKey];
-        if (!allowed || allowed.length === 0) continue;
+        if (!allowed || allowed.length === 0) continue; // no restriction
         var col = COLS.filter(function(c){ return c.k === colKey; })[0];
         if (!col) continue;
         var v = String(cellVal(col, s) == null ? '' : cellVal(col, s));
@@ -4642,9 +4651,21 @@ function drawer(){
     var headCells = COLS.map(th).join('');
 
 
+    // Compute counts and totals FIRST before building any HTML
+    var displayedCount = d.rows ? d.rows.length : 0;
+    var totalCount     = d.count || 0;
+    var isTruncated    = totalCount > displayedCount;
     // Filtered count = what user actually sees (respects LOB filter)
     var filteredCount  = visibleRows.length;
 
+    var dTeuSum=0;
+    visibleRows.forEach(function(r){ dTeuSum += r.t || 0; });
+
+    // BACKEND totals = full dataset (all matched rows, not just capped rows shown)
+    var fullRevSum    = d.totalRevenue || 0;
+    var fullCostSum   = d.totalCost    || 0;
+    var fullGpSum     = d.totalGP      || 0;
+    var fullMetricSum = d.totalMetric  || 0;
 
     function fmtDate(v){
       if (!v) return '<span style="color:#C7CEDA;">—</span>';
@@ -4691,7 +4712,99 @@ function drawer(){
     }).join('');
 
 
-    bodyContent = '<div style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;position:relative;">'
+    // Client-side subtotals for the two derived OL-status GP columns
+    var dActualGpSum = 0, dProvGpSum = 0;
+    visibleRows.forEach(function(r){
+      if (r.operationLock) dActualGpSum += (r.actualProfit || 0);
+      else dProvGpSum += (r.provisionalProfit || 0);
+    });
+
+    // Sticky total row — Revenue/Cost/GP always shown regardless of which metric was clicked
+    var totalRowBg = '#EEF3FC';
+    var totalRow = '<tr style="background:'+totalRowBg+';border-top:2.5px solid #0D2B5E;">'
+      + COLS.map(function(c, i){
+          var isSticky = c.sticky !== undefined;
+          var isLastSticky = c.k === 'lob';
+          var stickyStyle = isSticky
+            ? 'position:sticky;left:'+c.sticky+'px;width:'+c.width+'px;min-width:'+c.width+'px;max-width:'+c.width+'px;z-index:4;background:'+totalRowBg+';'+(isLastSticky?'box-shadow:2px 0 4px rgba(13,43,94,0.08);':'')
+            : '';
+          if (i === 0) return '<td style="padding:10px 10px;font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;'+stickyStyle+'">TOTAL ('+visibleRows.length.toLocaleString()+')</td>';
+          if (isSticky) return '<td style="padding:10px 10px;'+stickyStyle+'"></td>';
+          if (c.k === 'teu') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+dTeuSum.toFixed(1)+'</td>';
+          if (c.k === 'billedRevenue') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+fmtCur(fullRevSum)+'</td>';
+          if (c.k === 'postedCost') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+fmtCur(fullCostSum)+'</td>';
+          if (c.k === 'actualProfit') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(fullGpSum)+'</td>';
+          if (c.k === 'gpOlDone') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+(dActualGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dActualGpSum)+'</td>';
+          if (c.k === 'gpOlNotDone') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+(dProvGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dProvGpSum)+'</td>';
+          return '<td style="padding:10px 10px;"></td>';
+        }).join('')
+    +'</tr>';
+    totalRow = '<tfoot style="position:sticky;bottom:0;z-index:5;">'+totalRow+'</tfoot>';
+
+    // ── LOB tab bar ──
+    var tabBar = '<div style="padding:10px 24px;border-bottom:1px solid #EEF2F8;background:#FFFFFF;flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
+      + lobTabs.map(function(tab){
+          var active = tab === activeLobTab;
+          var inFilter = !active && activeLobTab === 'ALL' && tab !== 'ALL' && (state.filterLobs||[]).indexOf(tab) > -1;
+          var count = tab === 'ALL' ? (_activeDrillLobs ? d.rows.filter(function(r){ return _activeDrillLobs.indexOf(r.lob)>-1; }).length : d.rows.length) : (lobCounts[tab]||0);
+          var _bg = active ? BRAND_A1 : inFilter ? '#DBEAFE' : '#F4F7FA';
+          var _cl = active ? '#FFFFFF' : inFilter ? '#1D5FCC' : '#374151';
+          var _bo = inFilter ? 'border:1.5px solid #93B4F5;' : 'border:none;';
+          return '<button data-act="setDrillLobTab" data-val="'+esc(tab)+'" style="background:'+_bg+';color:'+_cl+';'+_bo+'border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;">'
+            +esc(tab)+' <span style="opacity:0.75;font-weight:600;">'+count+'</span>'
+          +'</button>';
+        }).join('')
+      +(Object.keys(columnFilters).some(function(k){ return columnFilters[k] && columnFilters[k].length>0; })
+        ? '<button data-act="clearDrillColFilters" style="background:#FEF3C7;border:none;border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;color:#92610A;cursor:pointer;white-space:nowrap;margin-left:auto;">Clear column filters</button>'
+        : '')
+    +'</div>';
+
+    // ── Column filter dropdown popup (only one open at a time) ──
+    var filterPopup = '';
+    if (state.drill.openFilterCol) {
+      var fCol = COLS.filter(function(c){ return c.k === state.drill.openFilterCol; })[0];
+      if (fCol) {
+        var uniqueVals = Array.from(new Set(d.rows.map(function(s){
+          var v = cellVal(fCol, s);
+          return v === null || v === undefined ? '' : String(v);
+        }))).sort();
+        var draft = state.drill.filterDraft[fCol.k];
+        if (!draft) {
+          // Initialise draft from active filter, or "all selected" if none active
+          var active = columnFilters[fCol.k];
+          draft = active && active.length > 0 ? active.slice() : uniqueVals.slice();
+          state.drill.filterDraft[fCol.k] = draft;
+        }
+        var anchor = state.drill.filterAnchor || { top: 100, left: 100 };
+        filterPopup = '<div id="drill-filter-popup" data-stop="1" style="position:fixed;top:'+anchor.top+'px;left:'+anchor.left+'px;background:#FFFFFF;border-radius:12px;box-shadow:0 16px 40px rgba(13,43,94,0.25),0 0 0 1px rgba(13,43,94,0.08);z-index:9999;width:280px;padding:16px;">'
+          +'<div style="font-size:13px;font-weight:800;color:#0D2B5E;margin-bottom:10px;">Filter: '+esc(fCol.l)+'</div>'
+          +'<div style="display:flex;align-items:center;gap:7px;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:7px 10px;margin-bottom:10px;">'
+            +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
+            +'<input type="text" id="drill-colfilter-search" placeholder="Search…" autocomplete="off" oninput="filterDrillFilterOptions(this)" style="border:none;outline:none;font-size:12px;color:#374151;flex:1;min-width:0;background:transparent;" />'
+          +'</div>'
+          +'<div style="display:flex;gap:8px;margin-bottom:10px;">'
+            +'<button data-act="drillFilterSelectAll" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:6px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;">Select All</button>'
+            +'<button data-act="drillFilterClearAll" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:6px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;">Clear All</button>'
+          +'</div>'
+          +'<div id="drill-colfilter-list" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;margin-bottom:10px;">'
+            + uniqueVals.map(function(v){
+                var checked = draft.indexOf(v) > -1;
+                var displayV = v === '' ? '(blank)' : v;
+                return '<div data-act="drillFilterToggleVal" data-val="'+esc(v)+'" data-search="'+esc(displayV.toLowerCase())+'" class="drill-filter-opt" style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;" onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'">'
+                  +'<div style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(checked?BRAND_A1:'#C5D0E0')+';background:'+(checked?BRAND_A1:'#FFFFFF')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+                    +(checked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '')
+                  +'</div>'
+                  +'<span style="font-size:12px;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(displayV)+'</span>'
+                +'</div>';
+              }).join('')
+          +'</div>'
+          +'<button data-act="drillFilterApply" style="width:100%;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:8px;color:#fff;font-size:12.5px;font-weight:700;padding:10px;cursor:pointer;">Apply</button>'
+        +'</div>';
+      }
+    }
+
+    bodyContent = tabBar
+      + '<div style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;position:relative;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
         +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
         +'<tbody id="drill-tbody">'+bodyRows
@@ -4701,7 +4814,9 @@ function drawer(){
             +'</td></tr>'
           : '')
         +'</tbody>'
+        +totalRow
       +'</table>'
+      + filterPopup
     +'</div>';
   }
 
@@ -4710,7 +4825,55 @@ function drawer(){
       ? filteredCount.toLocaleString() + ' job' + (filteredCount === 1 ? '' : 's') + ' matching'
       : '';
 
-  var footer = '';
+  // Footer: shows sum of DISPLAYED rows + full total if truncated
+  var footerLabel = d.metric === 'Shipments' ? 'Total Shipments'
+    : d.metric === 'GP' ? 'Total GP'
+    : d.metric === 'Tons (Air)' ? 'Total Tons (Air)'
+    : d.metric === 'TEUs (Ocean)' ? 'Total TEUs'
+    : d.metric === 'LCL (Ocean in CBM)' ? 'Total LCL'
+    : 'Total';
+
+  var footer;
+  if (!d.loading && !d.error && d.rows && d.rows.length > 0) {
+    if (d.metric === 'GP') {
+      // Show Provisional + Actual + Total breakdown
+      var provGP   = d.totalProvGP   || 0;
+      var actualGP = d.totalActualGP || 0;
+      var totGP    = provGP + actualGP;
+      footer = '<div style="padding:10px 18px;border-top:1px solid #E8EDF6;background:#F8FAFC;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">'
+        +'<span style="font-size:11.5px;font-weight:600;color:#5B6678;">'+footerLabel
+          +' <span style="color:#9AAFC8;font-weight:500;">('+filteredCount.toLocaleString()+' jobs)</span>'
+        +'</span>'
+        +'<div style="display:flex;align-items:center;gap:20px;">'
+          +'<span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">'
+            +'<span style="font-size:9.5px;font-weight:700;color:#10875A;text-transform:uppercase;letter-spacing:0.05em;">Provisional</span>'
+            +'<span style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#10875A;">'+fmtCur(provGP)+'</span>'
+          +'</span>'
+          +'<span style="color:#CBD5E1;font-size:15px;">+</span>'
+          +'<span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">'
+            +'<span style="font-size:9.5px;font-weight:700;color:#1D5FCC;text-transform:uppercase;letter-spacing:0.05em;">Actual</span>'
+            +'<span style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#1D5FCC;">'+fmtCur(actualGP)+'</span>'
+          +'</span>'
+          +'<span style="color:#CBD5E1;font-size:15px;">=</span>'
+          +'<span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">'
+            +'<span style="font-size:9.5px;font-weight:700;color:#0D2B5E;text-transform:uppercase;letter-spacing:0.05em;">Total GP</span>'
+            +'<span style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:800;color:#0D2B5E;">'+fmtCur(totGP)+'</span>'
+          +'</span>'
+        +'</div>'
+      +'</div>';
+    } else {
+      footer = '<div style="padding:10px 18px;border-top:1px solid #E8EDF6;background:#F8FAFC;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;">'
+        +'<span style="font-size:11.5px;font-weight:600;color:#5B6678;">'+footerLabel
+          +' <span style="color:#9AAFC8;font-weight:500;">('+filteredCount.toLocaleString()+' jobs)</span>'
+        +'</span>'
+        +'<span style="font-family:\'DM Mono\',monospace;font-size:14px;font-weight:800;color:#15875A;">'
+          +(d.metric==='Shipments' ? filteredCount.toLocaleString() : fullMetricSum.toFixed(2))
+        +'</span>'
+      +'</div>';
+    }
+  } else {
+    footer = '';
+  }
 
   return '<div data-act="close" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;animation:ovFade 0.16s ease;">'
     +'<div data-stop="1" style="width:min(1200px,96vw);height:min(88vh,900px);background:#FFFFFF;border-radius:16px;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(15,23,40,0.22);animation:fadeUp 0.2s cubic-bezier(0.22,1,0.36,1);overflow:hidden;">'
@@ -5050,7 +5213,6 @@ function loadDrillData(callback){
       if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
         allDrillRows = data.sales.allDrillRows;
         lsSet('drillrows', { rows: allDrillRows });
-        _drillResultCache = {};
       }
       _drillDataLoading = false;
       _drillDataCallbacks.forEach(function(cb){ cb(); });
@@ -5097,16 +5259,19 @@ function computeDrillResult(entity, metric, month){
   var isAir  = metric === 'Tons (Air)';
   var isTeu  = metric === 'TEUs (Ocean)' || metric === 'LCL (Ocean in CBM)';
 
-
   var rangeBits = isRange ? month.split(':') : null;
   var yearSuf   = isYear  ? month.split(':')[1] : null;
   var drBits    = isDR    ? month.split(':')    : null;
 
   var weekMon = null, weekSun = null;
   if (isWeek){
-    var _wk = isoWeekFromKey(month.slice(5));
-    weekMon = _wk.monday;
-    weekSun = new Date(_wk.sunday); weekSun.setUTCHours(23,59,59,999);
+    var isoKey = month.slice(5);
+    var wParts = isoKey.split('-W');
+    var iy = parseInt(wParts[0],10), wn = parseInt(wParts[1],10);
+    var j4 = new Date(Date.UTC(iy,0,4)); var j4d=(j4.getUTCDay()+6)%7;
+    var w1m=new Date(j4); w1m.setUTCDate(j4.getUTCDate()-j4d);
+    weekMon = new Date(w1m); weekMon.setUTCDate(w1m.getUTCDate()+(wn-1)*7);
+    weekSun = new Date(weekMon); weekSun.setUTCDate(weekMon.getUTCDate()+6); weekSun.setUTCHours(23,59,59,999);
   }
   var drStart = isDR ? new Date(drBits[1]+'T00:00:00Z') : null;
   var drEnd   = isDR ? new Date(drBits[2]+'T23:59:59Z') : null;
@@ -5135,8 +5300,8 @@ function computeDrillResult(entity, metric, month){
   for (var i=0; i<allDrillRows.length; i++){
     var row = allDrillRows[i];
 
-    // LOB filter — skip for weekly since weekData on the table is not LOB-filtered
-    if (_activeLobFilter && !isWeek && !isDR) {
+    // LOB filter — apply active filterLobs to restrict drill rows
+    if (_activeLobFilter) {
       var _lobMatch = _activeLobFilter.some(function(lob){
         return _LOB_TO_CL[lob] && _LOB_TO_CL[lob](row._cl);
       });
@@ -5144,55 +5309,55 @@ function computeDrillResult(entity, metric, month){
     }
 
     // Collection/metric filter
-    if (isAir && !row._cl.includes('air')) { continue; }
-    if (isTeu && !row._cl.includes('sea') && !row._cl.includes('isotank')) { continue; }
+    if (isAir && !row._cl.includes('air')) continue;
+    if (isTeu && !row._cl.includes('sea') && !row._cl.includes('isotank')) continue;
 
     // Date filter
     var ml = row._ml;
-    if (!isFY && !isYear && !isRange && !isWeek && !isDR && ml !== month) { continue; }
-    if (isYear && yearSuf && !ml.endsWith('-'+yearSuf)) { continue; }
-    if (isRange){ var mi=FY_MONTHS_ALL.indexOf(ml); if(mi<rangeStart||mi>rangeEnd){ continue; } }
-    if (isWeek){ var rd=new Date(row._d); if(rd<weekMon||rd>weekSun){ continue; } }
-    if (isDR){ var rd2=new Date(row._d); if(rd2<drStart||rd2>drEnd){ continue; } }
+    if (!isFY && !isYear && !isRange && !isWeek && !isDR && ml !== month) continue;
+    if (isYear && yearSuf && !ml.endsWith('-'+yearSuf)) continue;
+    if (isRange){ var mi=FY_MONTHS_ALL.indexOf(ml); if(mi<rangeStart||mi>rangeEnd) continue; }
+    if (isWeek){ var rd=new Date(row._dt); if(rd<weekMon||rd>weekSun) continue; }
+    if (isDR){ var rd2=new Date(row._dt); if(rd2<drStart||rd2>drEnd) continue; }
 
     // Entity filter
-    if (isGT) {
-      if (row._dn !== undefined) {
-        if (!row._dn) { continue; }
-        var _inRepsRaw = false;
-        for (var ri = 0; ri < repsRaw.length; ri++) {
-          if (!repsRaw[ri].isBranch && repsRaw[ri].name === row._dn) { _inRepsRaw = true; break; }
-        }
-        if (!_inRepsRaw) { continue; }
-      }
-    } else {
-      var spNorm = row._sp;
+    if (!isGT){
+      var sp = row._sp;
+      // Normalised rep name from the row's salesPerson field
+      var spNorm = sp; // already normalised from backend
       if (entity === 'Cross Sales'){
+        // Cross Sales = unmapped reps
+        // Check against repsRawOriginal names
         var isMapped = repsRawOriginal.some(function(r){ return !r.isBranch && r.name === row.salesPerson; });
-        if (isMapped) { continue; }
+        if (isMapped) continue;
       } else {
+        // Normalize entity for comparison
         var normEntity = entity.toLowerCase().split('|')[0].trim();
-        var normSP     = (row._sp || '').toLowerCase();
+        var normSP     = (row._sp || '').toLowerCase().split('|')[0].trim();
         var rawSP      = (row.salesPerson || '').split('|')[0].trim().toLowerCase();
-        var isRepMatch = (row._dn && row._dn.toLowerCase() === normEntity) || normSP === normEntity || rawSP === normEntity;
-        var repInZone = false;
-        if (row._dn) {
-          repInZone = repsRawOriginal.some(function(r){ return !r.isBranch && r.zone === entity && r.name === row._dn; });
-        } else {
-          repInZone = repsRawOriginal.some(function(r){
-            return r.zone === entity && (r.name.toLowerCase() === normSP || normalizeName(r.name) === normSP);
-          });
-        }
+
+        // Zone match: any rep in this zone whose normalized name matches
+        var repInZone = repsRawOriginal.some(function(r){
+          return r.zone === entity && (
+            r.name.toLowerCase() === normSP ||
+            r.name.toLowerCase() === rawSP  ||
+            normalizeName(r.name) === normSP
+          );
+        });
+        // Rep match: normalized name or raw first-segment match
+        var isRepMatch = normSP === normEntity || rawSP === normEntity;
+        // Branch match: location
         var isBranchMatch = row._loc === entity;
-        if (!repInZone && !isRepMatch && !isBranchMatch) { continue; }
+        if (!repInZone && !isRepMatch && !isBranchMatch) continue;
       }
     }
+
     var metricVal = metric==='Shipments' ? 1 : isAir ? (row.vol||0) : (row.t||0);
     matched.push({ row:row, m:metricVal });
   }
 
   // Sort by date descending
-  matched.sort(function(a,b){ return new Date(b.row._d) - new Date(a.row._d); });
+  matched.sort(function(a,b){ return b.row._dt - a.row._dt; });
 
   var totalGP=0, totalRevenue=0, totalMetric=0;
   var outRows = matched.slice(0,6000).map(function(item){
@@ -5234,35 +5399,23 @@ function _defaultDrillLobTab() {
   return 'ALL';
 }
 
-function openInsightDrill(drillType, name, drillLob) {
+function openInsightDrill(drillType, name) {
   // Filter allDrillRows by customer / agent / tradelane name
   if (!allDrillRows || !allDrillRows.length) {
     // Load drill rows first then retry
-    fetchDrillData(function(){ openInsightDrill(drillType, name, drillLob); });
+    fetchDrillData(function(){ openInsightDrill(drillType, name); });
     return;
   }
   var nameLower = (name || '').toLowerCase();
-
-  // Map insight LOB tab label → row.lob values (cls.kind + ' ' + cls.direction)
-  var LOB_TAB_TO_ROW_LOBS = {
-    'Air':      ['AIR EXPORT', 'AIR IMPORT'],
-    'Ocean':    ['SEA EXPORT', 'SEA IMPORT'],
-    'ISO Tank': ['ISOTANK EXPORT', 'ISOTANK IMPORT'],
-  };
-  // Effective LOB filter: prefer the insight page's active LOB tab, fall back to global filterLobs
-  var tabLobs = drillLob ? LOB_TAB_TO_ROW_LOBS[drillLob] : null;
   var activeLobFilter = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
-
-  var idxs = filteredMonthIndices();
-  var allowedMonths = idxs.map(function(i){ return months26[i]; });
-
   var matched = [];
   for (var i = 0; i < allDrillRows.length; i++) {
     var row = allDrillRows[i];
-    // LOB filter — insight tab takes priority, then global filterLobs
-    if (tabLobs && tabLobs.indexOf(row.lob) === -1) continue;
-    if (!tabLobs && activeLobFilter && activeLobFilter.indexOf(row.lob) === -1) continue;
-    // Date range filter (hoisted out of loop)
+    // LOB filter
+    if (activeLobFilter && activeLobFilter.indexOf(row.lob) === -1) continue;
+    // Date range filter
+    var idxs = filteredMonthIndices();
+    var allowedMonths = idxs.map(function(i){ return months26[i]; });
     if (allowedMonths.length > 0 && allowedMonths.indexOf(row._ml) === -1) continue;
     // Entity match
     var match = false;
@@ -5272,27 +5425,26 @@ function openInsightDrill(drillType, name, drillLob) {
       match = (row.destAgent || '').toLowerCase() === nameLower ||
               (row.originAgent || '').toLowerCase() === nameLower;
     } else if (drillType === 'tradelane') {
-      match = (row._tl || '').toLowerCase() === nameLower;
+      // tradelane name is "Origin → Destination" or just country
+      var tl = ((row.etdLoading||row.location||'') + ' → ' + (row.etaDischarge||'')).trim();
+      match = tl.toLowerCase() === nameLower ||
+              (row.location || '').toLowerCase() === nameLower ||
+              (row.etdLoading || '').toLowerCase() === nameLower ||
+              (row.etaDischarge || '').toLowerCase() === nameLower;
     }
     if (!match) continue;
     matched.push(row);
   }
   matched.sort(function(a,b){ return (b._d||0)-(a._d||0); });
-  var totalGP=0, totalRev=0, totalShip=0, totalProvGP=0, totalActualGP=0;
-  matched.forEach(function(r){
-    totalGP  += r.g||0;
-    totalRev += r.r||0;
-    totalShip++;
-    if (r.prov === 1) totalProvGP   += r.g||0;
-    else              totalActualGP += r.g||0;
-  });
+  var totalGP=0, totalRev=0, totalShip=0;
+  matched.forEach(function(r){ totalGP+=r.g||0; totalRev+=r.r||0; totalShip++; });
   state.drill = {
     entity: name, metric: 'Shipments', col: 'FY Total', valueFmt: null,
     loading: false,
     rows: matched.slice(0, 6000),
     count: matched.length,
     totalMetric: totalShip,
-    totalGP: totalGP, totalProvGP: totalProvGP, totalActualGP: totalActualGP,
+    totalGP: totalGP, totalProvGP: 0, totalActualGP: totalGP,
     totalRevenue: totalRev, totalCost: totalRev - totalGP,
     lobTab: _defaultDrillLobTab(),
     columnFilters: activeLobFilter ? {lob: activeLobFilter.slice()} : {},
@@ -5334,13 +5486,10 @@ function openDrill(entity, metric, col, valueFmt){
     lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
   render();
 
-  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col)
-         +(state.filterLobs&&state.filterLobs.length>0?'&lobs='+encodeURIComponent(state.filterLobs.join(',')):'');
-  
+  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col);
   fetch('/api/mongo-batch'+qs, { priority:'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
-      
       if (!data.success) { state.drill.loading=false; state.drill.error=data.error||'Failed.'; render(); return; }
       _drillResultCache[cacheKey] = data;
       state.drill.loading=false; state.drill.rows=data.rows; state.drill.count=data.count;
@@ -6094,7 +6243,7 @@ document.addEventListener('click', function(ev){
     render();
   }
   else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
-  else if(act==='insightDrill'){ ev.stopPropagation(); openInsightDrill(el.getAttribute('data-drill-type'), el.getAttribute('data-drill-name'), el.getAttribute('data-drill-lob')); }
+  else if(act==='insightDrill'){ ev.stopPropagation(); openInsightDrill(el.getAttribute('data-drill-type'), el.getAttribute('data-drill-name')); }
   else if(act==='pendencyDrill'){ ev.stopPropagation(); openPendencyDrill(el.getAttribute('data-rep'),el.getAttribute('data-col'),el.getAttribute('data-status'),el.getAttribute('data-lock'),el.getAttribute('data-type')||'rep'); }
   else if(act==='closePendencyDrill'){ if(el.getAttribute('data-stop')) return; state.pendencyDrill=null; render(); }
   else if(act==='pendencyDrillShowAll'){ ev.stopPropagation(); if(state.pendencyDrill){ state.pendencyDrill._showAll=true; var drawerEl=document.getElementById('drawer-slot'); if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():''); } }
@@ -6358,7 +6507,6 @@ window.addEventListener('load', function() {
             if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0) {
               allDrillRows = d.sales.allDrillRows;
               lsSet('drillrows', { rows: allDrillRows });
-              _drillResultCache = {};
             }
             // Check if lobData came bundled (Air keys always included in response)
             if (repsRawOriginal[0] && repsRawOriginal[0].lobData) {
@@ -6372,7 +6520,6 @@ window.addEventListener('load', function() {
           } else if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0 && !allDrillRows) {
             allDrillRows = d.sales.allDrillRows;
             lsSet('drillrows', { rows: allDrillRows });
-            _drillResultCache = {};
           }
         }
 
