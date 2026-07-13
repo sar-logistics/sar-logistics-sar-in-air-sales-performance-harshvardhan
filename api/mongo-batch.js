@@ -333,7 +333,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13-etd-revert-v4"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13-split-vol-v5"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -414,6 +414,18 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         const salesPerson = normalizeName(job["Sales Person"]);
         if (!salesPerson) continue;
 
+        // ETD/ETA month — used to validate volume metrics (tons/TEU/LCL)
+        // If ETD is blank or in a different month, volume = 0 for this row
+        const primaryDateStr = job[dateCol];
+        let volValid = false;
+        if (primaryDateStr) {
+          const dv = parseSheetDate(primaryDateStr);
+          if (dv) {
+            const vml = MONTH_NAMES[dv.getMonth()] + "-" + String(dv.getFullYear()).slice(2);
+            volValid = (vml === monthLabel);
+          }
+        }
+
         const { gp: rowGP, isProvisional } = pickGP(job, cls);
         const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
         const provRevenue   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
@@ -469,7 +481,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           t: parseFloat(job["Container TEU"] || 0) || 0,
           chargeableWeight,
           chargeableWeightUnit,
-          tons: calculatedTons,
+          tons: volValid ? calculatedTons : 0,
           // Retained for backwards compatibility with older cached payloads.
           vol: chargeableWeight,
           prov: isProvisional ? 1 : 0,
@@ -746,6 +758,15 @@ async function computeSalesAggregate(db) {
       }
       if (!monthLabel || !FY_MONTHS.includes(monthLabel)) continue;
 
+      // For volume metrics (Tons/TEU/LCL), use ETD/ETA strictly — no Job Date fallback.
+      // This ensures volume figures match raw source data filtered by ETD/ETA only.
+      // Shipments and GP continue to use ETD||JobDate so jobs with blank ETD are still counted.
+      let volMonthLabel = null;
+      if (primaryDate) {
+        const dv = parseSheetDate(primaryDate);
+        if (dv) volMonthLabel = MONTH_NAMES[dv.getMonth()] + "-" + String(dv.getFullYear()).slice(2);
+      }
+
       // Pick the mapping for this row's FY — fall back to the other FY if not found
       // Many reps only have FY26 mapping even if they have FY27 job data
       const rowFY = fyForMonthLabel(monthLabel);
@@ -788,6 +809,11 @@ async function computeSalesAggregate(db) {
           if (!volUnit || volUnit === "CBM") lcl = vol;
         }
       }
+
+      // Only credit Tons/TEU/LCL to this month if ETD/ETA also falls in this month.
+      // If ETD is blank or in a different month, volumes are zero for this bucket
+      // (they'll be counted when the ETD month is processed, or not at all if ETD blank).
+      if (volMonthLabel !== monthLabel) { tons = 0; teu = 0; lcl = 0; }
 
       if (!mapped) {
         // Unmapped sales person → Cross Sales, grouped by branch (Location)
