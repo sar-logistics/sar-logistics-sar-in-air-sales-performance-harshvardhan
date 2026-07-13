@@ -284,13 +284,24 @@ function getDateColumnFor(cls) {
 // putting 4 May shipments into April. Parse date-only values explicitly and
 // use this for every report and drill-down month bucket.
 function parseSheetDate(value) {
-  if (value instanceof Date) return new Date(value.getTime());
+  if (value instanceof Date) {
+    // Convert UTC date to IST (UTC+5:30) for month bucketing
+    const ist = new Date(value.getTime() + (5.5 * 60 * 60 * 1000));
+    return ist;
+  }
   if (typeof value === "number" && Number.isFinite(value)) {
     const excelEpoch = new Date(Date.UTC(1899, 11, 30));
     const utc = new Date(excelEpoch.getTime() + Math.round(value * 86400000));
     return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
   }
   const text = String(value || "").trim();
+  // ISO string with time component — convert to IST
+  if (text.includes("T") && text.includes("Z")) {
+    const utcMs = new Date(text).getTime();
+    if (!isNaN(utcMs)) {
+      return new Date(utcMs + (5.5 * 60 * 60 * 1000));
+    }
+  }
   let match = text.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})(?:\s|$)/);
   if (match) {
     const day = Number(match[1]), month = Number(match[2]) - 1;
@@ -333,7 +344,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1640-include-no-rep"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13T1700-ist-timezone"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
