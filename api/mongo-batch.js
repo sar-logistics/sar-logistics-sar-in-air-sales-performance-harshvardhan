@@ -2570,6 +2570,32 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ success: true, collection: collectionName, inserted, updated, keyField });
     }
 
+    if (action === "dedup") {
+      // Remove duplicate Shipment No entries — keep the document with the latest _insertedAt (or _id)
+      const results = {};
+      for (const collName of JOB_COLLECTIONS) {
+        const col = db.collection(collName);
+        // Find all docs grouped by Shipment No
+        const pipeline = [
+          { $group: { _id: "$Shipment No", count: { $sum: 1 }, ids: { $push: "$_id" } } },
+          { $match: { count: { $gt: 1 } } }
+        ];
+        const dupes = await col.aggregate(pipeline).toArray();
+        let removed = 0;
+        for (const dupe of dupes) {
+          // Keep first, delete the rest
+          const toDelete = dupe.ids.slice(1);
+          const r = await col.deleteMany({ _id: { $in: toDelete } });
+          removed += r.deletedCount;
+        }
+        results[collName] = { duplicateGroups: dupes.length, removed };
+      }
+      // Bust caches after dedup
+      salesCache = null; salesCacheTime = 0;
+      drillRowsCache = null; drillRowsCacheTime = 0;
+      return res.status(200).json({ success: true, action: "dedup", results });
+    }
+
     if (action === "users") {
       const { users } = req.body || {};
       if (!users) return res.status(400).json({ error: "users array required" });
