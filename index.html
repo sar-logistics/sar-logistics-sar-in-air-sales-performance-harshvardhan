@@ -5160,8 +5160,9 @@ function computeDrillResult(entity, metric, month){
 
     // Entity filter
     if (isGT) {
-      // Grand Total only includes rows from known mapped reps (same as table aggregation)
-      var _gtMapped = repsRawOriginal.some(function(r){
+      // Grand Total only includes rows from repsRaw (the filtered rep list —
+      // respects RLS, filterReps, same set the table sums)
+      var _gtMapped = repsRaw.some(function(r){
         return !r.isBranch && normalizeName(r.name) === row._sp;
       });
       if (!_gtMapped) continue;
