@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v28'; // v28: lobData bundled in sales cache for instant correct filtering
+var CACHE_VERSION = 'v29'; // v29: drill tons use the same unit conversion as the monthly dashboard
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -4600,6 +4600,9 @@ function drawer(){
       { k:'originAgent', l:'Origin Agent', t:'text', truncate:130 },
       { k:'salesPerson', l:'Sales Person', t:'text', truncate:130 },
       { k:'shipper', l:'Shipper', t:'text', truncate:140 },
+      { k:'chargeableWeight', l:'Chargeable Weight', t:'num' },
+      { k:'chargeableWeightUnit', l:'Weight Unit', t:'text' },
+      { k:'tons', l:'Calculated Tons', t:'num' },
       { k:'volume', l:'Volume', t:'num' },
       { k:'volumeUnit', l:'Volume Unit', t:'text' },
       { k:'operationLock', l:'Operation Lock', t:'text' },
@@ -5351,7 +5354,9 @@ function computeDrillResult(entity, metric, month){
       if (!zoneMatch && !repMatch && !branchMatch) continue;
     }
 
-    var metricVal = metric==='Shipments' ? 1 : isAir ? (row.vol||0) : (row.t||0);
+    // Tons is pre-converted server-side from the DB chargeable-weight unit.
+    // Do not sum raw kilograms here: that would inflate this month-only view.
+    var metricVal = metric==='Shipments' ? 1 : isAir ? (row.tons||0) : (row.t||0);
     matched.push({ row:row, m:metricVal });
   }
 

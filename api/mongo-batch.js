@@ -233,6 +233,17 @@ function classifyRow(job, collName) {
 // Tons metric is calculated only for AIR rows (Export or Import)
 function isAirRow(cls) { return cls.kind === "AIR"; }
 
+// One source of truth for air-tonnage conversion. The blank/default unit in
+// the source sheet is kilograms, while the dashboard displays metric tonnes.
+function calculateAirTons(job, cls) {
+  if (!isAirRow(cls)) return 0;
+  const rawWeight = parseFloat(job["Chargeable Weight"] || 0) || 0;
+  const unit = String(job["Chargeable Weight Unit"] || "").toLowerCase().trim();
+  if (unit === "ton" || unit === "tons" || unit === "mt") return rawWeight;
+  if (unit === "lb" || unit === "lbs") return rawWeight * 0.000453592;
+  return rawWeight / 1000;
+}
+
 // Pick the correct GP field based on lock status
 // Air (Import/Export): if "Financial Lock" is empty → Provisional; else Actual
 // All others:          if "Operation Lock" is empty → Provisional; else Actual
@@ -383,7 +394,9 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         const postedCost    = (postedCostRaw != null && String(postedCostRaw).trim() !== "")
           ? (parseFloat(postedCostRaw) || 0)
           : (billedRevenue - (parseFloat(job["Actual Profit (J=C-G)"] || 0) || 0));
-        const chargeable = parseFloat(job["Chargeable Weight"] || job["Volume"] || 0) || 0;
+        const chargeableWeight = parseFloat(job["Chargeable Weight"] || 0) || 0;
+        const chargeableWeightUnit = String(job["Chargeable Weight Unit"] || "").trim();
+        const calculatedTons = calculateAirTons(job, cls);
 
         allRows.push({
           _sp: salesPerson,  // normalized
@@ -426,7 +439,11 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           financialLock: job["Financial Lock"]     || "",
           g: rowGP, r: billedRevenue, x: postedCost,
           t: parseFloat(job["Container TEU"] || 0) || 0,
-          vol: chargeable,
+          chargeableWeight,
+          chargeableWeightUnit,
+          tons: calculatedTons,
+          // Retained for backwards compatibility with older cached payloads.
+          vol: chargeableWeight,
           prov: isProvisional ? 1 : 0,
           customer: String(job["Customer"] || "").trim(),
         });
@@ -510,7 +527,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
       if (!norm || sp !== norm) continue;
     }
 
-    let metricVal = metric === "Shipments" ? 1 : isAirMetric ? (row.vol||0) : (row.t||0);
+    let metricVal = metric === "Shipments" ? 1 : isAirMetric ? (row.tons||0) : (row.t||0);
     matchedRows.push({ ...row, m: metricVal });
   }
 
