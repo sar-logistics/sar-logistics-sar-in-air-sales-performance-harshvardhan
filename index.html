@@ -5287,9 +5287,9 @@ function computeDrillResult(entity, metric, month){
       if (_activeLobFilter.indexOf(row.lob) === -1) continue;
     }
 
-    // 2. Metric/collection filter
-    if (isAir && !row._cl.includes('air')) continue;
-    if (isTeu && !row._cl.includes('sea') && !row._cl.includes('isotank')) continue;
+    // 2. Metric/collection filter — use row.lob (same as LOB filter) not row._cl
+    if (isAir && row.lob !== 'AIR EXPORT' && row.lob !== 'AIR IMPORT') continue;
+    if (isTeu && row.lob !== 'SEA EXPORT' && row.lob !== 'SEA IMPORT' && row.lob !== 'ISOTANK EXPORT' && row.lob !== 'ISOTANK IMPORT') continue;
 
     // 3. Date filter — use row._d converted to IST (UTC+5:30) to match server bucketing
     var ml = row._ml;
