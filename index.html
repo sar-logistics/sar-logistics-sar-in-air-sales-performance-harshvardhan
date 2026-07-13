@@ -4663,21 +4663,19 @@ function drawer(){
     // BACKEND totals = full dataset (all matched rows, not just capped rows shown)
     var fullRevSum    = d.totalRevenue || 0;
     var fullCostSum   = d.totalCost    || 0;
+    var fullGpSum     = d.totalGP      || 0;
     var fullMetricSum = d.totalMetric  || 0;
 
-    // Always recompute GP totals from actual rows — never trust cached d.totalGP
-    // which may be stale (old drill cache without g field, or 0 from legacy path)
-    var fullGpSum = 0, fullProvGpSum = 0, fullActualGpSum = 0;
+    // Compute prov/actual GP split from the rows we have
+    var fullProvGpSum = 0, fullActualGpSum = 0;
     if (d.rows && d.rows.length > 0) {
       d.rows.forEach(function(r){
-        fullGpSum += r.g || 0;
         if (r.prov === 1) fullProvGpSum  += r.g || 0;
         else              fullActualGpSum += r.g || 0;
       });
     }
-    // Only fall back to stored totals if rows are empty (server-side drill)
-    if (fullGpSum === 0 && (d.totalGP || 0) !== 0) {
-      fullGpSum      = d.totalGP      || 0;
+    // If stored split is available and rows-computed sum matches totalGP, prefer stored
+    if ((d.totalProvGP || 0) + (d.totalActualGP || 0) !== 0) {
       fullProvGpSum  = d.totalProvGP  || 0;
       fullActualGpSum= d.totalActualGP|| 0;
     }

@@ -551,13 +551,15 @@ async function getDrillRows(db, entity, metric, month) {
 
   matchedRows.sort((a,b) => b._d - a._d);
   const totalGP      = matchedRows.reduce((s,r)=>s+(r.g||0),0);
+  const totalProvGP  = matchedRows.reduce((s,r)=>s+(r.prov===1?(r.g||0):0),0);
+  const totalActualGP= matchedRows.reduce((s,r)=>s+(r.prov!==1?(r.g||0):0),0);
   const totalRevenue = matchedRows.reduce((s,r)=>s+(r.r||0),0);
   const totalMetric  = matchedRows.reduce((s,r)=>s+(r.m||0),0);
 
   return {
     success: true, entity, metric, month,
     count: matchedRows.length,
-    totalMetric, totalGP,
+    totalMetric, totalGP, totalProvGP, totalActualGP,
     totalRevenue, totalCost: totalRevenue - totalGP,
     rows: matchedRows,
   };
