@@ -2901,13 +2901,13 @@ function tradelanePage(){
     +'</div>';
   }
 
-  var activeLob  = state.tradelaneLob  || 'Air';
+  var activeLob  = 'Air';
   var activeView = state.tradelaneView || 'chart';
   var fmtInt  = function(v){ return Math.round(v).toLocaleString('en-US'); };
   var fmtPct  = function(v){ return v+'%'; };
   var fmtTons = function(v){ return v >= 1000 ? (v/1000).toFixed(1)+'k T' : v.toFixed(1)+' T'; };
   var fmtTEU  = function(v){ return v.toFixed(2)+' TEU'; };
-  var LOBS = ['Air','Ocean','ISO Tank'];
+  var LOBS = ['Air'];
   var LOB_COLORS = {'Air':'#1D5FCC','Ocean':'#0891B2','ISO Tank':'#7C3AED'};
   var LOB_SUBTITLES = {'Air':'Air Export + Air Import','Ocean':'Sea Export + Sea Import','ISO Tank':'ISO Tank Export + Import'};
 
