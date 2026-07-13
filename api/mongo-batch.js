@@ -344,7 +344,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1730-force-clear"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13T1740-no-metric-row-filter"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -533,9 +533,8 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
   // ── Filter rows ───────────────────────────────────────────────────────────
   const matchedRows = [];
   for (const row of allRows) {
-    if (isAirMetric    && row.lob !== "AIR EXPORT" && row.lob !== "AIR IMPORT") continue;
-    if (isTeuLclMetric && row.lob !== "SEA EXPORT" && row.lob !== "SEA IMPORT" && row.lob !== "ISOTANK EXPORT" && row.lob !== "ISOTANK IMPORT") continue;
-    // LOB filter — match by row.lob (same key as lobData: "AIR EXPORT" etc)
+    // No metric-based row exclusion — LOB filter handles row selection, metric only affects value
+    // LOB filter — match by row.lob
     if (activeLobs.length > 0 && !isWeek && !isDateRange) {
       if (!activeLobs.includes(row.lob)) continue;
     }

@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v33'; // v33: force clear after IST + lob metric fix
+var CACHE_VERSION = 'v34'; // v34: no metric-based row exclusion in drill
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5287,9 +5287,8 @@ function computeDrillResult(entity, metric, month){
       if (_activeLobFilter.indexOf(row.lob) === -1) continue;
     }
 
-    // 2. Metric/collection filter — use row.lob (same as LOB filter) not row._cl
-    if (isAir && row.lob !== 'AIR EXPORT' && row.lob !== 'AIR IMPORT') continue;
-    if (isTeu && row.lob !== 'SEA EXPORT' && row.lob !== 'SEA IMPORT' && row.lob !== 'ISOTANK EXPORT' && row.lob !== 'ISOTANK IMPORT') continue;
+    // 2. Metric/collection filter — no row exclusion based on metric
+    // The LOB filter already restricts rows. Metric only affects the value summed.
 
     // 3. Date filter — use row._d converted to IST (UTC+5:30) to match server bucketing
     var ml = row._ml;
