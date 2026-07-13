@@ -5158,12 +5158,17 @@ function computeDrillResult(entity, metric, month){
     if (isGT) {
       // Grand Total: include only rows whose display name (_dn) is in repsRaw
       // _dn is stamped server-side from repLookupByFY — null means unmapped/branch
-      if (!row._dn) continue;
-      var _inRepsRaw = false;
-      for (var ri = 0; ri < repsRaw.length; ri++) {
-        if (!repsRaw[ri].isBranch && repsRaw[ri].name === row._dn) { _inRepsRaw = true; break; }
+      // Fallback: if _dn missing (old cache), accept all rows with a known _sp
+      if (row._dn !== undefined) {
+        // New rows: match by display name
+        if (!row._dn) continue;
+        var _inRepsRaw = false;
+        for (var ri = 0; ri < repsRaw.length; ri++) {
+          if (!repsRaw[ri].isBranch && repsRaw[ri].name === row._dn) { _inRepsRaw = true; break; }
+        }
+        if (!_inRepsRaw) continue;
       }
-      if (!_inRepsRaw) continue;
+      // else: old rows without _dn — allow through (better than showing zero)
     } else {
       // Normalised rep name from the row's salesPerson field
       var spNorm = row._sp; // already normalised from backend
@@ -5179,8 +5184,8 @@ function computeDrillResult(entity, metric, month){
         var normSP     = (row._sp || '').toLowerCase();
         var rawSP      = (row.salesPerson || '').split('|')[0].trim().toLowerCase();
 
-        // Rep match: display name matches entity (most reliable)
-        var isRepMatch = dnLower === normEntity || normSP === normEntity || rawSP === normEntity;
+        // Rep match: display name matches entity (most reliable), fall back to _sp
+        var isRepMatch = (row._dn && row._dn.toLowerCase() === normEntity) || normSP === normEntity || rawSP === normEntity;
 
         // Zone match: row's rep display name belongs to this zone
         var repInZone = false;

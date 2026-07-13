@@ -312,7 +312,8 @@ const SALES_CACHE_TTL_MS = 120 * 60 * 1000; // 2 hours — data pushed from shee
 // 30 minutes and is shared across all requests to the same container, and
 // since the ping endpoint pre-warms salesCache proactively, drill queries
 // after the first sales load are served in <50ms.
-let drillRowsCache = null; // { rows: [...], mappingData: {...}, cachedAt }
+const DRILL_CACHE_VERSION = 2; // bump to force rebuild when row schema changes
+let drillRowsCache = null; // { rows: [...], mappingData: {...}, cachedAt, version }
 let drillRowsCacheTime = 0;
 
 async function getDrillRows(db, entity, metric, month) {
@@ -322,7 +323,7 @@ async function getDrillRows(db, entity, metric, month) {
   // If salesCache has already loaded the full dataset, drillRowsCache is
   // already populated. No MongoDB queries needed — just filter in memory.
   const now = Date.now();
-  const cacheStale = (now - drillRowsCacheTime) > SALES_CACHE_TTL_MS;
+  const cacheStale = (now - drillRowsCacheTime) > SALES_CACHE_TTL_MS || drillRowsCache?.version !== DRILL_CACHE_VERSION;
 
   if (!drillRowsCache || cacheStale) {
     // Build drill rows cache from scratch (same DB pass as aggregate)
@@ -478,7 +479,7 @@ async function getDrillRows(db, entity, metric, month) {
       }
     }
 
-    drillRowsCache = { allRows, repLookupByFY, repsByZoneByFY, normByDisplayByFY };
+    drillRowsCache = { allRows, repLookupByFY, repsByZoneByFY, normByDisplayByFY, version: DRILL_CACHE_VERSION };
     drillRowsCacheTime = now;
     console.log(`[drill] Built row cache: ${allRows.length} rows in ${Date.now()-t0}ms`);
   }
