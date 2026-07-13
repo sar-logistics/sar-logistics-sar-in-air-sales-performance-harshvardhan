@@ -60,11 +60,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=300, stale-while-revalidate=3600"
-        },
-        {
-          "key": "Expires",
-          "value": "0"
+          "value": "no-store, no-cache, must-revalidate"
         },
         {
           "key": "Vary",
