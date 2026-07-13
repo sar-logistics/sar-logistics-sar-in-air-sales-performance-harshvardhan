@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v44'; // v44: weekData recomputed from lobData._week when LOB filter active
+var CACHE_VERSION = 'v46'; // v46: LOB recompute uses local position indexing
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -583,13 +583,16 @@ function computeFilteredRepsRaw(){
       if (!r.lobData) return r;
       var ld = r.lobData;
       var filtered = Object.assign({}, r);
-      filtered.gp       = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gp)   ||0); },0); });
-      filtered.gpProv   = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gpProv)||0); },0); });
-      filtered.gpActual = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gpActual)||0); },0); });
-      filtered.ship     = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].ship)  ||0); },0); });
-      filtered.tons     = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].tons)  ||0); },0); });
-      filtered.teu      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].teu)   ||0); },0); });
-      filtered.lcl      = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].lcl)   ||0); },0); });
+      // Iterate by local position (same length as r.gp/ship/tons) — look up month label via filteredMonthIndices
+      var _fidxs2 = filteredMonthIndices();
+      var _lobByLocal = function(metric){ return r.gp.map(function(_,li){ var m=months26[_fidxs2[li]]; return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m][metric])||0); },0); }); };
+      filtered.gp       = _lobByLocal('gp');
+      filtered.gpProv   = _lobByLocal('gpProv');
+      filtered.gpActual = _lobByLocal('gpActual');
+      filtered.ship     = _lobByLocal('ship');
+      filtered.tons     = _lobByLocal('tons');
+      filtered.teu      = _lobByLocal('teu');
+      filtered.lcl      = _lobByLocal('lcl');
       // Also recompute weekData from LOB week-level data
       if (r.weekData) {
         var allWks = Object.keys(r.weekData);
