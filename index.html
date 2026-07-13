@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v37'; // v37: zone drill uses e.zone code not e.name
+var CACHE_VERSION = 'v38'; // v38: cross sales + branch drill fixed
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5303,14 +5303,13 @@ function computeDrillResult(entity, metric, month){
     // 4. Entity filter
     var sp = row._sp; // normalizeName(rawSalesPersonName) from server
     if (isGT){
-      // Grand Total = ALL rows matching date+LOB filter (mapped + cross sales + branches)
-      // No entity filter needed — this matches what the table Grand Total shows
+      // Grand Total = ALL rows — no entity filter
     } else if (entity === 'Cross Sales'){
-      // Cross Sales = unmapped rows (not in any repsRaw entry)
+      // Cross Sales zone = all unmapped rows (any branch)
       var norms2 = getRepsRawNorms();
       if (norms2[sp]) continue; // mapped rep → skip
     } else {
-      // Rep or Zone entity — use repsRaw (same filtered set as zoneEntity uses)
+      // Rep, Zone, or Branch entity
       var zoneMatch = repsRaw.some(function(r){
         if (r.isBranch) return false;
         if (r.zone !== entity) return false;
@@ -5332,7 +5331,8 @@ function computeDrillResult(entity, metric, month){
           repMatch = (sp === normEnt || sp === segEnt);
         }
       }
-      var branchMatch = row._loc === entity;
+      // Branch match: entity is a branch/location name (Mumbai, Delhi etc.)
+      var branchMatch = (row.location || '').trim() === entity;
       if (!zoneMatch && !repMatch && !branchMatch) continue;
     }
 
