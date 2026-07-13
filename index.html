@@ -5336,9 +5336,11 @@ function openDrill(entity, metric, col, valueFmt){
 
   var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col)
          +(state.filterLobs&&state.filterLobs.length>0?'&lobs='+encodeURIComponent(state.filterLobs.join(',')):'');
+  console.log('[drill] fetching: /api/mongo-batch'+qs);
   fetch('/api/mongo-batch'+qs, { priority:'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
+      console.log('[drill] server returned count='+data.count+' entity='+entity+' month='+col);
       if (!data.success) { state.drill.loading=false; state.drill.error=data.error||'Failed.'; render(); return; }
       _drillResultCache[cacheKey] = data;
       state.drill.loading=false; state.drill.rows=data.rows; state.drill.count=data.count;
