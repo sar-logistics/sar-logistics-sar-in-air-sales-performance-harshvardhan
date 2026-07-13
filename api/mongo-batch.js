@@ -536,9 +536,9 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
   for (const row of allRows) {
     if (isAirMetric    && !row._cl.includes("air")) continue;
     if (isTeuLclMetric && !row._cl.includes("sea") && !row._cl.includes("isotank")) continue;
-    // LOB filter — skip for weekly since weekData on table is not LOB-filtered
+    // LOB filter — match by row.lob (same key as lobData: "AIR EXPORT" etc)
     if (activeLobs.length > 0 && !isWeek && !isDateRange) {
-      if (!activeLobs.some(lob => LOB_CL[lob] && LOB_CL[lob](row._cl))) continue;
+      if (!activeLobs.includes(row.lob)) continue;
     }
 
     const d=row._d, ml=row._ml;
@@ -593,6 +593,7 @@ async function getSalesAggregate(db, force) {
 
 
   const result = await computeSalesAggregate(db);
+  result._deployTs = DEPLOY_TS;
   salesCache = result;
   salesCacheTime = Date.now();
   salesCacheDeployTs = DEPLOY_TS;
@@ -2255,6 +2256,16 @@ module.exports = async function handler(req, res) {
       if (forceRefresh) {
         salesCache = null;
         salesCacheTime = 0;
+        drillRowsCache = null;
+        drillRowsCacheTime = 0;
+      }
+
+      // Bust stale cache if this deployment changed the data logic
+      if (salesCache && salesCache._deployTs !== DEPLOY_TS) {
+        salesCache = null;
+        salesCacheTime = 0;
+      }
+      if (drillRowsCache && drillRowsCache.deployTs !== DEPLOY_TS) {
         drillRowsCache = null;
         drillRowsCacheTime = 0;
       }

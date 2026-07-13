@@ -5248,16 +5248,9 @@ function computeDrillResult(entity, metric, month){
   var rangeStart = isRange ? FY_MONTHS_ALL.indexOf(rangeBits[1]) : -1;
   var rangeEnd   = isRange ? FY_MONTHS_ALL.indexOf(rangeBits[2]) : -1;
 
-  // LOB filter — map filterLobs keys to collection name matchers
+  // LOB filter — match by row.lob (same key as lobData: "AIR EXPORT", "SEA IMPORT" etc)
+  // This matches exactly how the table counts via lobData[lob][month].ship
   var _activeLobFilter = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
-  var _LOB_TO_CL = {
-    'AIR EXPORT':     function(cl){ return cl.includes('air') && cl.includes('export'); },
-    'AIR IMPORT':     function(cl){ return cl.includes('air') && cl.includes('import'); },
-    'SEA EXPORT':     function(cl){ return cl.includes('sea') && cl.includes('export'); },
-    'SEA IMPORT':     function(cl){ return cl.includes('sea') && cl.includes('import'); },
-    'ISOTANK EXPORT': function(cl){ return cl.includes('isotank') && cl.includes('export'); },
-    'ISOTANK IMPORT': function(cl){ return cl.includes('isotank') && cl.includes('import'); },
-  };
 
   // Build set of normalized raw names for reps currently in repsRaw (respects RLS + filterReps)
   // repsRaw contains display names — we need to map to raw normalized names via normalizeName
@@ -5289,12 +5282,9 @@ function computeDrillResult(entity, metric, month){
   for (var i=0; i<allDrillRows.length; i++){
     var row = allDrillRows[i];
 
-    // 1. LOB filter
-    if (_activeLobFilter && !isWeek) { // weekly: weekData not LOB-filtered in table
-      var _lobMatch = _activeLobFilter.some(function(lob){
-        return _LOB_TO_CL[lob] && _LOB_TO_CL[lob](row._cl);
-      });
-      if (!_lobMatch) continue;
+    // 1. LOB filter — use row.lob (matches lobData keys exactly)
+    if (_activeLobFilter && !isWeek) {
+      if (_activeLobFilter.indexOf(row.lob) === -1) continue;
     }
 
     // 2. Metric/collection filter
