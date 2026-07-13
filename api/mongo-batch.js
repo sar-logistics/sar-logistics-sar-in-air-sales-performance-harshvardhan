@@ -344,7 +344,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1740-no-metric-row-filter"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13T1750-gt-all-rows"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -554,7 +554,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
     const mapped = repLookupByFY[fy]?.[sp] || repLookupByFY.FY26?.[sp] || repLookupByFY.FY27?.[sp];
 
     if (isGrandTotal) {
-      if (!mapped) continue; // exclude unmapped/branch rows — matches table Grand Total
+      // All rows pass — Grand Total shows everything (mapped + cross sales + branches)
     } else if (useCrossSalesPath) {
       if (mapped) continue;
       if (isCrossSalesBranch && row.location !== entity) continue;

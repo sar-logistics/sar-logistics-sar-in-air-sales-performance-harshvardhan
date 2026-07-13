@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v34'; // v34: no metric-based row exclusion in drill
+var CACHE_VERSION = 'v35'; // v35: Grand Total drill includes cross sales + branches
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5303,9 +5303,8 @@ function computeDrillResult(entity, metric, month){
     // 4. Entity filter
     var sp = row._sp; // normalizeName(rawSalesPersonName) from server
     if (isGT){
-      // Grand Total = only rows from reps currently in repsRaw (respects RLS/filterReps)
-      var norms = getRepsRawNorms();
-      if (!norms[sp]) continue;
+      // Grand Total = ALL rows matching date+LOB filter (mapped + cross sales + branches)
+      // No entity filter needed — this matches what the table Grand Total shows
     } else if (entity === 'Cross Sales'){
       // Cross Sales = unmapped rows (not in any repsRaw entry)
       var norms2 = getRepsRawNorms();
