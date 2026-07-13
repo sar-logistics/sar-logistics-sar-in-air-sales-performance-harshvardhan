@@ -356,6 +356,11 @@ function _showDashboardBody() {
   })();
   console.log('[PERF] bootstrapSecondaryCache total', (performance.now()-_tBoot).toFixed(1)+'ms');
 
+  // Load drill rows in background immediately — so first drill click is instant
+  if (!allDrillRows) {
+    setTimeout(function(){ loadDrillData(null); }, 500);
+  }
+
   if (dataReady) {
     if (_lobDataFetched) {
       // lobData available — render immediately with correct filtered numbers
@@ -5498,6 +5503,8 @@ function openDrill(entity, metric, col, valueFmt){
       state.drill.totalRevenue=data.totalRevenue||0; state.drill.totalCost=data.totalCost||0;
       if (state.drill.lobTab === 'ALL') state.drill.lobTab = _defaultDrillLobTab();
       render();
+      // Load allDrillRows in background so next drill click is instant
+      if (!allDrillRows) loadDrillData(null);
     })
     .catch(function(){ state.drill.loading=false; state.drill.error='Could not reach the server.'; render(); });
 }
