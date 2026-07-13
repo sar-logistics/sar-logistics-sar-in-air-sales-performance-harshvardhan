@@ -5103,13 +5103,9 @@ function computeDrillResult(entity, metric, month){
 
   var weekMon = null, weekSun = null;
   if (isWeek){
-    var isoKey = month.slice(5);
-    var wParts = isoKey.split('-W');
-    var iy = parseInt(wParts[0],10), wn = parseInt(wParts[1],10);
-    var j4 = new Date(Date.UTC(iy,0,4)); var j4d=(j4.getUTCDay()+6)%7;
-    var w1m=new Date(j4); w1m.setUTCDate(j4.getUTCDate()-j4d);
-    weekMon = new Date(w1m); weekMon.setUTCDate(w1m.getUTCDate()+(wn-1)*7);
-    weekSun = new Date(weekMon); weekSun.setUTCDate(weekMon.getUTCDate()+6); weekSun.setUTCHours(23,59,59,999);
+    var _wk = isoWeekFromKey(month.slice(5));
+    weekMon = _wk.monday;
+    weekSun = new Date(_wk.sunday); weekSun.setUTCHours(23,59,59,999);
   }
   var drStart = isDR ? new Date(drBits[1]+'T00:00:00Z') : null;
   var drEnd   = isDR ? new Date(drBits[2]+'T23:59:59Z') : null;
@@ -5155,8 +5151,8 @@ function computeDrillResult(entity, metric, month){
     if (!isFY && !isYear && !isRange && !isWeek && !isDR && ml !== month) continue;
     if (isYear && yearSuf && !ml.endsWith('-'+yearSuf)) continue;
     if (isRange){ var mi=FY_MONTHS_ALL.indexOf(ml); if(mi<rangeStart||mi>rangeEnd) continue; }
-    if (isWeek){ var rd=new Date(row._dt); if(rd<weekMon||rd>weekSun) continue; }
-    if (isDR){ var rd2=new Date(row._dt); if(rd2<drStart||rd2>drEnd) continue; }
+    if (isWeek){ var rd=new Date(row._d); if(rd<weekMon||rd>weekSun) continue; }
+    if (isDR){ var rd2=new Date(row._d); if(rd2<drStart||rd2>drEnd) continue; }
 
     // Entity filter
     if (isGT) {
@@ -5201,7 +5197,7 @@ function computeDrillResult(entity, metric, month){
   }
 
   // Sort by date descending
-  matched.sort(function(a,b){ return b.row._dt - a.row._dt; });
+  matched.sort(function(a,b){ return new Date(b.row._d) - new Date(a.row._d); });
 
   var totalGP=0, totalRevenue=0, totalMetric=0;
   var outRows = matched.slice(0,6000).map(function(item){
