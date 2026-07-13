@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v32'; // v32: IST timezone fix for ETD date bucketing
+var CACHE_VERSION = 'v33'; // v33: force clear after IST + lob metric fix
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5446,7 +5446,7 @@ function openInsightDrill(drillType, name) {
 }
 
 function openDrill(entity, metric, col, valueFmt){
-  var cacheKey = entity+'||'+metric+'||'+col+'||'+(state.filterLobs||[]).join(',');
+  var cacheKey = CACHE_VERSION+'||'+entity+'||'+metric+'||'+col+'||'+(state.filterLobs||[]).join(',');
 
   // 1. In-memory cache — instant repeat clicks
   var mem = _drillResultCache[cacheKey];
