@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v36'; // v36: zone drill uses repsRaw not repsRawOriginal
+var CACHE_VERSION = 'v37'; // v37: zone drill uses e.zone code not e.name
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -4190,9 +4190,9 @@ function tableRows(){
       return {
         type:'metric', label:label, padLeft:(52+indent*18)+'px', labelColor:color,
         labelWeight:indent?500:600, labelStyle:indent?'italic':'normal',
-        caret:arrowChar, toggleType:toggleType||false, entityName:e.name,
+        caret:arrowChar, toggleType:toggleType||false, entityName: isZone ? e.zone : e.name,
         repInfo:repInfo||null, rowBg: groupBg, isZoneBlock: isZone, isGrandBlock: isGrand,
-        cells:buildCells(fy, vals, type, color, e.name, label, colLabels, noTarget, rawColKeys)
+        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, label, colLabels, noTarget, rawColKeys)
       };
     }
 
