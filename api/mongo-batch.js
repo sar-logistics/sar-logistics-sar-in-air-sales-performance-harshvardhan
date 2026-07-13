@@ -352,6 +352,7 @@ async function getDrillRows(db, entity, metric, month) {
       { coll: "srr_sea_import",  countryField: "Loading Port",       fromPort: true  },
       { coll: "srr_air_export",  countryField: "Discharge Port",     fromPort: true  },
       { coll: "srr_air_import",  countryField: "Loading Port",       fromPort: true  },
+      // ISO Tank has no dedicated SRR collections — rows will use job-field fallback below
     ];
     const srrDrillMap = {}; // shipmentNo → tradelane string
     await Promise.all(SRR_DRILL_CONFIG.map(async (cfg) => {
@@ -451,7 +452,22 @@ async function getDrillRows(db, entity, metric, month) {
           vol: chargeable,
           prov: isProvisional ? 1 : 0,
           customer: String(job["Customer"] || "").trim(),
-          _tl: srrDrillMap[String(job["Shipment No"] || "").trim()] || "",
+          _tl: (function(){
+            const sno = String(job["Shipment No"] || "").trim();
+            if (srrDrillMap[sno]) return srrDrillMap[sno];
+            // Fallback for Ocean/ISO Tank (no SRR): derive from job port fields
+            const isExport = collName.includes("export");
+            if (!isExport) {
+              return portToInfo(job["ETD Loading Port"] || job["Loading Port"] || "").tradelane || "";
+            }
+            // Export: try Discharge Country (plain text, Sea Export) then ETA Discharge (port code)
+            const dc = String(job["Discharge Country"] || "").trim();
+            if (dc) {
+              const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === dc.toLowerCase());
+              return entry ? entry.tradelane : dc;
+            }
+            return portToInfo(job["ETA Discharge"] || "").tradelane || "";
+          })(),
         });
       }
     }
@@ -1447,6 +1463,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     "Sales Person": 1, "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
     "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+    "Discharge Country": 1, "Loading Port": 1,
   };
 
   // countryMap: country → { shipments, revenue, gp, tons, teu, salesReps, lobs }
@@ -1475,10 +1492,33 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
 
       const sno = String(job["Shipment No"] || "").trim();
       const srrEntry = srrMap[sno];
-      if (!srrEntry) continue; // no SRR match → skip
 
-      const tradelane = srrEntry.tradelane || srrEntry.country;
-      const country   = srrEntry.country;
+      let tradelane = "", country = "";
+      if (srrEntry) {
+        tradelane = srrEntry.tradelane || srrEntry.country;
+        country   = srrEntry.country;
+      } else {
+        // Fallback: derive tradelane from job fields directly
+        // Export: use discharge port/country; Import: use loading port
+        if (cfg.dir === "Export") {
+          // Sea Export has "Discharge Country" (plain text); Air/ISO Tank Export has "ETA Discharge" (port code)
+          const dischargeCountry = String(job["Discharge Country"] || "").trim();
+          if (dischargeCountry) {
+            // Plain country name — look up tradelane
+            const entry = Object.values(TRADELANE_MAP).find(e => e.country.toLowerCase() === dischargeCountry.toLowerCase());
+            tradelane = entry ? entry.tradelane : dischargeCountry;
+            country   = dischargeCountry;
+          } else {
+            // Port code field (Air/ISO Tank export)
+            const info = portToInfo(job["ETA Discharge"] || "");
+            tradelane = info.tradelane; country = info.country;
+          }
+        } else {
+          // Import: loading port field
+          const info = portToInfo(job["ETD Loading Port"] || job["Loading Port"] || "");
+          tradelane = info.tradelane; country = info.country;
+        }
+      }
       if (!tradelane) continue;
 
       const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
