@@ -5228,29 +5228,24 @@ function computeDrillResult(entity, metric, month){
   var yearSuf   = isYear  ? month.split(':')[1] : null;
   var drBits    = isDR    ? month.split(':')    : null;
 
+  // Week boundaries using same isoWeekFromKey the table uses
   var weekMon = null, weekSun = null;
   if (isWeek){
-    var isoKey = month.slice(5);
-    var wParts = isoKey.split('-W');
-    var iy = parseInt(wParts[0],10), wn = parseInt(wParts[1],10);
-    var j4 = new Date(Date.UTC(iy,0,4)); var j4d=(j4.getUTCDay()+6)%7;
-    var w1m=new Date(j4); w1m.setUTCDate(j4.getUTCDate()-j4d);
-    weekMon = new Date(w1m); weekMon.setUTCDate(w1m.getUTCDate()+(wn-1)*7);
-    weekSun = new Date(weekMon); weekSun.setUTCDate(weekMon.getUTCDate()+6); weekSun.setUTCHours(23,59,59,999);
+    var _wk = isoWeekFromKey(month.slice(5));
+    weekMon = _wk.monday;
+    weekSun = new Date(_wk.sunday); weekSun.setUTCHours(23,59,59,999);
   }
   var drStart = isDR ? new Date(drBits[1]+'T00:00:00Z') : null;
   var drEnd   = isDR ? new Date(drBits[2]+'T23:59:59Z') : null;
 
-  // FY_MONTHS accessible globally from months26 context
   var FY_MONTHS_ALL = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25',
     'Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26',
     'Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
     'Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
-
   var rangeStart = isRange ? FY_MONTHS_ALL.indexOf(rangeBits[1]) : -1;
   var rangeEnd   = isRange ? FY_MONTHS_ALL.indexOf(rangeBits[2]) : -1;
 
-  // Build LOB collection filter from active filterLobs
+  // LOB filter — map filterLobs keys to collection name matchers
   var _activeLobFilter = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
   var _LOB_TO_CL = {
     'AIR EXPORT':     function(cl){ return cl.includes('air') && cl.includes('export'); },
@@ -5261,88 +5256,125 @@ function computeDrillResult(entity, metric, month){
     'ISOTANK IMPORT': function(cl){ return cl.includes('isotank') && cl.includes('import'); },
   };
 
+  // Build set of normalized raw names for reps currently in repsRaw (respects RLS + filterReps)
+  // repsRaw contains display names — we need to map to raw normalized names via normalizeName
+  // Since display name ≠ raw name, we match row._sp against normalizeName of each repsRaw entry
+  // BUT: repsRaw.name IS the display name from mapping. row._sp IS normalizeName(rawSalesPersonName).
+  // The correct bridge: normalizeName(displayName) may not equal row._sp.
+  // Instead use: for each rep in repsRaw, check if any allDrillRow._sp matches by
+  // trying normalizeName on the rep's name (handles "Name | Code" format by stripping pipe).
+  // Build lookup: Set of normSP values that belong to current repsRaw
+  var _repsRawNorms = null; // built lazily only when needed
+
+  function getRepsRawNorms() {
+    if (_repsRawNorms) return _repsRawNorms;
+    _repsRawNorms = {};
+    repsRaw.forEach(function(r){
+      if (r.isBranch) return;
+      // normalizeName strips pipe suffix: "Radha Singh | INZ01" -> "radha singh | inz01"
+      // but row._sp = normalizeName(rawSalesPersonName) which might be "radha singh"
+      // So we try both: full normalized display name AND first-segment only
+      var full = normalizeName(r.name);
+      var seg  = r.name.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
+      _repsRawNorms[full] = r;
+      _repsRawNorms[seg]  = r;
+    });
+    return _repsRawNorms;
+  }
+
   var matched = [];
   for (var i=0; i<allDrillRows.length; i++){
     var row = allDrillRows[i];
 
-    // LOB filter — apply active filterLobs to restrict drill rows
-    if (_activeLobFilter) {
+    // 1. LOB filter
+    if (_activeLobFilter && !isWeek) { // weekly: weekData not LOB-filtered in table
       var _lobMatch = _activeLobFilter.some(function(lob){
         return _LOB_TO_CL[lob] && _LOB_TO_CL[lob](row._cl);
       });
       if (!_lobMatch) continue;
     }
 
-    // Collection/metric filter
+    // 2. Metric/collection filter
     if (isAir && !row._cl.includes('air')) continue;
     if (isTeu && !row._cl.includes('sea') && !row._cl.includes('isotank')) continue;
 
-    // Date filter
+    // 3. Date filter — use row._d (Date object serialized as ISO string)
     var ml = row._ml;
+    var rd = null; // parsed date, only when needed
     if (!isFY && !isYear && !isRange && !isWeek && !isDR && ml !== month) continue;
     if (isYear && yearSuf && !ml.endsWith('-'+yearSuf)) continue;
     if (isRange){ var mi=FY_MONTHS_ALL.indexOf(ml); if(mi<rangeStart||mi>rangeEnd) continue; }
-    if (isWeek){ var rd=new Date(row._dt); if(rd<weekMon||rd>weekSun) continue; }
-    if (isDR){ var rd2=new Date(row._dt); if(rd2<drStart||rd2>drEnd) continue; }
+    if (isWeek || isDR){ rd = new Date(row._d); }
+    if (isWeek && (rd<weekMon||rd>weekSun)) continue;
+    if (isDR  && (rd<drStart ||rd>drEnd))  continue;
 
-    // Entity filter
-    if (!isGT){
-      var sp = row._sp;
-      // Normalised rep name from the row's salesPerson field
-      var spNorm = sp; // already normalised from backend
-      if (entity === 'Cross Sales'){
-        // Cross Sales = unmapped reps
-        // Check against repsRawOriginal names
-        var isMapped = repsRawOriginal.some(function(r){ return !r.isBranch && r.name === row.salesPerson; });
-        if (isMapped) continue;
-      } else {
-        // Normalize entity for comparison
-        var normEntity = entity.toLowerCase().split('|')[0].trim();
-        var normSP     = (row._sp || '').toLowerCase().split('|')[0].trim();
-        var rawSP      = (row.salesPerson || '').split('|')[0].trim().toLowerCase();
-
-        // Zone match: any rep in this zone whose normalized name matches
-        var repInZone = repsRawOriginal.some(function(r){
-          return r.zone === entity && (
-            r.name.toLowerCase() === normSP ||
-            r.name.toLowerCase() === rawSP  ||
-            normalizeName(r.name) === normSP
-          );
+    // 4. Entity filter
+    var sp = row._sp; // normalizeName(rawSalesPersonName) from server
+    if (isGT){
+      // Grand Total = only rows from reps currently in repsRaw (respects RLS/filterReps)
+      var norms = getRepsRawNorms();
+      if (!norms[sp]) continue;
+    } else if (entity === 'Cross Sales'){
+      // Cross Sales = unmapped rows (not in any repsRaw entry)
+      var norms2 = getRepsRawNorms();
+      if (norms2[sp]) continue; // mapped rep → skip
+    } else {
+      // Rep or Zone entity
+      // Try zone match first: any rep in this zone whose normalized name = sp
+      var zoneMatch = repsRawOriginal.some(function(r){
+        if (r.isBranch) return false;
+        if (r.zone !== entity) return false;
+        var full = normalizeName(r.name);
+        var seg  = r.name.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
+        return full === sp || seg === sp;
+      });
+      // Rep match: entity IS the display name of this rep
+      var repMatch = false;
+      if (!zoneMatch){
+        // Find the rep whose display name = entity
+        var repEntry = repsRawOriginal.find(function(r){
+          return !r.isBranch && r.name === entity;
         });
-        // Rep match: normalized name or raw first-segment match
-        var isRepMatch = normSP === normEntity || rawSP === normEntity;
-        // Branch match: location
-        var isBranchMatch = row._loc === entity;
-        if (!repInZone && !isRepMatch && !isBranchMatch) continue;
+        if (repEntry){
+          var full2 = normalizeName(repEntry.name);
+          var seg2  = repEntry.name.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
+          repMatch = (sp === full2 || sp === seg2);
+        } else {
+          // Fallback: normalize entity directly and compare
+          var normEnt = normalizeName(entity);
+          var segEnt  = entity.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
+          repMatch = (sp === normEnt || sp === segEnt);
+        }
       }
+      // Branch match
+      var branchMatch = row._loc === entity;
+      if (!zoneMatch && !repMatch && !branchMatch) continue;
     }
 
     var metricVal = metric==='Shipments' ? 1 : isAir ? (row.vol||0) : (row.t||0);
     matched.push({ row:row, m:metricVal });
   }
 
-  // Sort by date descending
-  matched.sort(function(a,b){ return b.row._dt - a.row._dt; });
+  // Sort by date descending using _d field
+  matched.sort(function(a,b){ return new Date(b.row._d) - new Date(a.row._d); });
 
-  var totalGP=0, totalRevenue=0, totalMetric=0;
-  var outRows = matched.slice(0,6000).map(function(item){
-    totalGP      += item.row.g||0;
-    totalRevenue += item.row.r||0;
-    totalMetric  += item.m||0;
-    return Object.assign({}, item.row, {m: item.m});
-  });
-  // Sum totals over ALL matched, not just the 6000 slice
-  // Split GP into Provisional (OL/FL not done) and Actual (OL/FL done)
   var allGP=0, allRev=0, allMetric=0, allProvGP=0, allActualGP=0;
-  matched.forEach(function(item){
+  var outRows = matched.slice(0,6000).map(function(item){
     var r = item.row;
-    allGP  += r.g||0;
-    allRev += r.r||0;
-    allMetric += item.m||0;
-    // prov flag: 1 = provisional (lock not done), 0 = actual (lock done)
+    allGP  += r.g||0; allRev += r.r||0; allMetric += item.m||0;
     if (r.prov === 1) allProvGP   += r.g||0;
     else              allActualGP += r.g||0;
+    return Object.assign({}, r, {m: item.m});
   });
+  // Totals over ALL matched (not just 6000 slice)
+  if (matched.length > 6000){
+    allGP=0; allRev=0; allMetric=0; allProvGP=0; allActualGP=0;
+    matched.forEach(function(item){
+      var r=item.row;
+      allGP+=r.g||0; allRev+=r.r||0; allMetric+=item.m||0;
+      if(r.prov===1) allProvGP+=r.g||0; else allActualGP+=r.g||0;
+    });
+  }
 
   return {
     success:true, entity:entity, metric:metric, month:month,
@@ -5451,7 +5483,8 @@ function openDrill(entity, metric, col, valueFmt){
     lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
   render();
 
-  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col);
+  var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col)
+         +(state.filterLobs&&state.filterLobs.length>0?'&lobs='+encodeURIComponent(state.filterLobs.join(',')):'');
   fetch('/api/mongo-batch'+qs, { priority:'high' })
     .then(function(r){ return r.json(); })
     .then(function(data){
