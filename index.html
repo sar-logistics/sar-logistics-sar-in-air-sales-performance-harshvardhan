@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v35'; // v35: Grand Total drill includes cross sales + branches
+var CACHE_VERSION = 'v36'; // v36: zone drill uses repsRaw not repsRawOriginal
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5310,20 +5310,16 @@ function computeDrillResult(entity, metric, month){
       var norms2 = getRepsRawNorms();
       if (norms2[sp]) continue; // mapped rep → skip
     } else {
-      // Rep or Zone entity
-      // Try zone match first: any rep in this zone whose normalized name = sp
-      var zoneMatch = repsRawOriginal.some(function(r){
+      // Rep or Zone entity — use repsRaw (same filtered set as zoneEntity uses)
+      var zoneMatch = repsRaw.some(function(r){
         if (r.isBranch) return false;
         if (r.zone !== entity) return false;
-        var full = normalizeName(r.name);
-        var seg  = r.name.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
-        return full === sp || seg === sp;
+        var seg = r.name.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
+        return normalizeName(r.name) === sp || seg === sp;
       });
-      // Rep match: entity IS the display name of this rep
       var repMatch = false;
       if (!zoneMatch){
-        // Find the rep whose display name = entity
-        var repEntry = repsRawOriginal.find(function(r){
+        var repEntry = repsRaw.find(function(r){
           return !r.isBranch && r.name === entity;
         });
         if (repEntry){
@@ -5331,13 +5327,11 @@ function computeDrillResult(entity, metric, month){
           var seg2  = repEntry.name.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
           repMatch = (sp === full2 || sp === seg2);
         } else {
-          // Fallback: normalize entity directly and compare
           var normEnt = normalizeName(entity);
           var segEnt  = entity.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
           repMatch = (sp === normEnt || sp === segEnt);
         }
       }
-      // Branch match
       var branchMatch = row._loc === entity;
       if (!zoneMatch && !repMatch && !branchMatch) continue;
     }
