@@ -4603,24 +4603,15 @@ function drawer(){
 
     function cellVal(c, s){ return c.derived ? c.derived(s) : s[c.k]; }
 
-    // ── LOB tabs — computed from whatever LOB values actually appear ──
-    var lobCounts = {};
-    d.rows.forEach(function(r){ lobCounts[r.lob] = (lobCounts[r.lob]||0) + 1; });
-    var lobTabs = ['ALL'].concat(Object.keys(lobCounts).sort());
-    var activeLobTab = state.drill.lobTab || 'ALL';
-    if (lobTabs.indexOf(activeLobTab) === -1) activeLobTab = 'ALL';
-
-    // ── Apply LOB tab + per-column filters to determine the visible row set ──
+    // ── Apply global LOB filter + per-column filters to determine the visible row set ──
     var columnFilters = state.drill.columnFilters || {};
     var _activeDrillLobs = (state.filterLobs && state.filterLobs.length > 0) ? state.filterLobs : null;
     var visibleRows = d.rows.filter(function(s){
-      // LOB tab filter
-      if (activeLobTab !== 'ALL' && s.lob !== activeLobTab) return false;
-      // Global LOB filter — when ALL tab selected, still restrict to active filterLobs
-      if (activeLobTab === 'ALL' && _activeDrillLobs && _activeDrillLobs.indexOf(s.lob) === -1) return false;
+      // Global LOB filter — always restrict to active filterLobs
+      if (_activeDrillLobs && _activeDrillLobs.indexOf(s.lob) === -1) return false;
       for (var colKey in columnFilters) {
         var allowed = columnFilters[colKey];
-        if (!allowed || allowed.length === 0) continue; // no restriction
+        if (!allowed || allowed.length === 0) continue;
         var col = COLS.filter(function(c){ return c.k === colKey; })[0];
         if (!col) continue;
         var v = String(cellVal(col, s) == null ? '' : cellVal(col, s));
@@ -4658,14 +4649,19 @@ function drawer(){
     // Filtered count = what user actually sees (respects LOB filter)
     var filteredCount  = visibleRows.length;
 
-    var dTeuSum=0;
-    visibleRows.forEach(function(r){ dTeuSum += r.t || 0; });
+    var dTeuSum=0, dRevSum=0, dCostSum=0, dGpSum=0, dProvGpSum=0, dActualGpSum=0;
+    visibleRows.forEach(function(r){
+      dTeuSum      += r.t || 0;
+      dRevSum      += r.r || 0;
+      dCostSum     += r.x || 0;
+      dGpSum       += r.g || 0;
+      if (r.operationLock) dActualGpSum += (r.actualProfit  || 0);
+      else                 dProvGpSum   += (r.provisionalProfit || 0);
+    });
 
-    // BACKEND totals = full dataset (all matched rows, not just capped rows shown)
-    var fullRevSum    = d.totalRevenue || 0;
-    var fullCostSum   = d.totalCost    || 0;
-    var fullGpSum     = d.totalGP      || 0;
-    var fullMetricSum = d.totalMetric  || 0;
+    var fullGpSum  = dGpSum;
+    var fullRevSum = dRevSum;
+    var fullCostSum= dCostSum;
 
     function fmtDate(v){
       if (!v) return '<span style="color:#C7CEDA;">—</span>';
@@ -4741,30 +4737,12 @@ function drawer(){
     +'</tr>';
     totalRow = '<tfoot style="position:sticky;bottom:0;z-index:5;">'+totalRow+'</tfoot>';
 
-    // ── LOB tab bar ──
-    var tabBar = '<div style="padding:10px 24px;border-bottom:1px solid #EEF2F8;background:#FFFFFF;flex-shrink:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
-      + lobTabs.map(function(tab){
-          var active = tab === activeLobTab;
-          var inFilter = !active && activeLobTab === 'ALL' && tab !== 'ALL' && (state.filterLobs||[]).indexOf(tab) > -1;
-          var count = tab === 'ALL' ? (_activeDrillLobs ? d.rows.filter(function(r){ return _activeDrillLobs.indexOf(r.lob)>-1; }).length : d.rows.length) : (lobCounts[tab]||0);
-          var _bg = active ? BRAND_A1 : inFilter ? '#DBEAFE' : '#F4F7FA';
-          var _cl = active ? '#FFFFFF' : inFilter ? '#1D5FCC' : '#374151';
-          var _bo = inFilter ? 'border:1.5px solid #93B4F5;' : 'border:none;';
-          return '<button data-act="setDrillLobTab" data-val="'+esc(tab)+'" style="background:'+_bg+';color:'+_cl+';'+_bo+'border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;cursor:pointer;white-space:nowrap;">'
-            +esc(tab)+' <span style="opacity:0.75;font-weight:600;">'+count+'</span>'
-          +'</button>';
-        }).join('')
-      +(Object.keys(columnFilters).some(function(k){ return columnFilters[k] && columnFilters[k].length>0; })
-        ? '<button data-act="clearDrillColFilters" style="background:#FEF3C7;border:none;border-radius:999px;padding:7px 14px;font-size:11px;font-weight:700;color:#92610A;cursor:pointer;white-space:nowrap;margin-left:auto;">Clear column filters</button>'
-        : '')
-    +'</div>';
-
     // ── Column filter dropdown popup (only one open at a time) ──
     var filterPopup = '';
     if (state.drill.openFilterCol) {
       var fCol = COLS.filter(function(c){ return c.k === state.drill.openFilterCol; })[0];
       if (fCol) {
-        var uniqueVals = Array.from(new Set(d.rows.map(function(s){
+        var uniqueVals = Array.from(new Set(visibleRows.map(function(s){
           var v = cellVal(fCol, s);
           return v === null || v === undefined ? '' : String(v);
         }))).sort();
@@ -4803,8 +4781,7 @@ function drawer(){
       }
     }
 
-    bodyContent = tabBar
-      + '<div style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;position:relative;">'
+    bodyContent = '<div style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;position:relative;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
         +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
         +'<tbody id="drill-tbody">'+bodyRows
@@ -4836,10 +4813,10 @@ function drawer(){
   var footer;
   if (!d.loading && !d.error && d.rows && d.rows.length > 0) {
     if (d.metric === 'GP') {
-      // Show Provisional + Actual + Total breakdown
-      var provGP   = d.totalProvGP   || 0;
-      var actualGP = d.totalActualGP || 0;
-      var totGP    = provGP + actualGP;
+      // Show Provisional + Actual + Total breakdown — all from visibleRows
+      var provGP   = dProvGpSum;
+      var actualGP = dActualGpSum;
+      var totGP    = dGpSum;
       footer = '<div style="padding:10px 18px;border-top:1px solid #E8EDF6;background:#F8FAFC;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">'
         +'<span style="font-size:11.5px;font-weight:600;color:#5B6678;">'+footerLabel
           +' <span style="color:#9AAFC8;font-weight:500;">('+filteredCount.toLocaleString()+' jobs)</span>'
@@ -4867,7 +4844,7 @@ function drawer(){
           +' <span style="color:#9AAFC8;font-weight:500;">('+filteredCount.toLocaleString()+' jobs)</span>'
         +'</span>'
         +'<span style="font-family:\'DM Mono\',monospace;font-size:14px;font-weight:800;color:#15875A;">'
-          +(d.metric==='Shipments' ? filteredCount.toLocaleString() : fullMetricSum.toFixed(2))
+          +(d.metric==='Shipments' ? filteredCount.toLocaleString() : dGpSum.toFixed(2))
         +'</span>'
       +'</div>';
     }
