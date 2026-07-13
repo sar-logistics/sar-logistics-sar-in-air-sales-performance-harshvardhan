@@ -279,6 +279,31 @@ function getDateColumnFor(cls) {
   return "Job Date";
 }
 
+// Google Sheets exports dates such as 04/05/2026 in day/month/year format.
+// `new Date("04/05/2026")` treats that as April 5 in JavaScript, incorrectly
+// putting 4 May shipments into April. Parse date-only values explicitly and
+// use this for every report and drill-down month bucket.
+function parseSheetDate(value) {
+  if (value instanceof Date) return new Date(value.getTime());
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const utc = new Date(excelEpoch.getTime() + Math.round(value * 86400000));
+    return new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+  }
+  const text = String(value || "").trim();
+  let match = text.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})(?:\s|$)/);
+  if (match) {
+    const day = Number(match[1]), month = Number(match[2]) - 1;
+    const year = Number(match[3].length === 2 ? "20" + match[3] : match[3]);
+    const parsed = new Date(year, month, day);
+    return parsed.getFullYear() === year && parsed.getMonth() === month && parsed.getDate() === day ? parsed : null;
+  }
+  match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|T)/);
+  if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const parsed = new Date(text);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
 // Indian Fiscal Years — FY26 runs Apr 2025 → Mar 2026, FY27 runs Apr 2026 → Mar 2027.
 // Both are listed here since FY26 and FY27 job data now coexist in the same
 // MongoDB collections (appended, not replaced) and need to be recognized
@@ -379,8 +404,8 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         const dateCol = getDateColumnFor(cls);
         const rawDate = job[dateCol] || job["Job Date"];
         if (!rawDate) continue;
-        const d = new Date(rawDate);
-        if (isNaN(d.getTime())) continue;
+        const d = parseSheetDate(rawDate);
+        if (!d) continue;
         const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
         if (!FY_MONTHS.includes(monthLabel)) continue;
         const salesPerson = normalizeName(job["Sales Person"]);
@@ -709,8 +734,8 @@ async function computeSalesAggregate(db) {
       const fallbackDate = job["Job Date"];
       const rawDate = primaryDate || fallbackDate;
       if (rawDate) {
-        const d = new Date(rawDate);
-        if (!isNaN(d.getTime())) {
+        const d = parseSheetDate(rawDate);
+        if (d) {
           monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
           rowDate = d;
         }
@@ -1060,8 +1085,8 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
       if (activeMonthSet) {
         const rawDate = job[dateCol] || job["Job Date"];
         if (!rawDate) continue;
-        const dObj = new Date(rawDate);
-        if (isNaN(dObj.getTime())) continue;
+        const dObj = parseSheetDate(rawDate);
+        if (!dObj) continue;
         const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
         if (!activeMonthSet.has(ml)) continue;
       }
@@ -1465,8 +1490,8 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       if (activeMonthSet) {
         const rawDate = job[cfg.dateCol] || job["Job Date"];
         if (!rawDate) continue;
-        const dObj = new Date(rawDate);
-        if (isNaN(dObj.getTime())) continue;
+        const dObj = parseSheetDate(rawDate);
+        if (!dObj) continue;
         const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
         if (!activeMonthSet.has(ml)) continue;
       }
@@ -1511,8 +1536,8 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       const rawDateM = job[cfg.dateCol] || job["Job Date"];
       let monthLabel = "";
       if (rawDateM) {
-        const dM = new Date(rawDateM);
-        if (!isNaN(dM.getTime())) monthLabel = MONTH_NAMES[dM.getMonth()] + "-" + String(dM.getFullYear()).slice(2);
+        const dM = parseSheetDate(rawDateM);
+        if (dM) monthLabel = MONTH_NAMES[dM.getMonth()] + "-" + String(dM.getFullYear()).slice(2);
       }
 
       function addTo(map, key) {
@@ -1670,8 +1695,8 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
       if (activeMonthSet) {
         const rawDate = job[dateCol] || job["Job Date"];
         if (!rawDate) continue;
-        const dObj = new Date(rawDate);
-        if (isNaN(dObj.getTime())) continue;
+        const dObj = parseSheetDate(rawDate);
+        if (!dObj) continue;
         const ml = MONTH_NAMES[dObj.getMonth()] + "-" + String(dObj.getFullYear()).slice(2);
         if (!activeMonthSet.has(ml)) continue;
       }
@@ -1918,8 +1943,8 @@ async function computeBothPendency(db) {
 
       const rawDate = job[dateField] || job["Job Date"];
       if (!rawDate) continue;
-      const d = new Date(rawDate);
-      if (isNaN(d.getTime())) continue;
+      const d = parseSheetDate(rawDate);
+      if (!d) continue;
       const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
       if (!FY_MONTHS.includes(monthLabel)) continue;
 
@@ -2334,8 +2359,8 @@ module.exports = async function handler(req, res) {
 
           const rawDate = job[dateField] || job['Job Date'];
           if (!rawDate) continue;
-          const d = new Date(rawDate);
-          if (isNaN(d.getTime())) continue;
+          const d = parseSheetDate(rawDate);
+          if (!d) continue;
           const ml = MONTH_NAMES[d.getMonth()] + '-' + String(d.getFullYear()).slice(2);
           if (!FY_MONTHS.includes(ml)) continue;
           // Month filter — null means all FY months, Set means specific months
