@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v39'; // v39: _zone+_dn stamped on drill rows for clean matching
+var CACHE_VERSION = 'v40'; // v40: branch match requires unmapped row (_zone null)
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5313,9 +5313,10 @@ function computeDrillResult(entity, metric, month){
         // Zone: row._zone must match
         if (row._zone !== entity) continue;
       } else {
-        // Rep: row._dn must match display name, OR Branch: location must match
-        var repMatch    = row._dn === entity;
-        var branchMatch = (row.location || '').trim() === entity;
+        // Rep: row._dn must match display name
+        var repMatch = row._dn === entity;
+        // Branch: location must match AND row must be unmapped (no zone)
+        var branchMatch = !row._zone && (row.location || '').trim() === entity;
         if (!repMatch && !branchMatch) continue;
       }
     }
