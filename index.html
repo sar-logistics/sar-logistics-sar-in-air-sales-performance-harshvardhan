@@ -5097,6 +5097,10 @@ function computeDrillResult(entity, metric, month){
   var isAir  = metric === 'Tons (Air)';
   var isTeu  = metric === 'TEUs (Ocean)' || metric === 'LCL (Ocean in CBM)';
 
+  // DEBUG
+  var dbg = { total: allDrillRows.length, lobFail:0, dateFail:0, entityFail:0, passed:0 };
+  console.log('[drill] START entity='+entity+' metric='+metric+' month='+month+' allDrillRows='+allDrillRows.length);
+
   var rangeBits = isRange ? month.split(':') : null;
   var yearSuf   = isYear  ? month.split(':')[1] : null;
   var drBits    = isDR    ? month.split(':')    : null;
@@ -5143,51 +5147,37 @@ function computeDrillResult(entity, metric, month){
     }
 
     // Collection/metric filter
-    if (isAir && !row._cl.includes('air')) continue;
-    if (isTeu && !row._cl.includes('sea') && !row._cl.includes('isotank')) continue;
+    if (isAir && !row._cl.includes('air')) { dbg.lobFail++; continue; }
+    if (isTeu && !row._cl.includes('sea') && !row._cl.includes('isotank')) { dbg.lobFail++; continue; }
 
     // Date filter
     var ml = row._ml;
-    if (!isFY && !isYear && !isRange && !isWeek && !isDR && ml !== month) continue;
-    if (isYear && yearSuf && !ml.endsWith('-'+yearSuf)) continue;
-    if (isRange){ var mi=FY_MONTHS_ALL.indexOf(ml); if(mi<rangeStart||mi>rangeEnd) continue; }
-    if (isWeek){ var rd=new Date(row._d); if(rd<weekMon||rd>weekSun) continue; }
-    if (isDR){ var rd2=new Date(row._d); if(rd2<drStart||rd2>drEnd) continue; }
+    if (!isFY && !isYear && !isRange && !isWeek && !isDR && ml !== month) { dbg.dateFail++; continue; }
+    if (isYear && yearSuf && !ml.endsWith('-'+yearSuf)) { dbg.dateFail++; continue; }
+    if (isRange){ var mi=FY_MONTHS_ALL.indexOf(ml); if(mi<rangeStart||mi>rangeEnd){ dbg.dateFail++; continue; } }
+    if (isWeek){ var rd=new Date(row._d); if(rd<weekMon||rd>weekSun){ dbg.dateFail++; continue; } }
+    if (isDR){ var rd2=new Date(row._d); if(rd2<drStart||rd2>drEnd){ dbg.dateFail++; continue; } }
 
     // Entity filter
     if (isGT) {
-      // Grand Total: include only rows whose display name (_dn) is in repsRaw
-      // _dn is stamped server-side from repLookupByFY — null means unmapped/branch
-      // Fallback: if _dn missing (old cache), accept all rows with a known _sp
       if (row._dn !== undefined) {
-        // New rows: match by display name
-        if (!row._dn) continue;
+        if (!row._dn) { dbg.entityFail++; continue; }
         var _inRepsRaw = false;
         for (var ri = 0; ri < repsRaw.length; ri++) {
           if (!repsRaw[ri].isBranch && repsRaw[ri].name === row._dn) { _inRepsRaw = true; break; }
         }
-        if (!_inRepsRaw) continue;
+        if (!_inRepsRaw) { dbg.entityFail++; continue; }
       }
-      // else: old rows without _dn — allow through (better than showing zero)
     } else {
-      // Normalised rep name from the row's salesPerson field
-      var spNorm = row._sp; // already normalised from backend
+      var spNorm = row._sp;
       if (entity === 'Cross Sales'){
-        // Cross Sales = unmapped reps
-        // Check against repsRawOriginal names
         var isMapped = repsRawOriginal.some(function(r){ return !r.isBranch && r.name === row.salesPerson; });
-        if (isMapped) continue;
+        if (isMapped) { dbg.entityFail++; continue; }
       } else {
-        // Use _dn (display name from mapping) for matching when available
-        var dnLower = row._dn ? row._dn.toLowerCase() : '';
         var normEntity = entity.toLowerCase().split('|')[0].trim();
         var normSP     = (row._sp || '').toLowerCase();
         var rawSP      = (row.salesPerson || '').split('|')[0].trim().toLowerCase();
-
-        // Rep match: display name matches entity (most reliable), fall back to _sp
         var isRepMatch = (row._dn && row._dn.toLowerCase() === normEntity) || normSP === normEntity || rawSP === normEntity;
-
-        // Zone match: row's rep display name belongs to this zone
         var repInZone = false;
         if (row._dn) {
           repInZone = repsRawOriginal.some(function(r){ return !r.isBranch && r.zone === entity && r.name === row._dn; });
@@ -5196,13 +5186,12 @@ function computeDrillResult(entity, metric, month){
             return r.zone === entity && (r.name.toLowerCase() === normSP || normalizeName(r.name) === normSP);
           });
         }
-
-        // Branch match: location
         var isBranchMatch = row._loc === entity;
-        if (!repInZone && !isRepMatch && !isBranchMatch) continue;
+        if (!repInZone && !isRepMatch && !isBranchMatch) { dbg.entityFail++; continue; }
       }
     }
 
+    dbg.passed++;
     var metricVal = metric==='Shipments' ? 1 : isAir ? (row.vol||0) : (row.t||0);
     matched.push({ row:row, m:metricVal });
   }
@@ -5230,6 +5219,9 @@ function computeDrillResult(entity, metric, month){
     else              allActualGP += r.g||0;
   });
 
+  console.log("[drill] RESULT lobFail="+dbg.lobFail+" dateFail="+dbg.dateFail+" entityFail="+dbg.entityFail+" passed="+dbg.passed);
+  if (matched.length>0){var s=matched[0].row;console.log("[drill] sample _d="+s._d+" _dn="+JSON.stringify(s._dn)+" _sp="+s._sp+" _ml="+s._ml);}
+  if (isWeek) console.log("[drill] weekMon="+weekMon+" weekSun="+weekSun);
   return {
     success:true, entity:entity, metric:metric, month:month,
     count: matched.length,
