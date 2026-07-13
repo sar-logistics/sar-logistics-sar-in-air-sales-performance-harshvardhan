@@ -344,7 +344,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1830-wk-stamp"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13T1835-wk-stamp-v2"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
