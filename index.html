@@ -5159,10 +5159,15 @@ function computeDrillResult(entity, metric, month){
     if (isDR){ var rd2=new Date(row._dt); if(rd2<drStart||rd2>drEnd) continue; }
 
     // Entity filter
-    if (!isGT){
-      var sp = row._sp;
+    if (isGT) {
+      // Grand Total only includes rows from known mapped reps (same as table aggregation)
+      var _gtMapped = repsRawOriginal.some(function(r){
+        return !r.isBranch && normalizeName(r.name) === row._sp;
+      });
+      if (!_gtMapped) continue;
+    } else {
       // Normalised rep name from the row's salesPerson field
-      var spNorm = sp; // already normalised from backend
+      var spNorm = row._sp; // already normalised from backend
       if (entity === 'Cross Sales'){
         // Cross Sales = unmapped reps
         // Check against repsRawOriginal names
