@@ -333,7 +333,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1620-no-db-date-filter"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13T1640-include-no-rep"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -412,8 +412,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         if (!d) continue;
         const monthLabel = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
         if (!FY_MONTHS.includes(monthLabel)) continue;
-        const salesPerson = normalizeName(job["Sales Person"]);
-        if (!salesPerson) continue;
+        const salesPerson = normalizeName(job["Sales Person"]) || "no rep assigned";
 
         const { gp: rowGP, isProvisional } = pickGP(job, cls);
         const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
@@ -719,8 +718,7 @@ async function computeSalesAggregate(db) {
   for (const { collName, jobs } of allJobResults) {
 
     for (const job of jobs) {
-      const salesPerson = normalizeName(job["Sales Person"]);
-      if (!salesPerson) continue;
+      const salesPerson = normalizeName(job["Sales Person"]) || "no rep assigned";
 
       // Classify this row by its own LOB column (or _tab for ISO Tank),
       // NOT by which collection it happens to be stored in — protects
