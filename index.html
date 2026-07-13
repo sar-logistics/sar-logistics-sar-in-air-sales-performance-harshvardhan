@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v42'; // v42: force reload after _wk stamp
+var CACHE_VERSION = 'v43'; // v43: bust stale weekData localStorage (sar_week_cache_v3)
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -725,7 +725,7 @@ function fetchWeekDataIfNeeded(callback){
     return;
   }
   try {
-    var lsCached = localStorage.getItem('sar_week_cache_v1');
+    var lsCached = localStorage.getItem('sar_week_cache_v3');
     if (lsCached) {
       var parsed = JSON.parse(lsCached);
       // Support both old array format and new {data,_cachedAt} format
@@ -755,7 +755,7 @@ function fetchWeekDataIfNeeded(callback){
         try {
           var toStore = repsRawOriginal.filter(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; })
             .map(function(r){ return {name:r.name, zone:r.zone, weekData:r.weekData}; });
-          localStorage.setItem('sar_week_cache_v1', JSON.stringify({data:toStore, _cachedAt:Date.now()}));
+          localStorage.setItem('sar_week_cache_v3', JSON.stringify({data:toStore, _cachedAt:Date.now()}));
         } catch(e){}
       }
       if (callback) callback();
