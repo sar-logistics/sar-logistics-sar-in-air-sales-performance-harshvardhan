@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v29'; // v29: bust stale drill cache — GP totals fix
+var CACHE_VERSION = 'v30'; // v30: _dn field on drill rows for accurate rep matching
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5156,12 +5156,14 @@ function computeDrillResult(entity, metric, month){
 
     // Entity filter
     if (isGT) {
-      // Grand Total only includes rows from repsRaw (the filtered rep list —
-      // respects RLS, filterReps, same set the table sums)
-      var _gtMapped = repsRaw.some(function(r){
-        return !r.isBranch && normalizeName(r.name) === row._sp;
-      });
-      if (!_gtMapped) continue;
+      // Grand Total: include only rows whose display name (_dn) is in repsRaw
+      // _dn is stamped server-side from repLookupByFY — null means unmapped/branch
+      if (!row._dn) continue;
+      var _inRepsRaw = false;
+      for (var ri = 0; ri < repsRaw.length; ri++) {
+        if (!repsRaw[ri].isBranch && repsRaw[ri].name === row._dn) { _inRepsRaw = true; break; }
+      }
+      if (!_inRepsRaw) continue;
     } else {
       // Normalised rep name from the row's salesPerson field
       var spNorm = row._sp; // already normalised from backend
@@ -5171,21 +5173,25 @@ function computeDrillResult(entity, metric, month){
         var isMapped = repsRawOriginal.some(function(r){ return !r.isBranch && r.name === row.salesPerson; });
         if (isMapped) continue;
       } else {
-        // Normalize entity for comparison
+        // Use _dn (display name from mapping) for matching when available
+        var dnLower = row._dn ? row._dn.toLowerCase() : '';
         var normEntity = entity.toLowerCase().split('|')[0].trim();
-        var normSP     = (row._sp || '').toLowerCase().split('|')[0].trim();
+        var normSP     = (row._sp || '').toLowerCase();
         var rawSP      = (row.salesPerson || '').split('|')[0].trim().toLowerCase();
 
-        // Zone match: any rep in this zone whose normalized name matches
-        var repInZone = repsRawOriginal.some(function(r){
-          return r.zone === entity && (
-            r.name.toLowerCase() === normSP ||
-            r.name.toLowerCase() === rawSP  ||
-            normalizeName(r.name) === normSP
-          );
-        });
-        // Rep match: normalized name or raw first-segment match
-        var isRepMatch = normSP === normEntity || rawSP === normEntity;
+        // Rep match: display name matches entity (most reliable)
+        var isRepMatch = dnLower === normEntity || normSP === normEntity || rawSP === normEntity;
+
+        // Zone match: row's rep display name belongs to this zone
+        var repInZone = false;
+        if (row._dn) {
+          repInZone = repsRawOriginal.some(function(r){ return !r.isBranch && r.zone === entity && r.name === row._dn; });
+        } else {
+          repInZone = repsRawOriginal.some(function(r){
+            return r.zone === entity && (r.name.toLowerCase() === normSP || normalizeName(r.name) === normSP);
+          });
+        }
+
         // Branch match: location
         var isBranchMatch = row._loc === entity;
         if (!repInZone && !isRepMatch && !isBranchMatch) continue;

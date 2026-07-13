@@ -398,6 +398,11 @@ async function getDrillRows(db, entity, metric, month) {
         const salesPerson = normalizeName(job["Sales Person"]);
         if (!salesPerson) continue;
 
+        // Resolve display name from mapping — used client-side for Grand Total matching
+        const fy = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25","Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"].includes(monthLabel) ? "FY26" : "FY27";
+        const _repMeta = repLookupByFY[fy]?.[salesPerson] || repLookupByFY["FY26"]?.[salesPerson] || repLookupByFY["FY27"]?.[salesPerson];
+        const _dn = _repMeta ? _repMeta.displayName : null; // null = unmapped/branch
+
         const { gp: rowGP, isProvisional } = pickGP(job, cls);
         const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
         const provRevenue   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
@@ -452,6 +457,7 @@ async function getDrillRows(db, entity, metric, month) {
           vol: chargeable,
           prov: isProvisional ? 1 : 0,
           customer: String(job["Customer"] || "").trim(),
+          _dn,  // display name from mapping — null if unmapped
           _tl: (function(){
             const sno = String(job["Shipment No"] || "").trim();
             if (srrDrillMap[sno]) return srrDrillMap[sno];
