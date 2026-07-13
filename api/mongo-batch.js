@@ -344,7 +344,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1800-zone-drill-fix"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13T1820-zone-dn-stamp"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -425,6 +425,12 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         if (!FY_MONTHS.includes(monthLabel)) continue;
         const salesPerson = normalizeName(job["Sales Person"]) || "no rep assigned";
 
+        // Resolve zone from mapping — used client-side for zone drill matching
+        const _fy = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25","Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"].includes(monthLabel) ? "FY26" : "FY27";
+        const _meta = repLookupByFY[_fy]?.[salesPerson] || repLookupByFY["FY26"]?.[salesPerson] || repLookupByFY["FY27"]?.[salesPerson];
+        const _zone = _meta ? _meta.zone : null; // null = unmapped/cross sales
+        const _dn   = _meta ? _meta.displayName : null; // display name for rep matching
+
         const { gp: rowGP, isProvisional } = pickGP(job, cls);
         const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
         const provRevenue   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
@@ -485,6 +491,8 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           vol: chargeableWeight,
           prov: isProvisional ? 1 : 0,
           customer: String(job["Customer"] || "").trim(),
+          _zone, // zone from mapping — null if unmapped
+          _dn,   // display name from mapping — null if unmapped
         });
       }
     }

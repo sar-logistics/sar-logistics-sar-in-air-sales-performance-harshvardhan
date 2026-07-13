@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v38'; // v38: cross sales + branch drill fixed
+var CACHE_VERSION = 'v39'; // v39: _zone+_dn stamped on drill rows for clean matching
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5303,37 +5303,21 @@ function computeDrillResult(entity, metric, month){
     // 4. Entity filter
     var sp = row._sp; // normalizeName(rawSalesPersonName) from server
     if (isGT){
-      // Grand Total = ALL rows — no entity filter
+      // Grand Total = ALL rows
     } else if (entity === 'Cross Sales'){
-      // Cross Sales zone = all unmapped rows (any branch)
-      var norms2 = getRepsRawNorms();
-      if (norms2[sp]) continue; // mapped rep → skip
+      // Cross Sales = unmapped rows only
+      if (row._zone) continue;
     } else {
-      // Rep, Zone, or Branch entity
-      var zoneMatch = repsRaw.some(function(r){
-        if (r.isBranch) return false;
-        if (r.zone !== entity) return false;
-        var seg = r.name.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
-        return normalizeName(r.name) === sp || seg === sp;
-      });
-      var repMatch = false;
-      if (!zoneMatch){
-        var repEntry = repsRaw.find(function(r){
-          return !r.isBranch && r.name === entity;
-        });
-        if (repEntry){
-          var full2 = normalizeName(repEntry.name);
-          var seg2  = repEntry.name.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
-          repMatch = (sp === full2 || sp === seg2);
-        } else {
-          var normEnt = normalizeName(entity);
-          var segEnt  = entity.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
-          repMatch = (sp === normEnt || sp === segEnt);
-        }
+      var isZoneEntity = repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; });
+      if (isZoneEntity) {
+        // Zone: row._zone must match
+        if (row._zone !== entity) continue;
+      } else {
+        // Rep: row._dn must match display name, OR Branch: location must match
+        var repMatch    = row._dn === entity;
+        var branchMatch = (row.location || '').trim() === entity;
+        if (!repMatch && !branchMatch) continue;
       }
-      // Branch match: entity is a branch/location name (Mumbai, Delhi etc.)
-      var branchMatch = (row.location || '').trim() === entity;
-      if (!zoneMatch && !repMatch && !branchMatch) continue;
     }
 
     // Tons is pre-converted server-side from the DB chargeable-weight unit.
