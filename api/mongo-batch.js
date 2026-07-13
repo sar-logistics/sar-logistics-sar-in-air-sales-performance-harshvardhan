@@ -344,7 +344,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1835-wk-stamp-v2"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-13T1840-isoweek-utc-fix"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -705,7 +705,8 @@ async function computeSalesAggregate(db) {
   // a week is identified by "<isoYear>-W<NN>" and can span two months.
   // Returns { key, weekNum, isoYear, monday (Date), sunday (Date) }.
   function isoWeekInfo(date) {
-    var d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    // date is IST-adjusted: use getUTCFullYear/Month/Date to get the IST calendar date
+    var d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
     var dayNum = (d.getUTCDay() + 6) % 7; // Mon=0 .. Sun=6
     var thursday = new Date(d);
     thursday.setUTCDate(d.getUTCDate() - dayNum + 3);
