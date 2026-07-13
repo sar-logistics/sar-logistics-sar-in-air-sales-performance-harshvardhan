@@ -4642,26 +4642,9 @@ function drawer(){
     var headCells = COLS.map(th).join('');
 
 
-    // Compute counts and totals FIRST before building any HTML
-    var displayedCount = d.rows ? d.rows.length : 0;
-    var totalCount     = d.count || 0;
-    var isTruncated    = totalCount > displayedCount;
     // Filtered count = what user actually sees (respects LOB filter)
     var filteredCount  = visibleRows.length;
 
-    var dTeuSum=0, dRevSum=0, dCostSum=0, dGpSum=0, dProvGpSum=0, dActualGpSum=0;
-    visibleRows.forEach(function(r){
-      dTeuSum      += r.t || 0;
-      dRevSum      += r.r || 0;
-      dCostSum     += r.x || 0;
-      dGpSum       += r.g || 0;
-      if (r.operationLock) dActualGpSum += (r.actualProfit  || 0);
-      else                 dProvGpSum   += (r.provisionalProfit || 0);
-    });
-
-    var fullGpSum  = dGpSum;
-    var fullRevSum = dRevSum;
-    var fullCostSum= dCostSum;
 
     function fmtDate(v){
       if (!v) return '<span style="color:#C7CEDA;">—</span>';
@@ -4708,79 +4691,6 @@ function drawer(){
     }).join('');
 
 
-    // Client-side subtotals for the two derived OL-status GP columns
-    var dActualGpSum = 0, dProvGpSum = 0;
-    visibleRows.forEach(function(r){
-      if (r.operationLock) dActualGpSum += (r.actualProfit || 0);
-      else dProvGpSum += (r.provisionalProfit || 0);
-    });
-
-    // Sticky total row — Revenue/Cost/GP always shown regardless of which metric was clicked
-    var totalRowBg = '#EEF3FC';
-    var totalRow = '<tr style="background:'+totalRowBg+';border-top:2.5px solid #0D2B5E;">'
-      + COLS.map(function(c, i){
-          var isSticky = c.sticky !== undefined;
-          var isLastSticky = c.k === 'lob';
-          var stickyStyle = isSticky
-            ? 'position:sticky;left:'+c.sticky+'px;width:'+c.width+'px;min-width:'+c.width+'px;max-width:'+c.width+'px;z-index:4;background:'+totalRowBg+';'+(isLastSticky?'box-shadow:2px 0 4px rgba(13,43,94,0.08);':'')
-            : '';
-          if (i === 0) return '<td style="padding:10px 10px;font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;'+stickyStyle+'">TOTAL ('+visibleRows.length.toLocaleString()+')</td>';
-          if (isSticky) return '<td style="padding:10px 10px;'+stickyStyle+'"></td>';
-          if (c.k === 'teu') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+dTeuSum.toFixed(1)+'</td>';
-          if (c.k === 'billedRevenue') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+fmtCur(fullRevSum)+'</td>';
-          if (c.k === 'postedCost') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+fmtCur(fullCostSum)+'</td>';
-          if (c.k === 'actualProfit') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(fullGpSum)+'</td>';
-          if (c.k === 'gpOlDone') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+(dActualGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dActualGpSum)+'</td>';
-          if (c.k === 'gpOlNotDone') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+(dProvGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dProvGpSum)+'</td>';
-          return '<td style="padding:10px 10px;"></td>';
-        }).join('')
-    +'</tr>';
-    totalRow = '<tfoot style="position:sticky;bottom:0;z-index:5;">'+totalRow+'</tfoot>';
-
-    // ── Column filter dropdown popup (only one open at a time) ──
-    var filterPopup = '';
-    if (state.drill.openFilterCol) {
-      var fCol = COLS.filter(function(c){ return c.k === state.drill.openFilterCol; })[0];
-      if (fCol) {
-        var uniqueVals = Array.from(new Set(visibleRows.map(function(s){
-          var v = cellVal(fCol, s);
-          return v === null || v === undefined ? '' : String(v);
-        }))).sort();
-        var draft = state.drill.filterDraft[fCol.k];
-        if (!draft) {
-          // Initialise draft from active filter, or "all selected" if none active
-          var active = columnFilters[fCol.k];
-          draft = active && active.length > 0 ? active.slice() : uniqueVals.slice();
-          state.drill.filterDraft[fCol.k] = draft;
-        }
-        var anchor = state.drill.filterAnchor || { top: 100, left: 100 };
-        filterPopup = '<div id="drill-filter-popup" data-stop="1" style="position:fixed;top:'+anchor.top+'px;left:'+anchor.left+'px;background:#FFFFFF;border-radius:12px;box-shadow:0 16px 40px rgba(13,43,94,0.25),0 0 0 1px rgba(13,43,94,0.08);z-index:9999;width:280px;padding:16px;">'
-          +'<div style="font-size:13px;font-weight:800;color:#0D2B5E;margin-bottom:10px;">Filter: '+esc(fCol.l)+'</div>'
-          +'<div style="display:flex;align-items:center;gap:7px;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:7px 10px;margin-bottom:10px;">'
-            +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9AAFC8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
-            +'<input type="text" id="drill-colfilter-search" placeholder="Search…" autocomplete="off" oninput="filterDrillFilterOptions(this)" style="border:none;outline:none;font-size:12px;color:#374151;flex:1;min-width:0;background:transparent;" />'
-          +'</div>'
-          +'<div style="display:flex;gap:8px;margin-bottom:10px;">'
-            +'<button data-act="drillFilterSelectAll" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:6px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;">Select All</button>'
-            +'<button data-act="drillFilterClearAll" style="flex:1;background:#F4F7FA;border:1.5px solid #E3E9F2;border-radius:7px;padding:6px;font-size:11px;font-weight:700;color:#374151;cursor:pointer;">Clear All</button>'
-          +'</div>'
-          +'<div id="drill-colfilter-list" style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;margin-bottom:10px;">'
-            + uniqueVals.map(function(v){
-                var checked = draft.indexOf(v) > -1;
-                var displayV = v === '' ? '(blank)' : v;
-                return '<div data-act="drillFilterToggleVal" data-val="'+esc(v)+'" data-search="'+esc(displayV.toLowerCase())+'" class="drill-filter-opt" style="display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;border-radius:6px;" onmouseenter="this.style.background=\'#F4F7FC\'" onmouseleave="this.style.background=\'transparent\'">'
-                  +'<div style="width:15px;height:15px;border-radius:4px;border:1.5px solid '+(checked?BRAND_A1:'#C5D0E0')+';background:'+(checked?BRAND_A1:'#FFFFFF')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
-                    +(checked ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : '')
-                  +'</div>'
-                  +'<span style="font-size:12px;color:#374151;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(displayV)+'</span>'
-                +'</div>';
-              }).join('')
-          +'</div>'
-          +'<button data-act="drillFilterApply" style="width:100%;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:8px;color:#fff;font-size:12.5px;font-weight:700;padding:10px;cursor:pointer;">Apply</button>'
-        +'</div>';
-      }
-    }
-
     bodyContent = '<div style="flex:1;overflow:auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;position:relative;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:3800px;">'
         +'<thead style="position:sticky;top:0;z-index:4;"><tr>'+headCells+'</tr></thead>'
@@ -4791,9 +4701,7 @@ function drawer(){
             +'</td></tr>'
           : '')
         +'</tbody>'
-        +totalRow
       +'</table>'
-      + filterPopup
     +'</div>';
   }
 
@@ -4802,55 +4710,9 @@ function drawer(){
       ? filteredCount.toLocaleString() + ' job' + (filteredCount === 1 ? '' : 's') + ' matching'
       : '';
 
-  // Footer: shows sum of DISPLAYED rows + full total if truncated
-  var footerLabel = d.metric === 'Shipments' ? 'Total Shipments'
-    : d.metric === 'GP' ? 'Total GP'
-    : d.metric === 'Tons (Air)' ? 'Total Tons (Air)'
-    : d.metric === 'TEUs (Ocean)' ? 'Total TEUs'
-    : d.metric === 'LCL (Ocean in CBM)' ? 'Total LCL'
-    : 'Total';
+  var footer = '';
 
-  var footer;
-  if (!d.loading && !d.error && d.rows && d.rows.length > 0) {
-    if (d.metric === 'GP') {
-      // Show Provisional + Actual + Total breakdown — all from visibleRows
-      var provGP   = dProvGpSum;
-      var actualGP = dActualGpSum;
-      var totGP    = dGpSum;
-      footer = '<div style="padding:10px 18px;border-top:1px solid #E8EDF6;background:#F8FAFC;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">'
-        +'<span style="font-size:11.5px;font-weight:600;color:#5B6678;">'+footerLabel
-          +' <span style="color:#9AAFC8;font-weight:500;">('+filteredCount.toLocaleString()+' jobs)</span>'
-        +'</span>'
-        +'<div style="display:flex;align-items:center;gap:20px;">'
-          +'<span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">'
-            +'<span style="font-size:9.5px;font-weight:700;color:#10875A;text-transform:uppercase;letter-spacing:0.05em;">Provisional</span>'
-            +'<span style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#10875A;">'+fmtCur(provGP)+'</span>'
-          +'</span>'
-          +'<span style="color:#CBD5E1;font-size:15px;">+</span>'
-          +'<span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">'
-            +'<span style="font-size:9.5px;font-weight:700;color:#1D5FCC;text-transform:uppercase;letter-spacing:0.05em;">Actual</span>'
-            +'<span style="font-family:\'DM Mono\',monospace;font-size:13px;font-weight:700;color:#1D5FCC;">'+fmtCur(actualGP)+'</span>'
-          +'</span>'
-          +'<span style="color:#CBD5E1;font-size:15px;">=</span>'
-          +'<span style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">'
-            +'<span style="font-size:9.5px;font-weight:700;color:#0D2B5E;text-transform:uppercase;letter-spacing:0.05em;">Total GP</span>'
-            +'<span style="font-family:\'DM Mono\',monospace;font-size:15px;font-weight:800;color:#0D2B5E;">'+fmtCur(totGP)+'</span>'
-          +'</span>'
-        +'</div>'
-      +'</div>';
-    } else {
-      footer = '<div style="padding:10px 18px;border-top:1px solid #E8EDF6;background:#F8FAFC;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:16px;">'
-        +'<span style="font-size:11.5px;font-weight:600;color:#5B6678;">'+footerLabel
-          +' <span style="color:#9AAFC8;font-weight:500;">('+filteredCount.toLocaleString()+' jobs)</span>'
-        +'</span>'
-        +'<span style="font-family:\'DM Mono\',monospace;font-size:14px;font-weight:800;color:#15875A;">'
-          +(d.metric==='Shipments' ? filteredCount.toLocaleString() : dGpSum.toFixed(2))
-        +'</span>'
-      +'</div>';
-    }
-  } else {
-    footer = '';
-  }
+  return '<div data-act="close"'
 
   return '<div data-act="close" style="position:fixed;inset:0;background:rgba(15,23,40,0.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px;animation:ovFade 0.16s ease;">'
     +'<div data-stop="1" style="width:min(1200px,96vw);height:min(88vh,900px);background:#FFFFFF;border-radius:16px;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(15,23,40,0.22);animation:fadeUp 0.2s cubic-bezier(0.22,1,0.36,1);overflow:hidden;">'
