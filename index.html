@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v30'; // v30: parse DD/MM/YYYY sheet dates correctly in every month bucket
+var CACHE_VERSION = 'v32'; // v32: IST timezone fix for ETD date bucketing
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5291,13 +5291,13 @@ function computeDrillResult(entity, metric, month){
     if (isAir && !row._cl.includes('air')) continue;
     if (isTeu && !row._cl.includes('sea') && !row._cl.includes('isotank')) continue;
 
-    // 3. Date filter — use row._d (Date object serialized as ISO string)
+    // 3. Date filter — use row._d converted to IST (UTC+5:30) to match server bucketing
     var ml = row._ml;
-    var rd = null; // parsed date, only when needed
+    var rd = null; // IST-adjusted date, only when needed
     if (!isFY && !isYear && !isRange && !isWeek && !isDR && ml !== month) continue;
     if (isYear && yearSuf && !ml.endsWith('-'+yearSuf)) continue;
     if (isRange){ var mi=FY_MONTHS_ALL.indexOf(ml); if(mi<rangeStart||mi>rangeEnd) continue; }
-    if (isWeek || isDR){ rd = new Date(row._d); }
+    if (isWeek || isDR){ rd = new Date(new Date(row._d).getTime() + (5.5*60*60*1000)); }
     if (isWeek && (rd<weekMon||rd>weekSun)) continue;
     if (isDR  && (rd<drStart ||rd>drEnd))  continue;
 
