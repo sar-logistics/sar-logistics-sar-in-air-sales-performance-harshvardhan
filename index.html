@@ -4732,7 +4732,8 @@ function drawer(){
           if (c.k === 'teu') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+dTeuSum.toFixed(1)+'</td>';
           if (c.k === 'billedRevenue') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+fmtCur(fullRevSum)+'</td>';
           if (c.k === 'postedCost') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+fmtCur(fullCostSum)+'</td>';
-          if (c.k === 'actualProfit') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(fullGpSum)+'</td>';
+          if (c.k === 'gp') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(fullGpSum)+'</td>';
+          if (c.k === 'actualProfit') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+(dActualGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dActualGpSum)+'</td>';
           if (c.k === 'gpOlDone') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+(dActualGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dActualGpSum)+'</td>';
           if (c.k === 'gpOlNotDone') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+(dProvGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dProvGpSum)+'</td>';
           return '<td style="padding:10px 10px;"></td>';
@@ -5442,15 +5443,21 @@ function openInsightDrill(drillType, name, drillLob) {
     matched.push(row);
   }
   matched.sort(function(a,b){ return (b._d||0)-(a._d||0); });
-  var totalGP=0, totalRev=0, totalShip=0;
-  matched.forEach(function(r){ totalGP+=r.g||0; totalRev+=r.r||0; totalShip++; });
+  var totalGP=0, totalRev=0, totalShip=0, totalProvGP=0, totalActualGP=0;
+  matched.forEach(function(r){
+    totalGP  += r.g||0;
+    totalRev += r.r||0;
+    totalShip++;
+    if (r.prov === 1) totalProvGP   += r.g||0;
+    else              totalActualGP += r.g||0;
+  });
   state.drill = {
     entity: name, metric: 'Shipments', col: 'FY Total', valueFmt: null,
     loading: false,
     rows: matched.slice(0, 6000),
     count: matched.length,
     totalMetric: totalShip,
-    totalGP: totalGP, totalProvGP: 0, totalActualGP: totalGP,
+    totalGP: totalGP, totalProvGP: totalProvGP, totalActualGP: totalActualGP,
     totalRevenue: totalRev, totalCost: totalRev - totalGP,
     lobTab: _defaultDrillLobTab(),
     columnFilters: activeLobFilter ? {lob: activeLobFilter.slice()} : {},
