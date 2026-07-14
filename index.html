@@ -5440,10 +5440,9 @@ function openInsightDrill(drillType, name) {
     return;
   }
   var nameLower = (name || '').toLowerCase();
-  // Use insight-page LOB filter (derived from activeLob) not state.filterLobs (sales filter)
-  var _ILOB = {'Air':['AIR EXPORT','AIR IMPORT'],'Ocean':['SEA EXPORT','SEA IMPORT'],'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT']};
-  var _insightLob = drillType==='customer' ? (state.customerLob||'Air') : drillType==='agent' ? (state.agentLob||'Air') : (state.tradelaneLob||'Air');
-  var activeLobFilter = _ILOB[_insightLob] || null;
+  // No LOB filter for insight drill — customer/agent/tradelane counts are cross-LOB
+  // (e.g. OL USA LLC has Air Exp + Sea Exp + Sea Imp — all count toward its 42 shipments)
+  var activeLobFilter = null;
   // RLS rep filter — same reps visible in the insight table
   var _rlsRepsNorm = [];
   if (currentUser) {
