@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v63'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v64'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -1200,7 +1200,7 @@ function fetchTradelaneData(callback, force) {
     // Skip localStorage — tradelane data may be stale from before ocean/isotank fix
   }
   fetch(qs).then(function(r){ return r.json(); })
-    .then(function(data){ if(data.success){data._cacheKey=key;_tradelaneCache[key]=data;tradelaneData=data;tradelaneDataReady=true;lsSet(lsKey,data);} if(callback) callback(); })
+    .then(function(data){ if(data.success){data._cacheKey=key;_tradelaneCache[key]=data;tradelaneData=data;tradelaneDataReady=true;} if(callback) callback(); })
     .catch(function(e){ console.warn('Tradelane failed:',e.message); if(callback) callback(); });
 }
 
@@ -1214,20 +1214,21 @@ function _debouncedTradelaneFetch() {
 function prefetchTradelaneRanges() {
   if (_tradelanePrefetchDone) return;
   _tradelanePrefetchDone = true;
+  // Only prefetch the last 3/6/12 month ranges — not every individual month
   var allM = months26; if (!allM || !allM.length) return;
   var queue = [];
-  for (var i=0;i<allM.length;i++) queue.push({dateFrom:allM[i],dateTo:allM[i]});
   [3,6,9,12].forEach(function(n){ if(allM.length>=n) queue.push({dateFrom:allM[allM.length-n],dateTo:allM[allM.length-1]}); });
   var idx=0;
   function next(){
     if(idx>=queue.length) return;
-    var r=queue[idx++]; var key=r.dateFrom+'_'+r.dateTo, lsKey='tradelane_'+key;
-    if(_tradelaneCache[key]){setTimeout(next,10);return;}
-    var lsCached=lsGet(lsKey); if(lsCached&&lsCached.success){_tradelaneCache[key]=lsCached;setTimeout(next,10);return;}
+    var r=queue[idx++]; var key=r.dateFrom+'_'+r.dateTo;
+    if(_tradelaneCache[key]){setTimeout(next,50);return;}
     fetch('/api/mongo-batch?action=tradelane&dateFrom='+encodeURIComponent(r.dateFrom)+'&dateTo='+encodeURIComponent(r.dateTo))
-      .then(function(res){return res.json();}).then(function(data){if(data.success){_tradelaneCache[key]=data;lsSet(lsKey,data);}setTimeout(next,200);}).catch(function(){setTimeout(next,400);});
+      .then(function(res){return res.json();})
+      .then(function(d){if(d.success){d._cacheKey=key;_tradelaneCache[key]=d;} setTimeout(next,200);})
+      .catch(function(){setTimeout(next,200);});
   }
-  setTimeout(next, 7000);
+  setTimeout(next, 2000);
 }
 var fetchOrgData = makeFetcher('org', 'org', function(d){ orgData = d; orgDataReady = true; });
 
