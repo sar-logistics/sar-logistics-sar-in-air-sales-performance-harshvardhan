@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v71'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v72'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -692,7 +692,7 @@ function fetchLiveData(callback, force){
           // Save with lobData included so next boot has correct numbers from first render
           setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
           if (data.allDrillRows && data.allDrillRows.length > 0 && !allDrillRows) {
-            allDrillRows = data.allDrillRows;
+            allDrillRows = dedupDrillRows(data.allDrillRows);
             // drillrows kept in-memory only (too large for localStorage)
           }
           // If allDrillRows not in sales response, fetch it silently in background
@@ -5338,6 +5338,16 @@ function renderKeepTopbar(){
 var allDrillRows = null;
 var _drillDataLoading = false;
 var _drillDataCallbacks = [];
+function dedupDrillRows(rows) {
+  if (!rows || !rows.length) return rows;
+  var seen = {};
+  return rows.filter(function(r){
+    var key = r.shipmentNo + '|' + (r._cl||'') + '|' + (r._sp||'');
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+}
 
 function loadDrillData(callback){
   if (allDrillRows) { if(callback) callback(); return; }
@@ -5349,7 +5359,7 @@ function loadDrillData(callback){
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
-        allDrillRows = data.sales.allDrillRows;
+        allDrillRows = dedupDrillRows(data.sales.allDrillRows);
         // drillrows kept in-memory only (too large for localStorage)
       }
       _drillDataLoading = false;
