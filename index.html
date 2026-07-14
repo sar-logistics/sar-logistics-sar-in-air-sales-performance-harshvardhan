@@ -5452,7 +5452,8 @@ function openInsightDrill(drillType, name) {
   }
 
   // Check cache first — instant for repeat clicks
-  var _iCacheKey = drillType + '||' + name + '||' + (state.dateFrom||'') + '||' + (state.dateTo||'');
+  var _iDateR = drillType==='customer' ? getCustomerDateRange() : drillType==='agent' ? getAgentDateRange() : getTradelaneDateRange();
+  var _iCacheKey = drillType + '||' + name + '||' + (_iDateR.dateFrom||'') + '||' + (_iDateR.dateTo||'');
   var _iCached = _insightDrillCache[_iCacheKey];
   if (_iCached) {
     state.drill = _iCached;
@@ -5482,9 +5483,16 @@ function openInsightDrill(drillType, name) {
     // LOB filter
     if (activeLobFilter && activeLobFilter.indexOf(row.lob) === -1) continue;
     // Date range filter
-    var idxs = filteredMonthIndices();
-    var allowedMonths = idxs.map(function(i){ return months26[i]; });
-    if (allowedMonths.length > 0 && allowedMonths.indexOf(row._ml) === -1) continue;
+    // Use insight-page date range (not sales performance range)
+    var _iDateRange = drillType === 'customer' ? getCustomerDateRange()
+                    : drillType === 'agent'    ? getAgentDateRange()
+                    : getTradelaneDateRange();
+    var _iFrom = _iDateRange.dateFrom, _iTo = _iDateRange.dateTo;
+    var FY_ALL = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
+    var _iFromIdx = _iFrom ? FY_ALL.indexOf(_iFrom) : 0;
+    var _iToIdx   = _iTo   ? FY_ALL.indexOf(_iTo)   : FY_ALL.length - 1;
+    var _iRowIdx  = FY_ALL.indexOf(row._ml);
+    if (_iRowIdx < 0 || _iRowIdx < _iFromIdx || _iRowIdx > _iToIdx) continue;
     // RLS rep filter — only show rows belonging to visible reps
     if (_rlsRepsNorm.length > 0 && _rlsRepsNorm.indexOf(row._sp) === -1) continue;
     // Entity match
