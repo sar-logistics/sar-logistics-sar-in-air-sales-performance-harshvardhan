@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v74'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v75'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5627,7 +5627,7 @@ function openInsightDrill(drillType, name, drillMonth) {
       var _tlGP=0, _tlRev=0;
       _tlRows.forEach(function(r){ _tlGP+=r.g||0; _tlRev+=r.r||0; });
       var _tlResult = { entity:name, metric:'Shipments', col:'FY Total', valueFmt:null,
-        loading:false, rows:_tlRows.slice(0,6000), count:_tlRows.length,
+        loading:false, rows:_tlRows, count:_tlRows.length,
         totalMetric:_tlRows.length, totalGP:_tlGP, totalProvGP:0, totalActualGP:_tlGP,
         totalRevenue:_tlRev, totalCost:_tlRev-_tlGP,
         lobTab:'ALL', insightDrill:true, columnFilters:{}, openFilterCol:null, filterDraft:{} };
