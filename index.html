@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v52'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v53'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -1175,18 +1175,7 @@ var _tradelaneCache = {};
 var _tradelaneFetchTimer = null;
 var _tradelanePrefetchDone = false;
 
-function getTradelaneDateRange() {
-  var v = state.tradelanePeriod || state.reportView || 'Monthly';
-  var dateFrom = '', dateTo = '';
-  if (state.tradelaneDateFrom && state.tradelaneDateTo) {
-    dateFrom = state.tradelaneDateFrom; dateTo = state.tradelaneDateTo;
-  } else {
-    // Fall back to sales performance date range
-    var idxs = filteredMonthIndices();
-    if (idxs && idxs.length > 0) { dateFrom = months26[idxs[0]]; dateTo = months26[idxs[idxs.length-1]]; }
-  }
-  return { dateFrom: dateFrom, dateTo: dateTo };
-}
+function getTradelaneDateRange() { return getCustomerDateRange(); }
 function getTradelaneCacheKey() { var r = getTradelaneDateRange(); return (r.dateFrom||'all')+'_'+(r.dateTo||'all'); }
 
 function fetchTradelaneData(callback, force) {
@@ -6268,8 +6257,6 @@ document.addEventListener('click', function(ev){
     if(state.agentSortCol===col){ state.agentSortDir=(state.agentSortDir||(-1))*-1; } else { state.agentSortCol=col; state.agentSortDir=-1; } render();
   }
   else if(act==='setTradelaneLob'){ ev.stopPropagation(); state.tradelaneLob=el.getAttribute('data-val'); render(); }
-  else if(act==='setTradelaneDateFrom'){ ev.stopPropagation(); state.tradelaneDateFrom=el.value; _tradelanePivotCache={}; _insightDrillCache={}; fetchTradelaneData(function(){render();},true); }
-  else if(act==='setTradelaneDateTo'){   ev.stopPropagation(); state.tradelaneDateTo=el.value;   _tradelanePivotCache={}; _insightDrillCache={}; fetchTradelaneData(function(){render();},true); }
   else if(act==='setTradelaneView'){ ev.stopPropagation(); state.tradelaneView=el.getAttribute('data-val'); render(); }
   else if(act==='tradelaneSort'){
     ev.stopPropagation(); var col=el.getAttribute('data-col');
