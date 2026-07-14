@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v67'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v68'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -2722,14 +2722,16 @@ function customerPivotTable(lobData, activeLob, brandC) {
     var groupCells = '';
     if (isGrouped && colGroups) {
       groupCells = colGroups.map(function(g){
-        var gShip=0, gGP=0, gRev=0;
+        var gShip=0, gGP=0;
         g.idxs.forEach(function(mi){
-          var ml = months26[mi];
-          var md = (c.monthData||{})[ml];
-          if(md){ gShip+=md.shipments||0; gGP+=md.gp||0; gRev+=md.revenue||0; }
+          var md=(c.monthData||{})[months26[mi]];
+          if(md){gShip+=md.shipments||0;gGP+=md.gp||0;}
         });
-        var gpC = gGP>=0?'#059669':'#DC2626';
-        return '<td style="padding:7px 10px;font-size:11px;text-align:right;border-left:2px solid #E3EAF3;font-family:'DM Mono',monospace;">'          +'<div style="font-weight:700;color:#15233B;">'+(gShip>0?gShip:'--')+'</div>'          +'<div style="font-size:10px;color:'+gpC+';">'+fmtCur(gGP)+'</div>'          +'</td>';
+        var gpC=gGP>=0?'#059669':'#DC2626';
+        return '<td style="padding:7px 10px;text-align:right;border-left:2px solid #E3EAF3;">'
+          +'<div style="font-size:11.5px;font-weight:700;color:#15233B;">'+(gShip>0?gShip:'--')+'</div>'
+          +'<div style="font-size:10px;color:'+gpC+';">'+fmtCur(gGP)+'</div>'
+          +'</td>';
       }).join('');
     }
 
@@ -2744,9 +2746,9 @@ function customerPivotTable(lobData, activeLob, brandC) {
       +'<td data-act="insightDrill" data-drill-type="customer" data-drill-name="'+esc(c.name)+'" style="padding:7px 10px;font-size:11.5px;color:#1D5FCC;text-align:right;font-family:\'DM Mono\',monospace;cursor:pointer;text-decoration:underline dotted;">'+fmtCur(c.revenue)+'</td>'
       +'<td data-act="insightDrill" data-drill-type="customer" data-drill-name="'+esc(c.name)+'" style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpColor+';text-align:right;font-family:\'DM Mono\',monospace;cursor:pointer;text-decoration:underline dotted;">'+fmtCur(c.gp)+'</td>'
       +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpPctColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+c.gpPct+'%</td>'
-      +'<td style="padding:7px 10px;">'+lobsHtml+'</td>'
+      +(isGrouped?'':'<td style="padding:7px 10px;">'+lobsHtml+'</td>')
       +'<td style="padding:7px 10px;font-size:10.5px;color:#64748B;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(c.salesReps||[]).join(', ')+'">'+repsText+'</td>'
-      +'</tr>';
+      +(isGrouped?groupCells:'')+'</tr>';
   });
   tbody += '</tbody>';
 
