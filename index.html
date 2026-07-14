@@ -170,7 +170,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v44'; // v44: weekData recomputed from lobData._week when LOB filter active
+var CACHE_VERSION = 'v45'; // v45: tradelane ocean/isotank fix — clears stale ls cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -340,8 +340,8 @@ function _showDashboardBody() {
     var latestKey = 'Apr-26_' + curMonBoot;
     var ac = lsGet('agents_' + latestKey) || lsGet('agents_' + defKey);
     if (ac && ac.success) { agentData = ac; agentDataReady = true; _agentCache[latestKey] = ac; }
-    var tc = lsGet('tradelane_' + latestKey) || lsGet('tradelane_' + defKey);
-    if (tc && tc.success) { tradelaneData = tc; tradelaneDataReady = true; _tradelaneCache[latestKey] = tc; }
+    // tradelane always fetched fresh — localStorage may have stale ocean/isotank data
+    var tc = null; // force fresh fetch
     var cusc = lsGet('customers_' + latestKey) || lsGet('customers_' + defKey);
     if (cusc && cusc.success) { customerData = cusc; customerDataReady = true; _customerCache[latestKey] = cusc; }
     // drillrows not stored in localStorage (too large) — loaded via ping response
@@ -1180,13 +1180,7 @@ function fetchTradelaneData(callback, force) {
     + (dateTo   ? '&dateTo='   + encodeURIComponent(dateTo)   : '');
   if (!force) {
     if (_tradelaneCache[key]) { tradelaneData = _tradelaneCache[key]; tradelaneDataReady = true; if (callback) callback(); return; }
-    var lsCached = lsGet(lsKey);
-    if (lsCached && lsCached.success) {
-      _tradelaneCache[key] = lsCached; tradelaneData = lsCached; tradelaneDataReady = true;
-      if (callback) callback();
-      if (lsCached._isStale) fetch(qs+'&force=1').then(function(r){return r.json();}).then(function(d){ if(d.success){_tradelaneCache[key]=d;tradelaneData=d;lsSet(lsKey,d);render();} }).catch(function(){});
-      return;
-    }
+    // Skip localStorage — tradelane data may be stale from before ocean/isotank fix
   }
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){ if(data.success){_tradelaneCache[key]=data;tradelaneData=data;tradelaneDataReady=true;lsSet(lsKey,data);} if(callback) callback(); })
