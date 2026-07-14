@@ -2172,7 +2172,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op", "pendencyDrill"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
