@@ -1136,10 +1136,26 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
         teu = parseFloat(job["Container TEU"] || 0) || 0;
       }
 
+      // Derive month label for this job
+      const rawDateForMl = job[dateCol];
+      let monthLabelForMd = "";
+      if (rawDateForMl) {
+        const dMl = parseSheetDate(rawDateForMl);
+        if (dMl) monthLabelForMd = MONTH_NAMES[dMl.getMonth()] + "-" + String(dMl.getFullYear()).slice(2);
+      }
+
       function addTo(map, key) {
-        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
+        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, monthData:{} };
         map[key].shipments++; map[key].revenue += revenue; map[key].gp += gp;
         map[key].tons += tons; map[key].teu += teu;
+        if (monthLabelForMd) {
+          if (!map[key].monthData[monthLabelForMd]) map[key].monthData[monthLabelForMd] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
+          map[key].monthData[monthLabelForMd].shipments++;
+          map[key].monthData[monthLabelForMd].revenue += revenue;
+          map[key].monthData[monthLabelForMd].gp += gp;
+          map[key].monthData[monthLabelForMd].tons += tons;
+          map[key].monthData[monthLabelForMd].teu += teu;
+        }
       }
       addTo(custMapByLob[lob], customer);
       addTo(custMapAll, customer);
@@ -1182,6 +1198,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
       salesReps: custSalesReps[name] ? [...custSalesReps[name]] : [],
       lobs:      custLobLabels[name] ? [...custLobLabels[name]].sort() : [],
       repMetrics: custRepMap[name] || {},
+      monthData: Object.fromEntries(Object.entries(d.monthData||{}).map(([m,md])=>[m,{shipments:md.shipments,revenue:Math.round(md.revenue),gp:Math.round(md.gp),tons:Math.round(md.tons*100)/100,teu:Math.round(md.teu*100)/100}])),
     }));
     function top10(arr, key) { return [...arr].sort((a,b)=>b[key]-a[key]).slice(0,10); }
     return {
