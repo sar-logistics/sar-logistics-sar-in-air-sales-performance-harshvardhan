@@ -420,7 +420,14 @@ function _showDashboardBody() {
       }, 1100);
       setTimeout(function(){ fetchFinanceData(null);  }, 1500);
       setTimeout(function(){ fetchOpData(null);       }, 1900);
-      setTimeout(function(){ fetchOrgData(null);      }, 2300);
+      // Prefetch org + usage immediately for admin users
+  var _isAdminUser = currentUser && ['admin','hr'].indexOf((currentUser.role||'').toLowerCase()) > -1;
+  if (_isAdminUser) {
+    fetchOrgData(null);
+    fetchUsageData(null);
+  } else {
+    setTimeout(function(){ fetchOrgData(null); }, 2300);
+  }
     }
   bgPrefetchSecondary();
 
@@ -1217,11 +1224,14 @@ function prefetchTradelaneRanges() {
 var fetchOrgData = makeFetcher('org', 'org', function(d){ orgData = d; orgDataReady = true; });
 
 function fetchUsageData(callback, force){
-  // Usage always fetches live (login counts must be real-time)
+  var USAGE_TTL = 2 * 60 * 1000; // 2 min cache
+  if (!force && usageDataReady && usageData && usageData._fetchedAt && (Date.now()-usageData._fetchedAt)<USAGE_TTL) {
+    if (callback) callback(); return;
+  }
   fetch('/api/mongo-batch?action=usage' + (force ? '&force=1' : ''))
     .then(function(r){ return r.json(); })
     .then(function(data){
-      if (data.success) { usageData = data; usageDataReady = true; }
+      if (data.success) { data._fetchedAt = Date.now(); usageData = data; usageDataReady = true; }
       if (callback) callback();
     })
     .catch(function(e){ console.warn('⚠️ usage failed:', e.message); if (callback) callback(); });
@@ -5968,8 +5978,9 @@ document.addEventListener('click', function(ev){
       else { tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); }
     }
     if(state.page==='usage'){
-      // Always force-fetch on every visit so login counts are real-time
-      fetchUsageData(function(){ render(); }, true);
+      // Serve cached data instantly, refresh in background
+      if (!usageDataReady) fetchUsageData(function(){ render(); });
+      else fetchUsageData(function(){ render(); }); // background refresh
     }
     if(state.page==='finance' && !financeDataReady){
       fetchFinanceData(function(){ render(); });
