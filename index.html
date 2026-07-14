@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v49'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v50'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -3155,8 +3155,9 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
     function mCellDrill(val, color, isSub, drillName) {
       var subStyle = isSub ? 'background:'+subBg+';' : 'background:'+bg+';';
       var isDash = val === '--';
-      var dAttr = (!isDash && !isGrand && drillName) ? ' data-act="insightDrill" data-drill-type="tradelane" data-drill-name="'+esc(drillName)+'"' : '';
-      var dSty  = (!isDash && !isGrand && drillName) ? 'cursor:pointer;text-decoration:underline dotted;' : '';
+      var _drillN = isGrand ? 'Grand Total' : drillName;
+      var dAttr = (!isDash && _drillN) ? ' data-act="insightDrill" data-drill-type="tradelane" data-drill-name="'+esc(_drillN)+'"' : '';
+      var dSty  = (!isDash && _drillN) ? 'cursor:pointer;text-decoration:underline dotted;' : '';
       return '<td'+dAttr+' style="'+dSty+subStyle+'text-align:right;padding:7px 10px;font-size:11.5px;color:'+(color||'#334155')+';'+MONO+'border-right:1px solid '+BORDER+';">'+val+'</td>';
     }
 
