@@ -1136,9 +1136,6 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
         teu = parseFloat(job["Container TEU"] || 0) || 0;
       }
 
-      const _wdObj = rawDateM ? parseSheetDate(rawDateM) : null;
-      const weekKey = _wdObj ? isoWeekInfo(_wdObj).key : '';
-
       function addTo(map, key) {
         if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
         map[key].shipments++; map[key].revenue += revenue; map[key].gp += gp;
@@ -1634,13 +1631,15 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           map[key].monthData[monthLabel].tankTeu += tankTeu;
           map[key].monthData[monthLabel].lcl     += lclVol;
         }
-        if (weekKey) {
-          if (!map[key].weekData[weekKey]) map[key].weekData[weekKey] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, _snos:new Set() };
-          if (!map[key].weekData[weekKey]._snos.has(sno)) { map[key].weekData[weekKey].shipments++; map[key].weekData[weekKey]._snos.add(sno); }
-          map[key].weekData[weekKey].revenue += revenue;
-          map[key].weekData[weekKey].gp += gp;
-          map[key].weekData[weekKey].tons += tons;
-          map[key].weekData[weekKey].teu  += teu;
+        const _wkObj = rawDateM ? parseSheetDate(rawDateM) : null;
+        const _wkKey = _wkObj ? isoWeekInfo(_wkObj).key : '';
+        if (_wkKey) {
+          if (!map[key].weekData[_wkKey]) map[key].weekData[_wkKey] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, _snos:new Set() };
+          if (!map[key].weekData[_wkKey]._snos.has(sno)) { map[key].weekData[_wkKey].shipments++; map[key].weekData[_wkKey]._snos.add(sno); }
+          map[key].weekData[_wkKey].revenue += revenue;
+          map[key].weekData[_wkKey].gp += gp;
+          map[key].weekData[_wkKey].tons += tons;
+          map[key].weekData[_wkKey].teu  += teu;
         }
       }
       addTo(countryMap, tradelane);
