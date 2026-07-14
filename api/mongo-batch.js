@@ -1173,7 +1173,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
   function buildStats(custMap) {
     const customers = Object.entries(custMap).map(([name, d]) => ({
       name,
-      shipments: d.shipmentNos.size, // use unique SNO count — avoids double-counting duplicate SRR entries
+      shipments: d.shipments,
       revenue:   Math.round(d.revenue),
       gp:        Math.round(d.gp),
       tons:      Math.round(d.tons * 100) / 100,
@@ -1606,7 +1606,9 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
 
       function addTo(map, key) {
         if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0, salesReps:new Set(), lobs:new Set(), countries:new Set(), shipmentNos:new Set(), monthData:{} };
-        map[key].shipments++;
+        const isNewSno = !map[key].shipmentNos.has(sno);
+        if (isNewSno) map[key].shipments++;
+        map[key].shipmentNos.add(sno);
         map[key].revenue += revenue;
         map[key].gp += gp;
         map[key].tons += tons;
@@ -1619,8 +1621,8 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         map[key].lobs.add(lobLabel);
         if (country) map[key].countries.add(country);
         if (monthLabel) {
-          if (!map[key].monthData[monthLabel]) map[key].monthData[monthLabel] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
-          map[key].monthData[monthLabel].shipments++;
+          if (!map[key].monthData[monthLabel]) map[key].monthData[monthLabel] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0, _snos:new Set() };
+          if (!map[key].monthData[monthLabel]._snos.has(sno)) { map[key].monthData[monthLabel].shipments++; map[key].monthData[monthLabel]._snos.add(sno); }
           map[key].monthData[monthLabel].revenue += revenue;
           map[key].monthData[monthLabel].gp += gp;
           map[key].monthData[monthLabel].tons += tons;
