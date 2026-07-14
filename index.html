@@ -2523,7 +2523,13 @@ function customerPage(){
     }
   }
   var filterReps = _rlsReps.length > 0 ? _rlsReps : (state.filterReps || []);
-  var filterLobs = state.filterLobs || [];
+  // Derive LOB filter from the active tab — independent of state.filterLobs (Sales Performance)
+  var _INSIGHT_LOB_MAP = {
+    'Air':      ['AIR EXPORT','AIR IMPORT'],
+    'Ocean':    ['SEA EXPORT','SEA IMPORT'],
+    'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
+  };
+  var filterLobs = _INSIGHT_LOB_MAP[activeLob] || [];
   // Map sales LOB filter keys to customer LOB label substrings
   var LOB_KEY_TO_CUST = {
     'AIR EXPORT':      'Air Exp',  'AIR IMPORT':      'Air Imp',
@@ -2738,7 +2744,13 @@ function agentPage(){
     }
   }
   var filterReps = _rlsReps.length > 0 ? _rlsReps : (state.filterReps || []);
-  var filterLobs = state.filterLobs || [];
+  // Derive LOB filter from the active tab — independent of state.filterLobs (Sales Performance)
+  var _INSIGHT_LOB_MAP = {
+    'Air':      ['AIR EXPORT','AIR IMPORT'],
+    'Ocean':    ['SEA EXPORT','SEA IMPORT'],
+    'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
+  };
+  var filterLobs = _INSIGHT_LOB_MAP[activeLob] || [];
   var LOB_KEY_TO_CUST = {
     'AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp',
     'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
@@ -2928,7 +2940,13 @@ function tradelanePage(){
   // Apply filterReps / filterLobs
   // RLS: auto-restrict reps based on user role
   var filterReps = state.filterReps || [];
-  var filterLobs = state.filterLobs || [];
+  // Derive LOB filter from the active tab — independent of state.filterLobs (Sales Performance)
+  var _INSIGHT_LOB_MAP = {
+    'Air':      ['AIR EXPORT','AIR IMPORT'],
+    'Ocean':    ['SEA EXPORT','SEA IMPORT'],
+    'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
+  };
+  var filterLobs = _INSIGHT_LOB_MAP[activeLob] || [];
   var LOB_KEY_TO_LABEL = {
     'AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp',
     'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
