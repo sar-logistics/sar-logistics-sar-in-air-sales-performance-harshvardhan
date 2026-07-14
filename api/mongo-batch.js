@@ -344,7 +344,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-13T1850-lob-week-filter"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-14T-tradelane-country-fix"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2117,6 +2117,11 @@ module.exports = async function handler(req, res) {
   // Bust stale in-memory caches immediately if this deployment changed logic
   if (salesCache?._deployTs !== DEPLOY_TS) { salesCache = null; salesCacheTime = 0; }
   if (drillRowsCache?.deployTs !== DEPLOY_TS) { drillRowsCache = null; drillRowsCacheTime = 0; }
+  // Bust tradelane cache on new deployment
+  if (!global._tradelaneCacheTs || global._tradelaneCacheTs !== DEPLOY_TS) {
+    Object.keys(tradelaneCacheMap).forEach(k => delete tradelaneCacheMap[k]);
+    global._tradelaneCacheTs = DEPLOY_TS;
+  }
 
   if (req.method === "OPTIONS") return res.status(200).end();
 
