@@ -349,8 +349,7 @@ function _showDashboardBody() {
     // drillrows not stored in localStorage (too large) — loaded via ping response
     // allPendencyDrillRows: prefer from opData (already extracted above), fallback to dedicated key
     if (!allPendencyDrillRows) {
-      var _tPDrill = performance.now(); var pdc = lsGet('pendencyDrillRows'); console.log('[PERF] lsGet(pendencyDrillRows) took', (performance.now()-_tPDrill).toFixed(1)+'ms');
-      if (pdc && pdc.rows && pdc.rows.length > 0) { allPendencyDrillRows = pdc.rows; }
+    // pendencyDrillRows not loaded from localStorage — kept in-memory only
     }
 
   })();
@@ -1080,7 +1079,8 @@ function prefetchCustomerRanges() {
   setTimeout(next, 2000);
 }
 var fetchFinanceData  = makeFetcher('finance',   'finance',   function(d){ financeData  = d; financeDataReady  = true; });
-var fetchOpData = makeFetcher('op', 'op', function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows; lsSet('pendencyDrillRows', { rows: d.allDrillJobRows }); delete d.allDrillJobRows; } });
+var fetchOpData = makeFetcher('op', 'op', function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows; // pendencyDrillRows in-memory only (30MB, too large for localStorage)
+    delete d.allDrillJobRows; } });
 
 // ── Agent Insights fetch (mirrors customer fetch pattern) ─────────────────────
 var _agentCache = {};
@@ -6672,12 +6672,13 @@ window.addEventListener('load', function() {
           opData = d.op; opDataReady = true;
           if (d.op.allDrillJobRows) {
             allPendencyDrillRows = d.op.allDrillJobRows;
-            lsSet('pendencyDrillRows', { rows: d.op.allDrillJobRows });
+            // pendencyDrillRows in-memory only (too large for localStorage)
           }
           // Strip drill rows before saving op to localStorage (too large)
           var opToSave = Object.assign({}, d.op);
           delete opToSave.allDrillJobRows;
           lsSet('op', opToSave);
+          try { localStorage.removeItem(CACHE_VERSION+'_pendencyDrillRows'); localStorage.removeItem('pendencyDrillRows'); } catch(e){}
         }
       })
       .catch(function(){});
