@@ -364,6 +364,26 @@ const SALES_CACHE_TTL_MS = 120 * 60 * 1000; // 2 hours — data pushed from shee
 let drillRowsCache = null; // { rows: [...], mappingData: {...}, cachedAt }
 let drillRowsCacheTime = 0;
 
+// True ISO 8601 week number (Mon-Sun), independent of calendar month.
+// Defined at module scope so both getDrillRows and computeSalesAggregate can use it.
+function isoWeekInfo(date) {
+  var d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  var dayNum = (d.getUTCDay() + 6) % 7; // Mon=0 .. Sun=6
+  var thursday = new Date(d);
+  thursday.setUTCDate(d.getUTCDate() - dayNum + 3);
+  var isoYear = thursday.getUTCFullYear();
+  var firstThursday = new Date(Date.UTC(isoYear, 0, 4));
+  var fThDayNum = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - fThDayNum + 3);
+  var weekNum = 1 + Math.round((thursday - firstThursday) / (7 * 86400000));
+  var monday = new Date(d);
+  monday.setUTCDate(d.getUTCDate() - dayNum);
+  var sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  var key = isoYear + '-W' + String(weekNum).padStart(2, '0');
+  return { key: key, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
+}
+
 async function getDrillRows(db, entity, metric, month, lobsParam) {
   const activeLobs = lobsParam ? lobsParam.split(',').map(s=>s.trim()).filter(Boolean) : [];
   const LOB_CL = {
@@ -701,27 +721,6 @@ async function computeSalesAggregate(db) {
   const repLobData    = {}; // repKey → { "SEA EXPORT" → { "Apr-25" → {gp,ship,tons,teu,lcl} } }
   const branchLobData = {}; // branchName → { "SEA EXPORT" → { "Apr-25" → {...} } }
 
-  // True ISO 8601 week number (Mon-Sun), independent of calendar month —
-  // a week is identified by "<isoYear>-W<NN>" and can span two months.
-  // Returns { key, weekNum, isoYear, monday (Date), sunday (Date) }.
-  function isoWeekInfo(date) {
-    // date is IST-adjusted: use getUTCFullYear/Month/Date to get the IST calendar date
-    var d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-    var dayNum = (d.getUTCDay() + 6) % 7; // Mon=0 .. Sun=6
-    var thursday = new Date(d);
-    thursday.setUTCDate(d.getUTCDate() - dayNum + 3);
-    var isoYear = thursday.getUTCFullYear();
-    var firstThursday = new Date(Date.UTC(isoYear, 0, 4));
-    var fThDayNum = (firstThursday.getUTCDay() + 6) % 7;
-    firstThursday.setUTCDate(firstThursday.getUTCDate() - fThDayNum + 3);
-    var weekNum = 1 + Math.round((thursday - firstThursday) / (7 * 86400000));
-    var monday = new Date(d);
-    monday.setUTCDate(d.getUTCDate() - dayNum);
-    var sunday = new Date(monday);
-    sunday.setUTCDate(monday.getUTCDate() + 6);
-    var key = isoYear + '-W' + String(weekNum).padStart(2, '0');
-    return { key: key, weekNum: weekNum, isoYear: isoYear, monday: monday, sunday: sunday };
-  }
   // Fetch all collections IN PARALLEL — no DB-level date filter since dates may be in
   // DD/MM/YYYY format which breaks string comparison. parseSheetDate handles filtering in memory.
   const allJobResults = await Promise.all(JOB_COLLECTIONS.map(cn =>
