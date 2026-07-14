@@ -5444,6 +5444,16 @@ function openInsightDrill(drillType, name) {
   var _ILOB = {'Air':['AIR EXPORT','AIR IMPORT'],'Ocean':['SEA EXPORT','SEA IMPORT'],'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT']};
   var _insightLob = drillType==='customer' ? (state.customerLob||'Air') : drillType==='agent' ? (state.agentLob||'Air') : (state.tradelaneLob||'Air');
   var activeLobFilter = _ILOB[_insightLob] || null;
+  // RLS rep filter — same reps visible in the insight table
+  var _rlsRepsNorm = [];
+  if (currentUser) {
+    var _iRole = (currentUser.role||'').toLowerCase().trim();
+    if (_iRole === 'sales rep') {
+      _rlsRepsNorm = [normalizeName(currentUser.name)];
+    } else if (_iRole === 'zonal manager') {
+      _rlsRepsNorm = repsRaw.filter(function(r){ return !r.isBranch; }).map(function(r){ return normalizeName(r.name); });
+    }
+  }
   var matched = [];
   for (var i = 0; i < allDrillRows.length; i++) {
     var row = allDrillRows[i];
@@ -5453,6 +5463,8 @@ function openInsightDrill(drillType, name) {
     var idxs = filteredMonthIndices();
     var allowedMonths = idxs.map(function(i){ return months26[i]; });
     if (allowedMonths.length > 0 && allowedMonths.indexOf(row._ml) === -1) continue;
+    // RLS rep filter — only show rows belonging to visible reps
+    if (_rlsRepsNorm.length > 0 && _rlsRepsNorm.indexOf(row._sp) === -1) continue;
     // Entity match
     var match = false;
     if (drillType === 'customer') {
