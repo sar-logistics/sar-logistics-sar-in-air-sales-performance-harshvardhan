@@ -2223,40 +2223,22 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "tradelaneDebug") {
-      // Samples sea/isotank job rows to show what port fields are actually present
-      const debugColls = [
-        { coll: "jobs_sea_export",     dateCol: "ETD Loading Port" },
-        { coll: "jobs_sea_import",     dateCol: "ETA Discharge" },
-        { coll: "jobs_isotank_export", dateCol: "ETD Loading Port" },
-        { coll: "jobs_isotank_import", dateCol: "ETA Discharge" },
-      ];
-      const result = {};
-      for (const { coll, dateCol } of debugColls) {
-        const rows = await db.collection(coll).find({}, { projection: {
-          "Shipment No":1, "ETD Loading Port":1, "ETA Discharge":1,
-          "Job Date":1, "LOB":1, "Cargo Type":1,
-        }}).limit(3).toArray();
-        const total = await db.collection(coll).countDocuments({});
-        // Check how many have ETD vs ETA populated
-        const hasETD = await db.collection(coll).countDocuments({ "ETD Loading Port": { $exists: true, $ne: "", $ne: null } });
-        const hasETA = await db.collection(coll).countDocuments({ "ETA Discharge":    { $exists: true, $ne: "", $ne: null } });
-        result[coll] = { total, hasETD, hasETA, samples: rows.map(r => ({
-          shipNo: r["Shipment No"],
-          etd: r["ETD Loading Port"],
-          eta: r["ETA Discharge"],
-          jobDate: r["Job Date"],
-          lob: r["LOB"],
-          cargoType: r["Cargo Type"],
-        }))};
-      }
-      // Also check SRR collections
+      // Show SRR row fields + check shipment no overlap with job collections
       const srrColls = ["srr_sea_export","srr_sea_import","srr_air_export","srr_air_import"];
-      const srrCounts = {};
+      const srrSamples = {};
       for (const c of srrColls) {
-        try { srrCounts[c] = await db.collection(c).countDocuments({}); }
-        catch(e) { srrCounts[c] = "missing"; }
+        try {
+          const rows = await db.collection(c).find({}).limit(2).toArray();
+          const total = await db.collection(c).countDocuments({});
+          srrSamples[c] = { total, fields: rows[0] ? Object.keys(rows[0]).filter(k=>k!=='_id') : [], samples: rows.map(r=>{ const o={}; Object.keys(r).filter(k=>k!=='_id').forEach(k=>{ o[k]=r[k]; }); return o; }) };
+        } catch(e) { srrSamples[c] = { error: e.message }; }
       }
-      return res.status(200).json({ success: true, jobSamples: result, srrCounts });
+      // Check overlap: how many sea_export job shipment nos exist in srr_sea_export
+      const jobSnos = await db.collection("jobs_sea_export").distinct("Shipment No");
+      const srrSnos = await db.collection("srr_sea_export").distinct("Shipment No");
+      const srrSet = new Set(srrSnos);
+      const overlap = jobSnos.filter(s=>srrSet.has(s)).length;
+      return res.status(200).json({ success: true, srrSamples, overlapCheck: { jobSeaExportTotal: jobSnos.length, srrSeaExportTotal: srrSnos.length, overlap } });
     }
 
     if (action === "lobCheck") {
