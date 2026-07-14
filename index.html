@@ -6049,18 +6049,7 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; render(); }
   else if(act==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; state.fromDropOpen=false; state.toDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='setCustomerLob'){
-  ev.stopPropagation();
-  var _cl = el.getAttribute('data-val');
-  state.customerLob = _cl;
-  var _lobMap = {
-    'Air':      ['AIR EXPORT','AIR IMPORT'],
-    'Ocean':    ['SEA EXPORT','SEA IMPORT'],
-    'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
-  };
-  if (_lobMap[_cl]) state.filterLobs = _lobMap[_cl];
-  render();
-}
+  else if(act==='setCustomerLob'){ ev.stopPropagation(); state.customerLob=el.getAttribute('data-val'); render(); }
   else if(act==='setCustView'){ ev.stopPropagation(); state.customerView=el.getAttribute('data-val'); render(); }
   else if(act==='custSort'){
     ev.stopPropagation();
@@ -6069,36 +6058,13 @@ document.addEventListener('click', function(ev){
     else { state.custSortCol = col; state.custSortDir = -1; }
     render();
   }
-  else if(act==='setAgentLob'){
-  ev.stopPropagation();
-  var _al = el.getAttribute('data-val');
-  state.agentLob = _al;
-  var _lobMap = {
-    'Air':      ['AIR EXPORT','AIR IMPORT'],
-    'Ocean':    ['SEA EXPORT','SEA IMPORT'],
-    'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
-  };
-  if (_lobMap[_al]) state.filterLobs = _lobMap[_al];
-  render();
-}
+  else if(act==='setAgentLob'){ ev.stopPropagation(); state.agentLob=el.getAttribute('data-val'); render(); }
   else if(act==='setAgentView'){ ev.stopPropagation(); state.agentView=el.getAttribute('data-val'); render(); }
   else if(act==='agentSort'){
     ev.stopPropagation(); var col=el.getAttribute('data-col');
     if(state.agentSortCol===col){ state.agentSortDir=(state.agentSortDir||(-1))*-1; } else { state.agentSortCol=col; state.agentSortDir=-1; } render();
   }
-  else if(act==='setTradelaneLob'){
-  ev.stopPropagation();
-  var _tl = el.getAttribute('data-val');
-  state.tradelaneLob = _tl;
-  // Sync LOB filter to match the selected tradelane tab
-  var _lobMap = {
-    'Air':      ['AIR EXPORT','AIR IMPORT'],
-    'Ocean':    ['SEA EXPORT','SEA IMPORT'],
-    'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
-  };
-  if (_lobMap[_tl]) state.filterLobs = _lobMap[_tl];
-  render();
-}
+  else if(act==='setTradelaneLob'){ ev.stopPropagation(); state.tradelaneLob=el.getAttribute('data-val'); render(); }
   else if(act==='setTradelaneView'){ ev.stopPropagation(); state.tradelaneView=el.getAttribute('data-val'); render(); }
   else if(act==='tradelaneSort'){
     ev.stopPropagation(); var col=el.getAttribute('data-col');
