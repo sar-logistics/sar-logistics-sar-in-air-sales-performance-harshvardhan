@@ -2512,7 +2512,7 @@ function customerPage(){
   var LOB_SUBTITLES = {'Air':'Air Export + Air Import','Ocean':'Sea Export + Sea Import','ISO Tank':'ISO Tank Export + Import'};
 
   var d = customerData || {};
-  var lobData = (activeView === 'table') ? d : ((d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d);
+  var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
 
   // Apply filterReps / filterLobs to customer data
   // RLS: auto-restrict reps based on user role
@@ -2593,7 +2593,7 @@ function customerPage(){
 
   var brandC = LOB_COLORS[activeLob];
 
-  var tabs = activeView === 'table' ? '' : LOBS.map(function(lob){
+  var tabs = LOBS.map(function(lob){
     var active = lob === activeLob;
     var c = LOB_COLORS[lob];
     return '<button data-act="setCustomerLob" data-val="'+esc(lob)+'" style="padding:6px 16px;border-radius:999px;border:1.5px solid '+(active?c:'#D8E1F0')+';background:'+(active?c:'#F4F7FC')+';color:'+(active?'#fff':'#5B7298')+';font-size:12px;font-weight:700;cursor:pointer;">'+esc(lob)+'</button>';
@@ -2731,7 +2731,7 @@ function agentPage(){
   var LOB_SUBTITLES = {'Air':'Air Export + Air Import','Ocean':'Sea Export + Sea Import','ISO Tank':'ISO Tank Export + Import'};
 
   var d = agentData || {};
-  var lobData = (activeView === 'table') ? d : ((d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d);
+  var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
 
   // Apply filterReps / filterLobs
   // RLS: auto-restrict reps based on user role
@@ -2796,7 +2796,7 @@ function agentPage(){
 
   var brandC = LOB_COLORS[activeLob];
 
-  var tabs = activeView === 'table' ? '' : LOBS.map(function(lob){
+  var tabs = LOBS.map(function(lob){
     var active = lob === activeLob;
     var c = LOB_COLORS[lob];
     return '<button data-act="setAgentLob" data-val="'+esc(lob)+'" style="padding:6px 16px;border-radius:999px;border:1.5px solid '+(active?c:'#D8E1F0')+';background:'+(active?c:'#F4F7FC')+';color:'+(active?'#fff':'#5B7298')+';font-size:12px;font-weight:700;cursor:pointer;">'+esc(lob)+'</button>';
@@ -2934,7 +2934,7 @@ function tradelanePage(){
   var LOB_SUBTITLES = {'Air':'Air Export + Air Import','Ocean':'Sea Export + Sea Import','ISO Tank':'ISO Tank Export + Import'};
 
   var d = tradelaneData || {};
-  var lobData = (activeView === 'table') ? d : ((d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d);
+  var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
 
   // Apply filterReps / filterLobs
   // RLS: auto-restrict reps based on user role
@@ -2985,7 +2985,7 @@ function tradelanePage(){
 
   var brandC = LOB_COLORS[activeLob];
 
-  var tabs = activeView === 'table' ? '' : LOBS.map(function(lob){
+  var tabs = LOBS.map(function(lob){
     var active = lob===activeLob; var c=LOB_COLORS[lob];
     return '<button data-act="setTradelaneLob" data-val="'+esc(lob)+'" style="padding:6px 16px;border-radius:999px;border:1.5px solid '+(active?c:'#D8E1F0')+';background:'+(active?c:'#F4F7FC')+';color:'+(active?'#fff':'#5B7298')+';font-size:12px;font-weight:700;cursor:pointer;">'+esc(lob)+'</button>';
   }).join('');
@@ -4694,7 +4694,7 @@ function drawer(){
 
     // ── Apply LOB tab + per-column filters to determine the visible row set ──
     var columnFilters = state.drill.columnFilters || {};
-    var _activeDrillLobs = (state.filterLobs && state.filterLobs.length > 0) ? state.filterLobs : null;
+    var _activeDrillLobs = (state.drill && state.drill.insightDrill) ? null : ((state.filterLobs && state.filterLobs.length > 0) ? state.filterLobs : null);
     var visibleRows = (d.rows||[]).filter(function(s){
       // LOB tab filter
       if (activeLobTab !== 'ALL' && s.lob !== activeLobTab) return false;
@@ -5497,9 +5497,8 @@ function openInsightDrill(drillType, name) {
     totalMetric: totalShip,
     totalGP: totalGP, totalProvGP: 0, totalActualGP: totalGP,
     totalRevenue: totalRev, totalCost: totalRev - totalGP,
-    lobTab: _defaultDrillLobTab(),
-    columnFilters: activeLobFilter ? {lob: activeLobFilter.slice()} : {},
-    openFilterCol: null, filterDraft: {}
+    lobTab: 'ALL', insightDrill: true,
+    columnFilters: {}, openFilterCol: null, filterDraft: {}
   };
   render();
 }
