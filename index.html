@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v53'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v54'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -3021,19 +3021,7 @@ function tradelanePage(){
     )
     +(periodLabel ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+periodLabel+'</span>' : '')
     +(activeView==='table' ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+(allC.length)+' tradelanes \u00b7 '+fmtCur(totalRev)+' Rev \u00b7 '+overallGPPct+'% GP%</span>' : '')
-    + (function(){
-        var MONTHS = months26.filter(function(m){ return m.endsWith('-25')||m.endsWith('-26')||m.endsWith('-27'); });
-        function mkSel(val, act){
-          return '<select data-act="'+act+'" style="font-size:11px;padding:3px 6px;border:1px solid #D0D9E8;border-radius:6px;background:#fff;color:#15233B;cursor:pointer;">'+
-            MONTHS.map(function(m){ return '<option value="'+m+'"'+(m===val?' selected':'')+'>'+m+'</option>'; }).join('')+'</select>';
-        }
-        var tlFrom = state.tradelaneDateFrom || months26[filteredMonthIndices()[0]] || 'Apr-26';
-        var tlTo   = state.tradelaneDateTo   || months26[filteredMonthIndices()[filteredMonthIndices().length-1]] || 'Jul-26';
-        return '<div style="display:flex;align-items:center;gap:6px;">'
-          +'<span style="font-size:11px;color:#64748B;">From</span>'+mkSel(tlFrom,'setTradelaneDateFrom')
-          +'<span style="font-size:11px;color:#64748B;">To</span>'+mkSel(tlTo,'setTradelaneDateTo')
-          +'</div>';
-      })()
+    
     +'<div style="display:flex;align-items:center;gap:6px;margin-left:auto;">'
       +(tabs ? '<div style="display:flex;gap:6px;">'+tabs+'</div>' : '')
       +viewToggle
