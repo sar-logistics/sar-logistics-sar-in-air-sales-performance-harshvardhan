@@ -1679,7 +1679,7 @@ function grandEntity(){
   var wkeys = isWeekly ? filteredWeekKeys() : null;
   return {
     name:'Grand Total', initials:'GT', avatarBg:'oklch(0.5 0.14 262)', isGrand:true, zone:'',
-    ship: isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
+    ship: isWeekly ? wkeys.map(function(k){if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;return allDrillRows.filter(function(r){return r._wk===k&&(!_fl||_fl.indexOf(r.lob)>-1);}).length;}return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
                    : idxs.map(function(i){return sum(repsRaw.map(function(r){return r.ship[i]||0;}));}),
     gp:   isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){return sum(repsRaw.map(function(r){return r.gp[i]||0;}));}),
