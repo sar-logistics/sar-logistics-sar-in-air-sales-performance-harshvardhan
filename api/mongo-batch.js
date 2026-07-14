@@ -1416,6 +1416,17 @@ function portToInfo(portStr) {
 // Legacy compat
 function portToCountry(portStr) { return portToInfo(portStr).country; }
 
+// Reverse-lookup: country name (plain text) → tradelane
+// Used for ocean/isotank jobs which store Consignee Country / Shipper Country as plain text
+const _countryToTradelane = {};
+Object.values(TRADELANE_MAP).forEach(function(e) {
+  if (e.country) _countryToTradelane[e.country.toLowerCase()] = e.tradelane;
+});
+function countryNameToTradelane(name) {
+  if (!name) return "";
+  return _countryToTradelane[String(name).toLowerCase().trim()] || "";
+}
+
 async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
   const key = cacheKey || "all";
   const entry = tradelaneCacheMap[key];
@@ -1494,6 +1505,8 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     "Sales Person": 1, "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
     "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+    "Consignee Country": 1, "Shipper Country": 1, "Trade Lane": 1,
+    "Discharge Port": 1, "Loading Port": 1,
   };
 
   // countryMap: country → { shipments, revenue, gp, tons, teu, salesReps, lobs }
@@ -1525,30 +1538,30 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
 
       let tradelane = "", country = "";
       if (srrEntry) {
+        // SRR match — most accurate source
         tradelane = srrEntry.tradelane || srrEntry.country;
         country   = srrEntry.country;
       } else if (cfg.lob === "Air") {
-        // Air must match via SRR (port codes not on job row) — skip if missing
+        // Air: no country fields on job row — skip if not in SRR
         continue;
       } else {
-        // Ocean / ISO Tank: derive country+tradelane directly from job row port fields
-        // Export → ETD Loading Port gives origin (IN), Discharge port = destination
-        // We need destination for export, origin for import
-        const portField = cfg.dir === "Export" ? "ETD Loading Port" : "ETA Discharge";
-        const portStr   = String(job[portField] || "").trim();
-        if (!portStr) continue;
-        const info = portToInfo(portStr);
-        // portToInfo extracts the foreign port; but ETD/ETA might be the Indian port
-        // Use the OTHER port: for export the discharge (destination), for import the loading (origin)
-        // The job row also has the counter-party port in the opposite field
-        const counterField = cfg.dir === "Export" ? "ETA Discharge" : "ETD Loading Port";
-        const counterPort  = String(job[counterField] || "").trim();
-        const counterInfo  = counterPort ? portToInfo(counterPort) : { country: "", tradelane: "" };
-        // Pick the non-India port for tradelane grouping
-        const useInfo = (counterInfo.country && counterInfo.country !== "India") ? counterInfo : info;
-        country   = useInfo.country;
-        tradelane = useInfo.tradelane;
-        if (!tradelane) continue; // can't classify without a tradelane
+        // Ocean / ISO Tank: use country fields directly on the job row
+        // Export: foreign country = Consignee Country (destination)
+        // Import: foreign country = Shipper Country (origin)
+        const rawCountry = cfg.dir === "Export"
+          ? String(job["Consignee Country"] || "").trim()
+          : String(job["Shipper Country"]   || "").trim();
+
+        if (!rawCountry || rawCountry.toLowerCase() === "india") {
+          // Try Trade Lane field as last resort
+          const tl = String(job["Trade Lane"] || "").trim();
+          if (!tl) continue;
+          tradelane = tl;
+          country   = tl;
+        } else {
+          country   = rawCountry;
+          tradelane = countryNameToTradelane(rawCountry) || rawCountry;
+        }
       }
       if (!tradelane) continue;
 
