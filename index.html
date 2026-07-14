@@ -344,9 +344,7 @@ function _showDashboardBody() {
     if (tc && tc.success) { tradelaneData = tc; tradelaneDataReady = true; _tradelaneCache[latestKey] = tc; }
     var cusc = lsGet('customers_' + latestKey) || lsGet('customers_' + defKey);
     if (cusc && cusc.success) { customerData = cusc; customerDataReady = true; _customerCache[latestKey] = cusc; }
-    // Load drill rows from localStorage — avoids re-fetch on every session
-    var _tDrill = performance.now(); var dc = lsGet('drillrows'); console.log('[PERF] lsGet(drillrows) took', (performance.now()-_tDrill).toFixed(1)+'ms rows='+((dc&&dc.rows&&dc.rows.length)||0));
-    if (dc && dc.rows && dc.rows.length > 0) { allDrillRows = dc.rows; }
+    // drillrows not stored in localStorage (too large) — loaded via ping response
     // allPendencyDrillRows: prefer from opData (already extracted above), fallback to dedicated key
     if (!allPendencyDrillRows) {
       var _tPDrill = performance.now(); var pdc = lsGet('pendencyDrillRows'); console.log('[PERF] lsGet(pendencyDrillRows) took', (performance.now()-_tPDrill).toFixed(1)+'ms');
@@ -687,7 +685,7 @@ function fetchLiveData(callback, force){
           setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
           if (data.allDrillRows && data.allDrillRows.length > 0 && !allDrillRows) {
             allDrillRows = data.allDrillRows;
-            lsSet('drillrows', { rows: allDrillRows });
+            // drillrows kept in-memory only (too large for localStorage)
           }
           // If allDrillRows not in sales response, fetch it silently in background
           if (!allDrillRows) {
@@ -5194,7 +5192,7 @@ function loadDrillData(callback){
     .then(function(data){
       if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
         allDrillRows = data.sales.allDrillRows;
-        lsSet('drillrows', { rows: allDrillRows });
+        // drillrows kept in-memory only (too large for localStorage)
       }
       _drillDataLoading = false;
       _drillDataCallbacks.forEach(function(cb){ cb(); });
@@ -6486,7 +6484,7 @@ window.addEventListener('load', function() {
             // Save drill rows separately
             if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0) {
               allDrillRows = d.sales.allDrillRows;
-              lsSet('drillrows', { rows: allDrillRows });
+              // drillrows kept in-memory only (too large for localStorage)
             }
             // Check if lobData came bundled (Air keys always included in response)
             if (repsRawOriginal[0] && repsRawOriginal[0].lobData) {
@@ -6499,7 +6497,7 @@ window.addEventListener('load', function() {
             }
           } else if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0 && !allDrillRows) {
             allDrillRows = d.sales.allDrillRows;
-            lsSet('drillrows', { rows: allDrillRows });
+            // drillrows kept in-memory only (too large for localStorage)
           }
         }
 
