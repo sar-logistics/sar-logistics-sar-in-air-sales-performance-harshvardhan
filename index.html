@@ -5464,36 +5464,36 @@ function openInsightDrill(drillType, name) {
   // Defer heavy computation to next frame so loading state paints first
   requestAnimationFrame(function(){
   var nameLower = (name || '').toLowerCase();
-  // No LOB filter for insight drill — customer/agent/tradelane counts are cross-LOB
-  // (e.g. OL USA LLC has Air Exp + Sea Exp + Sea Imp — all count toward its 42 shipments)
-  var activeLobFilter = null;
-  // RLS rep filter — same reps visible in the insight table
+
+  // LOB filter — use active LOB tab for this insight page
+  var _ILOB = {'Air':['AIR EXPORT','AIR IMPORT'],'Ocean':['SEA EXPORT','SEA IMPORT'],'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT']};
+  var _insightActiveLob = drillType==='customer'?(state.customerLob||'Air'):drillType==='agent'?(state.agentLob||'Air'):(state.tradelaneLob||'Air');
+  var activeLobFilter = _ILOB[_insightActiveLob] || null;
+
+  // Date range — compute ONCE outside loop
+  var _iDateRange = drillType==='customer' ? getCustomerDateRange() : drillType==='agent' ? getAgentDateRange() : getTradelaneDateRange();
+  var _iFrom = _iDateRange.dateFrom, _iTo = _iDateRange.dateTo;
+  var FY_ALL = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
+  var _iFromIdx = _iFrom ? FY_ALL.indexOf(_iFrom) : 0;
+  var _iToIdx   = _iTo   ? FY_ALL.indexOf(_iTo)   : FY_ALL.length - 1;
+
+  // RLS rep filter — compute ONCE outside loop
   var _rlsRepsNorm = [];
   if (currentUser) {
     var _iRole = (currentUser.role||'').toLowerCase().trim();
-    if (_iRole === 'sales rep') {
-      _rlsRepsNorm = [normalizeName(currentUser.name)];
-    } else if (_iRole === 'zonal manager') {
-      _rlsRepsNorm = repsRaw.filter(function(r){ return !r.isBranch; }).map(function(r){ return normalizeName(r.name); });
-    }
+    if (_iRole === 'sales rep') _rlsRepsNorm = [normalizeName(currentUser.name)];
+    else if (_iRole === 'zonal manager') _rlsRepsNorm = repsRaw.filter(function(r){return !r.isBranch;}).map(function(r){return normalizeName(r.name);});
   }
+
   var matched = [];
   for (var i = 0; i < allDrillRows.length; i++) {
     var row = allDrillRows[i];
     // LOB filter
     if (activeLobFilter && activeLobFilter.indexOf(row.lob) === -1) continue;
     // Date range filter
-    // Use insight-page date range (not sales performance range)
-    var _iDateRange = drillType === 'customer' ? getCustomerDateRange()
-                    : drillType === 'agent'    ? getAgentDateRange()
-                    : getTradelaneDateRange();
-    var _iFrom = _iDateRange.dateFrom, _iTo = _iDateRange.dateTo;
-    var FY_ALL = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
-    var _iFromIdx = _iFrom ? FY_ALL.indexOf(_iFrom) : 0;
-    var _iToIdx   = _iTo   ? FY_ALL.indexOf(_iTo)   : FY_ALL.length - 1;
-    var _iRowIdx  = FY_ALL.indexOf(row._ml);
+    var _iRowIdx = FY_ALL.indexOf(row._ml);
     if (_iRowIdx < 0 || _iRowIdx < _iFromIdx || _iRowIdx > _iToIdx) continue;
-    // RLS rep filter — only show rows belonging to visible reps
+    // RLS rep filter
     if (_rlsRepsNorm.length > 0 && _rlsRepsNorm.indexOf(row._sp) === -1) continue;
     // Entity match
     var match = false;
@@ -5503,12 +5503,7 @@ function openInsightDrill(drillType, name) {
       match = (row.destAgent || '').toLowerCase() === nameLower ||
               (row.originAgent || '').toLowerCase() === nameLower;
     } else if (drillType === 'tradelane') {
-      // tradelane name is "Origin → Destination" or just country
-      var tl = ((row.etdLoading||row.location||'') + ' → ' + (row.etaDischarge||'')).trim();
-      match = tl.toLowerCase() === nameLower ||
-              (row.location || '').toLowerCase() === nameLower ||
-              (row.etdLoading || '').toLowerCase() === nameLower ||
-              (row.etaDischarge || '').toLowerCase() === nameLower;
+      match = (row.location || '').toLowerCase() === nameLower;
     }
     if (!match) continue;
     matched.push(row);
