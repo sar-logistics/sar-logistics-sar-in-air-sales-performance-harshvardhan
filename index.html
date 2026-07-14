@@ -2379,10 +2379,15 @@ function horizontalBarPanel(title, items, valueKey, fmtFn, barColor, drillType){
   var maxVal = Math.max.apply(null, items.map(function(it){ return it[valueKey]; }));
   var rows = items.map(function(it){
     var pct = maxVal > 0 ? Math.max(2, (it[valueKey] / maxVal) * 100) : 0;
-    var label = it.name.length > 28 ? it.name.slice(0,26)+'…' : it.name;
+    var label = it.name.length > 28 ? it.name.slice(0,26)+'\u2026' : it.name;
     var _dAttr = drillType ? ' data-act="insightDrill" data-drill-type="'+esc(drillType)+'" data-drill-name="'+esc(it.name)+'"' : '';
-    var _dStyle = drillType ? 'cursor:pointer;border-radius:6px;padding:2px 4px;transition:background 0.15s;' : '';
-    return '<div'+_dAttr+' style="display:flex;align-items:center;gap:10px;margin-bottom:9px;'+_dStyle+'">'
+    var _tip = esc(it.name)
+      +' \u2022 Ships: '+(it.shipments||0)
+      +' \u2022 GP: '+fmtCur(it.gp||0)
+      +' \u2022 Rev: '+fmtCur(it.revenue||0)
+      +(it.tons>0?' \u2022 Tons: '+it.tons.toFixed(1):'')
+      +(it.teu>0?' \u2022 TEU: '+it.teu.toFixed(1):'');
+    return '<div'+_dAttr+' title="'+_tip+'" style="display:flex;align-items:center;gap:10px;margin-bottom:9px;'+(drillType?'cursor:pointer;':'')+';border-radius:6px;padding:3px 4px;transition:background 0.15s;" onmouseenter="this.style.background=\'#F0F4FA\'" onmouseleave="this.style.background=\'transparent\'">'
       +'<div style="width:130px;flex-shrink:0;font-size:11px;color:#374151;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(it.name)+'">'+esc(label)+'</div>'
       +'<div style="flex:1;background:#F1F5F9;border-radius:4px;height:18px;position:relative;overflow:hidden;">'
         +'<div style="background:'+barColor+';height:100%;border-radius:4px;width:'+pct+'%;transition:width 0.4s ease;"></div>'
@@ -2676,7 +2681,7 @@ function customerPivotTable(lobData, activeLob, brandC) {
     var bg = i%2===1 ? 'background:#FAFBFD;' : '';
     tbody += '<tr style="border-bottom:1px solid #F1F5F9;'+bg+'">'
       +'<td style="padding:7px 10px;font-size:11px;color:#9AAFC8;text-align:center;font-weight:600;">'+(i+1)+'</td>'
-      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:#15233B;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(c.name)+'">'+esc(c.name)+'</td>'
+      +'<td data-act="insightDrill" data-drill-type="customer" data-drill-name="'+esc(c.name)+'" title="'+esc(c.name)+'" style="padding:7px 10px;font-size:11.5px;font-weight:700;color:#1D5FCC;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-decoration:underline dotted;">'+esc(c.name)+'</td>'
       +'<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+c.shipments+'</td>'
       +(isAir
         ? '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+(c.tons>=1000?(c.tons/1000).toFixed(1)+'k':c.tons.toFixed(1))+'</td>'
@@ -2876,7 +2881,7 @@ function agentPivotTable(lobData, activeLob, brandC) {
     var bg = i%2===1 ? 'background:#FAFBFD;' : '';
     tbody += '<tr style="border-bottom:1px solid #F1F5F9;'+bg+'">'
       +'<td style="padding:7px 10px;font-size:11px;color:#9AAFC8;text-align:center;font-weight:600;">'+(i+1)+'</td>'
-      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:#15233B;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(a.name)+'">'+esc(a.name)+'</td>'
+      +'<td data-act="insightDrill" data-drill-type="agent" data-drill-name="'+esc(a.name)+'" title="'+esc(a.name)+'" style="padding:7px 10px;font-size:11.5px;font-weight:700;color:#1D5FCC;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;text-decoration:underline dotted;">'+esc(a.name)+'</td>'
       +'<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+a.shipments+'</td>'
       +(isAir
         ? '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+(a.tons>=1000?(a.tons/1000).toFixed(1)+'k':a.tons.toFixed(1))+'</td>'
@@ -3072,9 +3077,9 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
 
     var avatar = '<div style="width:28px;height:28px;border-radius:8px;background:'+avatarBg+';display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0;margin-right:8px;">'+esc(ini)+'</div>';
 
-    var nameTd = '<td rowspan="'+(open?8:4)+'" style="position:sticky;left:0;z-index:2;background:'+bg+';padding:10px 12px;border-bottom:2px solid '+BORDER_STRONG+';vertical-align:middle;box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';min-width:160px;">'
-      +'<div style="display:flex;align-items:center;">'+avatar+'<span style="font-size:12px;font-weight:700;color:#15233B;">'+esc(name)+'</span></div>'
-    +'</td>';
+    var _drillAttr = !isGrand ? ' data-act="insightDrill" data-drill-type="tradelane" data-drill-name="'+esc(name)+'"' : '';
+    var _drillStyle = !isGrand ? 'cursor:pointer;' : '';
+    var nameTd = \'<td rowspan="\'+(open?8:4)+\'"\'+ _drillAttr +\' style="position:sticky;left:0;z-index:2;background:\'+bg+\';padding:10px 12px;border-bottom:2px solid \'+BORDER_STRONG+\';vertical-align:middle;box-shadow:inset -1.5px 0 0 \'+BORDER_STRONG+\';min-width:160px;\'+_drillStyle+\'">\'\n      +\'<div style="display:flex;align-items:center;">\'+avatar+\'<span style="font-size:12px;font-weight:700;color:\'+(!isGrand?\'#1D5FCC\':\'#15233B\')+\';">\'+esc(name)+\'</span></div>\'\n    +\'</td>\';
 
     function mTd(label, indent, clickable, clickAct, clickVal) {
       var actAttr = clickable ? ' data-act="'+clickAct+'" data-name="'+esc(clickVal)+'" style="cursor:pointer;"' : '';
