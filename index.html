@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v51'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v52'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -1265,7 +1265,7 @@ function updateUserField(email, fields, callback){
 }
 
 var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'', dateTo:'', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, pendencyDrill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:1, agentLob:'Air', agentView:'chart', agentSortCol:'gp', agentSortDir:1, tradelaneLob:'Air', tradelaneView:'chart', tradelaneSortCol:'gp', tradelaneSortDir:-1, tradelaneShipOpen:{},
-  tradelaneDateFrom:'', tradelaneDateTo:'', tradelanePeriod:'Monthly',
+  tradelaneDateFrom:'', tradelaneDateTo:'', tradelanePeriod:'Monthly', tradelaneWeeklyMonth:'',
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
   addUserOpen: false, addUserError: '', addUserDefaultRole: '',
   weeklyMonth: null,
@@ -1980,7 +1980,7 @@ function topbar(){
         +'</div>'
         +(state.viewDropOpen
           ? '<div id="view-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
-            +((state.page==='customers'||state.page==='agents'||state.page==='tradelane') ? ['Monthly','Yearly','Custom'] : ['Monthly','Weekly','Quarterly','Yearly','Custom']).map(function(v){
+            +((state.page==='customers'||state.page==='agents') ? ['Monthly','Yearly','Custom'] : state.page==='tradelane' ? ['Monthly','Weekly','Custom'] : ['Monthly','Weekly','Quarterly','Yearly','Custom']).map(function(v){
               var active = state.reportView===v;
               var desc = v==='Monthly'?'Month by month':v==='Weekly'?'Week by week':v==='Quarterly'?'Quarter view':v==='Yearly'?'Full year':'Custom range';
               return '<div data-act="setView" data-val="'+v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;transition:background 0.1s;">'
@@ -3054,7 +3054,7 @@ function tradelanePage(){
   if (activeView === 'table') {
     var _tlDR = getTradelaneDateRange();
     var _openKeys = Object.keys(state.tradelaneShipOpen||{}).filter(function(k){return state.tradelaneShipOpen[k];}).sort().join(',');
-    var _tlPivotKey = activeLob+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+_openKeys;
+    var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+_openKeys;
     if (!_tradelanePivotCache[_tlPivotKey]) {
       _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC);
     }
@@ -3080,8 +3080,9 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
   var BORDER_STRONG = '#B0BAC8';
   var MONO = "font-family:'DM Mono',monospace;";
 
+  var isWeekly = state.reportView === 'Weekly';
   var idxs = filteredMonthIndices();
-  var activeMons = idxs.map(function(i){ return months26[i]; });
+  var activeMons = isWeekly ? filteredWeekKeys() : idxs.map(function(i){ return months26[i]; });
 
   // Grand totals
   var grand = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
@@ -3091,7 +3092,7 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
     grand.tons += r.tons||0; grand.teu += r.teu||0;
     grand.fclTeu += r.fclTeu||0; grand.tankTeu += r.tankTeu||0; grand.lcl += r.lcl||0;
     activeMons.forEach(function(m){
-      var md = (r.monthData||{})[m]; if (!md) return;
+      var md = isWeekly ? (r.weekData||{})[m] : (r.monthData||{})[m]; if (!md) return;
       if (!grandMD[m]) grandMD[m] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
       grandMD[m].shipments += md.shipments||0; grandMD[m].revenue += md.revenue||0; grandMD[m].gp += md.gp||0;
       grandMD[m].tons += md.tons||0; grandMD[m].teu += md.teu||0;
@@ -3170,7 +3171,7 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
     var r1 = '<tr style="'+trS+'">' + nameTd
       +'<td data-act="tlShipToggle" data-name="'+esc(name)+'" style="position:sticky;left:160px;z-index:2;background:'+bg+';padding:7px 10px;font-size:11.5px;font-weight:600;color:#15233B;border-right:1px solid '+BORDER+';min-width:130px;cursor:pointer;">'+arrowChar+'Shipments</td>'
       + gtTd(fmtN(data.shipments), '#15233B', true, false, name)
-      + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCellDrill(md&&md.shipments>0?md.shipments:'--', null, false, name, m); }).join('')
+      + activeMons.map(function(m){ var md=isWeekly?((data&&data.weekData||{})[m]):(monthData||{})[m]; return mCellDrill(md&&md.shipments>0?md.shipments:'--', null, false, name, m); }).join('')
       +'</tr>';
 
     // Sub-rows (only when open)
@@ -3180,7 +3181,7 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
         subRows += '<tr style="'+subTrS+'">'
           + mTdSub('Tons (Air)')
           + gtTd(fmtT(data.tons||0), '#64748B', false, true)
-          + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.tons||0)>0?(md.tons||0).toFixed(1):'--', '#64748B', true); }).join('')
+          + activeMons.map(function(m){ var md=isWeekly?((data&&data.weekData||{})[m]):(monthData||{})[m]; return mCell(md&&(md.tons||0)>0?(md.tons||0).toFixed(1):'--', '#64748B', true); }).join('')
           +'</tr>';
       } else if (activeLob === 'ISO Tank') {
         subRows += '<tr style="'+subTrS+'">'
@@ -3212,14 +3213,14 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
     var r2 = '<tr style="'+trS+'">'
       + mTd('Revenue', 0, false)
       + gtTd(fmtV(data.revenue), '#334155', false)
-      + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCellDrill(md?fmtV(md.revenue):'--', null, false, name, m); }).join('')
+      + activeMons.map(function(m){ var md=isWeekly?((data&&data.weekData||{})[m]):(monthData||{})[m]; return mCellDrill(md?fmtV(md.revenue):'--', null, false, name, m); }).join('')
       +'</tr>';
 
     // GP row
     var r3 = '<tr style="'+trS+'">'
       + mTd('GP', 0, false)
       + gtTd(fmtV(data.gp), gpColor, false)
-      + activeMons.map(function(m){ var md=(monthData||{})[m]; var c=md&&md.gp>=0?'#059669':'#DC2626'; return mCellDrill(md?fmtV(md.gp):'--', c, false, name, m); }).join('')
+      + activeMons.map(function(m){ var md=isWeekly?((data&&data.weekData||{})[m]):(monthData||{})[m]; var c=md&&md.gp>=0?'#059669':'#DC2626'; return mCellDrill(md?fmtV(md.gp):'--', c, false, name, m); }).join('')
       +'</tr>';
 
     // GP% row
