@@ -3181,11 +3181,41 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
 
   if (isWeekly) {
     activeCols = filteredWeekKeys();
-    colHeaders = activeCols.map(function(wk){ return wk.replace('2026-',''); });
+    colHeaders = activeCols.map(function(wk){ return wk.replace('2026-','').replace('2025-',''); });
   } else {
     var idxs = filteredMonthIndices();
     activeCols = idxs.map(function(i){ return months26[i]; });
     colHeaders = activeCols;
+  }
+
+  // For weekly view: build week-level pending/done index from allPendencyDrillRows
+  // rep.monthData only has month granularity — weeks need per-row bucketing
+  var _weeklyPendencyIndex = null; // repName → wkKey → { pending, done }
+  if (isWeekly && allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+    _weeklyPendencyIndex = {};
+    var _wkSet = {}; activeCols.forEach(function(k){ _wkSet[k]=true; });
+    allPendencyDrillRows.forEach(function(row) {
+      // Pick the date field (ETD for export, ETA for import, fallback to job date)
+      var rawDate = row.etdLoading || row.etaDischarge || row.jobDate || '';
+      if (!rawDate) return;
+      var d = new Date(rawDate);
+      if (isNaN(d)) return;
+      var wk = getISOWeek(d).key;
+      if (!_wkSet[wk]) return; // not in current week range
+      var repName = row._repName || '';
+      if (!repName) return;
+      // LOB filter
+      if (_flobs && _flobs.length > 0) {
+        var lobKey = (row.lob||'').toUpperCase().replace(' ','_');
+        var lobMatch = _flobs.some(function(fl){ return row.lob && row.lob.toUpperCase().replace(' ','_') === fl.replace(' ','_'); });
+        if (!lobMatch) return;
+      }
+      if (!_weeklyPendencyIndex[repName]) _weeklyPendencyIndex[repName] = {};
+      if (!_weeklyPendencyIndex[repName][wk]) _weeklyPendencyIndex[repName][wk] = { pending:0, done:0 };
+      var isDone = lockType === 'Financial Lock' ? row.flDone : row.olDone;
+      if (isDone) _weeklyPendencyIndex[repName][wk].done++;
+      else        _weeklyPendencyIndex[repName][wk].pending++;
+    });
   }
 
   // Build per-rep filtered data
@@ -3234,13 +3264,13 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
 
   var repsFiltered = _pendencyReps.map(function(rep){
     var colData = activeCols.map(function(col){
+      // Weekly view: use per-row bucketed index from allPendencyDrillRows
+      if (isWeekly && _weeklyPendencyIndex) {
+        return (_weeklyPendencyIndex[rep.name] && _weeklyPendencyIndex[rep.name][col]) || { pending:0, done:0 };
+      }
       // Use LOB-filtered index when available — keyed by displayName = rep.name
       if (_pendencyLobIndex) {
         return (_pendencyLobIndex[rep.name] && _pendencyLobIndex[rep.name][col]) || { pending:0, done:0 };
-      }
-      if (isWeekly) {
-        var m = state.weeklyMonth || months26[months26.length-1];
-        return rep.monthData[m] || { pending:0, done:0 };
       }
       return rep.monthData[col] || { pending:0, done:0 };
     });
