@@ -1687,10 +1687,21 @@ function grandEntity(){
   var isWeekly = state.reportView === 'Weekly' && weekDataLoaded();
   var idxs = filteredMonthIndices();
   var wkeys = isWeekly ? filteredWeekKeys() : null;
+  // Grand Total ship helper — uses allDrillRows to include cross-sales branches
+  function _gtShipForMonth(monthLabel) {
+    if (!allDrillRows || !allDrillRows.length) return repsRaw.reduce(function(s,r){return s+(r.ship[months26.indexOf(monthLabel)]||0);},0);
+    var _fl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
+    return allDrillRows.filter(function(r){ return r._ml===monthLabel && (!_fl||_fl.indexOf(r.lob)>-1); }).length;
+  }
+  function _gtShipForWk(wk) {
+    if (!allDrillRows || !allDrillRows.length) return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[wk]&&r.weekData[wk].ship)||0);},0);
+    var _fl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
+    return allDrillRows.filter(function(r){ return r._wk===wk && (!_fl||_fl.indexOf(r.lob)>-1); }).length;
+  }
   return {
     name:'Grand Total', initials:'GT', avatarBg:'oklch(0.5 0.14 262)', isGrand:true, zone:'',
-    ship: isWeekly ? wkeys.map(function(k){ if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;return allDrillRows.filter(function(r){return r._wk===k&&(!_fl||_fl.indexOf(r.lob)>-1);}).length;} return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
-                   : idxs.map(function(i){return sum(repsRaw.map(function(r){return r.ship[i]||0;}));}),
+    ship: isWeekly ? wkeys.map(function(k){ return _gtShipForWk(k); })
+                   : idxs.map(function(i){ return _gtShipForMonth(months26[i]); }),
     gp:   isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){return sum(repsRaw.map(function(r){return r.gp[i]||0;}));}),
     tons: isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
@@ -2309,8 +2320,8 @@ function kpiRow(M){
   var wkeys = isWeeklyView ? filteredWeekKeys() : null;
 
   var shipData  = isWeeklyView
-    ? wkeys.map(function(k){ if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;return allDrillRows.filter(function(r){return r._wk===k&&(!_fl||_fl.indexOf(r.lob)>-1);}).length;} return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0); })
-    : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); });
+    ? wkeys.map(function(k){ return _gtShipForWk(k); })
+    : idxs.map(function(i){ return _gtShipForMonth(months26[i]); });
   var teuData   = isWeeklyView
     ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0); },0); })
     : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+((r.teu&&r.teu[i])||0);},0); });
