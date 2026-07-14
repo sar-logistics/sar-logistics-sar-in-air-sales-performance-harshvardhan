@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v57'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v58'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -3075,7 +3075,8 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
   rows.forEach(function(r){
     // For grand total ships/rev/gp — use weekData sum if weekly, else use r.shipments
     if (isWeekly) {
-      Object.values(r.weekData||{}).forEach(function(wd){ grand.shipments+=wd.shipments||0; grand.revenue+=wd.revenue||0; grand.gp+=wd.gp||0; grand.tons+=wd.tons||0; grand.teu+=wd.teu||0; });
+      // Only sum weeks in activeMons (respects current weekly month filter)
+      activeMons.forEach(function(wk){ var wd=(r.weekData||{})[wk]||{}; grand.shipments+=wd.shipments||0; grand.revenue+=wd.revenue||0; grand.gp+=wd.gp||0; grand.tons+=wd.tons||0; grand.teu+=wd.teu||0; });
     } else {
       grand.shipments += r.shipments; grand.revenue += r.revenue; grand.gp += r.gp;
       grand.tons += r.tons||0; grand.teu += r.teu||0;
