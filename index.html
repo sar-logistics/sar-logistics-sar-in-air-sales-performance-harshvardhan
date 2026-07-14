@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v62'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v63'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -1200,7 +1200,7 @@ function fetchTradelaneData(callback, force) {
     // Skip localStorage — tradelane data may be stale from before ocean/isotank fix
   }
   fetch(qs).then(function(r){ return r.json(); })
-    .then(function(data){ if(data.success){_tradelaneCache[key]=data;tradelaneData=data;tradelaneDataReady=true;lsSet(lsKey,data);} if(callback) callback(); })
+    .then(function(data){ if(data.success){data._cacheKey=key;_tradelaneCache[key]=data;tradelaneData=data;tradelaneDataReady=true;lsSet(lsKey,data);} if(callback) callback(); })
     .catch(function(e){ console.warn('Tradelane failed:',e.message); if(callback) callback(); });
 }
 
@@ -2929,6 +2929,11 @@ function agentPivotTable(lobData, activeLob, brandC) {
 
 /* ====================== TRADELANE INSIGHTS ====================== */
 function tradelanePage(){
+  var _tlCurrentKey = getTradelaneCacheKey();
+  if (tradelaneDataReady && tradelaneData && tradelaneData._cacheKey && tradelaneData._cacheKey !== _tlCurrentKey) {
+    if (_tradelaneCache[_tlCurrentKey]) { tradelaneData=_tradelaneCache[_tlCurrentKey]; _tradelanePivotCache={}; }
+    else { tradelaneDataReady=false; tradelaneDataLoading=false; }
+  }
   if (!tradelaneDataReady) {
     if (!tradelaneDataLoading) {
       tradelaneDataLoading = true;
