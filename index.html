@@ -644,7 +644,7 @@ function fetchLiveData(callback, force){
         .forEach(function(k){ localStorage.removeItem(k); });
       localStorage.removeItem('sar_user_session');
       _weekDataFetched = false;
-      _drillResultCache = {}; _insightDrillCache = {};
+      _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {};
       allDrillRows = null;
 
       try {
@@ -3016,7 +3016,13 @@ function tradelanePage(){
     +'</div>'
   +'</div>';
 
-  if (activeView === 'table') return header + tradelanePivotTable(lobData, activeLob, brandC);
+  if (activeView === 'table') {
+    var _tlPivotKey = activeLob+'|'+(state.dateFrom||'')+'|'+(state.dateTo||'')+'|'+(state.tradelaneShipOpen?JSON.stringify(state.tradelaneShipOpen):'');
+    if (!_tradelanePivotCache[_tlPivotKey]) {
+      _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC);
+    }
+    return header + _tradelanePivotCache[_tlPivotKey];
+  }
 
   var sc = ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
 
@@ -5425,8 +5431,9 @@ function computeDrillResult(entity, metric, month){
   };
 }
 
-var _drillResultCache = {}; _insightDrillCache = {};
-var _insightDrillCache = {}; // cache for customer/agent/tradelane drill results // in-memory: entity||metric||col → full result object
+var _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {};
+var _insightDrillCache = {}; // cache for customer/agent/tradelane drill results
+var _tradelanePivotCache = {}; // cache rendered tradelane pivot HTML // in-memory: entity||metric||col → full result object
 
 // Returns the default LOB tab for the drill drawer based on active filterLobs
 function _defaultDrillLobTab() {
@@ -5461,6 +5468,26 @@ function openInsightDrill(drillType, name) {
     return;
   }
 
+  // Tradelane drill: use server API (needs SRR join not available client-side)
+  if (drillType === 'tradelane') {
+    var _tlDateR = getTradelaneDateRange();
+    var _tlQs = '/api/mongo-batch?action=drill&entity='+encodeURIComponent(name)
+      +'&metric=Shipments&month=FY Total'
+      +(_tlDateR.dateFrom ? '&dateFrom='+encodeURIComponent(_tlDateR.dateFrom) : '')
+      +(_tlDateR.dateTo   ? '&dateTo='+encodeURIComponent(_tlDateR.dateTo)     : '');
+    fetch(_tlQs).then(function(res){return res.json();}).then(function(d){
+      if(d.success){
+        state.drill = { entity:name, metric:'Shipments', col:'FY Total', valueFmt:null,
+          loading:false, rows:d.rows||[], count:d.count||0, totalMetric:d.totalMetric||0,
+          totalGP:d.totalGP||0, totalProvGP:0, totalActualGP:d.totalGP||0,
+          totalRevenue:d.totalRevenue||0, totalCost:d.totalCost||0,
+          lobTab:'ALL', insightDrill:true, columnFilters:{}, openFilterCol:null, filterDraft:{} };
+        render();
+      }
+    }).catch(function(){});
+    return;
+  }
+
   // Defer heavy computation to next frame so loading state paints first
   requestAnimationFrame(function(){
   var nameLower = (name || '').toLowerCase();
@@ -5482,7 +5509,15 @@ function openInsightDrill(drillType, name) {
   if (currentUser) {
     var _iRole = (currentUser.role||'').toLowerCase().trim();
     if (_iRole === 'sales rep') _rlsRepsNorm = [normalizeName(currentUser.name)];
-    else if (_iRole === 'zonal manager') _rlsRepsNorm = repsRaw.filter(function(r){return !r.isBranch;}).map(function(r){return normalizeName(r.name);});
+    else if (_iRole === 'zonal manager') {
+      _rlsRepsNorm = [];
+      repsRaw.filter(function(r){return !r.isBranch;}).forEach(function(r){
+        _rlsRepsNorm.push(normalizeName(r.name));
+        // Also add first-segment norm in case raw name differs from display name
+        var seg = r.name.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
+        if(_rlsRepsNorm.indexOf(seg)<0) _rlsRepsNorm.push(seg);
+      });
+    }
   }
 
   var matched = [];
@@ -5503,7 +5538,9 @@ function openInsightDrill(drillType, name) {
       match = (row.destAgent || '').toLowerCase() === nameLower ||
               (row.originAgent || '').toLowerCase() === nameLower;
     } else if (drillType === 'tradelane') {
-      match = (row.location || '').toLowerCase() === nameLower;
+      // Tradelane groups (US, Europe etc) can't be matched client-side
+      // without SRR data — server handles this via getDrillRows
+      match = false;
     }
     if (!match) continue;
     matched.push(row);
@@ -5973,7 +6010,7 @@ document.addEventListener('click', function(ev){
         .forEach(function(k){ localStorage.removeItem(k); });
     } catch(e){}
     _weekDataFetched = false;
-    _drillResultCache = {}; _insightDrillCache = {};
+    _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {};
     // Reset all secondary data ready flags so pages show fresh data
     customerDataReady = false; financeDataReady = false; financeDataLoading = false;
     opDataReady = false; opDataLoading = false; usageDataReady = false; orgDataReady = false;
@@ -6204,7 +6241,7 @@ document.addEventListener('click', function(ev){
   }
   else if(act==='toggleFilterLobDrop'){ ev.stopPropagation(); state.filterLobDropOpen=!state.filterLobDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterRepDrop'){ ev.stopPropagation(); state.filterRepDropOpen=!state.filterRepDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='filterLobAll'){ ev.stopPropagation(); _drillResultCache = {}; _insightDrillCache = {}; state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterLobAll'){ ev.stopPropagation(); _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='filterRepAll'){ ev.stopPropagation(); state.filterReps=[]; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterLob'){
     ev.stopPropagation();
@@ -6214,7 +6251,7 @@ document.addEventListener('click', function(ev){
     } else {
       state.filterLobs = state.filterLobs.concat([lv]);
     }
-    _drillResultCache = {}; _insightDrillCache = {}; _pendencyDrillCache = {};
+    _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _pendencyDrillCache = {};
     // If newly selected LOB isn't in lobData yet, fetch full lobData then re-render
     var _sampleRep = repsRawOriginal && repsRawOriginal[0];
     var _hasAllLobs = _sampleRep && _sampleRep.lobData &&
