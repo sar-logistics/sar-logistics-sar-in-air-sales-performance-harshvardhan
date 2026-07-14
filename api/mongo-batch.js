@@ -1605,7 +1605,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       }
 
       function addTo(map, key) {
-        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0, salesReps:new Set(), lobs:new Set(), countries:new Set(), monthData:{} };
+        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0, salesReps:new Set(), lobs:new Set(), countries:new Set(), shipmentNos:new Set(), monthData:{} };
         map[key].shipments++;
         map[key].revenue += revenue;
         map[key].gp += gp;
@@ -1615,6 +1615,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         map[key].tankTeu += tankTeu;
         map[key].lcl     += lclVol;
         if (dispSP) map[key].salesReps.add(dispSP);
+        if (sno) map[key].shipmentNos.add(sno);
         map[key].lobs.add(lobLabel);
         if (country) map[key].countries.add(country);
         if (monthLabel) {
@@ -1672,7 +1673,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       topByTEU:        top10(rows.filter(r=>r.teu>0), "teu"),
       topByGPPct:      top10(rows.filter(r=>r.shipments>=2), "gpPct"),
       totalCountries:  rows.length,
-      allCountries:    [...rows].sort((a,b)=>b.gp-a.gp),
+      allCountries:    [...rows].sort((a,b)=>b.gp-a.gp).map(r=>({...r, shipmentNos:[...r.shipmentNos]})),
     };
   }
 
