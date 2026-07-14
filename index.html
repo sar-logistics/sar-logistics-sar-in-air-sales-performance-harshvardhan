@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v47'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v48'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -2710,8 +2710,8 @@ function customerPivotTable(lobData, activeLob, brandC) {
         ? '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+(c.tons>=1000?(c.tons/1000).toFixed(1)+'k':c.tons.toFixed(1))+'</td>'
         : '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+c.teu.toFixed(1)+'</td>'
       )
-      +'<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(c.revenue)+'</td>'
-      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(c.gp)+'</td>'
+      +'<td data-act="insightDrill" data-drill-type="customer" data-drill-name="'+esc(c.name)+'" style="padding:7px 10px;font-size:11.5px;color:#1D5FCC;text-align:right;font-family:\'DM Mono\',monospace;cursor:pointer;text-decoration:underline dotted;">'+fmtCur(c.revenue)+'</td>'
+      +'<td data-act="insightDrill" data-drill-type="customer" data-drill-name="'+esc(c.name)+'" style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpColor+';text-align:right;font-family:\'DM Mono\',monospace;cursor:pointer;text-decoration:underline dotted;">'+fmtCur(c.gp)+'</td>'
       +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpPctColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+c.gpPct+'%</td>'
       +'<td style="padding:7px 10px;">'+lobsHtml+'</td>'
       +'<td style="padding:7px 10px;font-size:10.5px;color:#64748B;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(c.salesReps||[]).join(', ')+'">'+repsText+'</td>'
@@ -2913,8 +2913,8 @@ function agentPivotTable(lobData, activeLob, brandC) {
         ? '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+(a.tons>=1000?(a.tons/1000).toFixed(1)+'k':a.tons.toFixed(1))+'</td>'
         : '<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+a.teu.toFixed(1)+'</td>'
       )
-      +'<td style="padding:7px 10px;font-size:11.5px;color:#334155;text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(a.revenue)+'</td>'
-      +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+fmtCur(a.gp)+'</td>'
+      +'<td data-act="insightDrill" data-drill-type="agent" data-drill-name="'+esc(a.name)+'" style="padding:7px 10px;font-size:11.5px;color:#1D5FCC;text-align:right;font-family:\'DM Mono\',monospace;cursor:pointer;text-decoration:underline dotted;">'+fmtCur(a.revenue)+'</td>'
+      +'<td data-act="insightDrill" data-drill-type="agent" data-drill-name="'+esc(a.name)+'" style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpColor+';text-align:right;font-family:\'DM Mono\',monospace;cursor:pointer;text-decoration:underline dotted;">'+fmtCur(a.gp)+'</td>'
       +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpPctColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+a.gpPct+'%</td>'
       +'<td style="padding:7px 10px;">'+lobsHtml+'</td>'
       +'<td style="padding:7px 10px;font-size:10.5px;color:#64748B;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+(a.salesReps||[]).join(', ')+'">'+repsText+'</td>'
