@@ -2666,7 +2666,7 @@ module.exports = async function handler(req, res) {
 
     if (action === "wipeCollection") {
       // Wipe an entire job collection so Apps Script can re-push clean data
-      const collName = body.collection;
+      const collName = (req.body && req.body.collection) || req.query.collection;
       if (!collName) return res.status(400).json({ error: "collection required" });
       const JOB_COLLS = ["jobs_air_export","jobs_air_import","jobs_sea_export","jobs_sea_import",
         "jobs_isotank_export","jobs_isotank_import","jobs_general","jobs_road",
