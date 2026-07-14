@@ -2223,22 +2223,15 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "tradelaneDebug") {
-      // Show SRR row fields + check shipment no overlap with job collections
-      const srrColls = ["srr_sea_export","srr_sea_import","srr_air_export","srr_air_import"];
-      const srrSamples = {};
-      for (const c of srrColls) {
-        try {
-          const rows = await db.collection(c).find({}).limit(2).toArray();
-          const total = await db.collection(c).countDocuments({});
-          srrSamples[c] = { total, fields: rows[0] ? Object.keys(rows[0]).filter(k=>k!=='_id') : [], samples: rows.map(r=>{ const o={}; Object.keys(r).filter(k=>k!=='_id').forEach(k=>{ o[k]=r[k]; }); return o; }) };
-        } catch(e) { srrSamples[c] = { error: e.message }; }
-      }
-      // Check overlap: how many sea_export job shipment nos exist in srr_sea_export
-      const jobSnos = await db.collection("jobs_sea_export").distinct("Shipment No");
-      const srrSnos = await db.collection("srr_sea_export").distinct("Shipment No");
-      const srrSet = new Set(srrSnos);
-      const overlap = jobSnos.filter(s=>srrSet.has(s)).length;
-      return res.status(200).json({ success: true, srrSamples, overlapCheck: { jobSeaExportTotal: jobSnos.length, srrSeaExportTotal: srrSnos.length, overlap } });
+      // Show ALL fields on a sea export job row to find port code fields
+      const seaRow = await db.collection("jobs_sea_export").findOne({});
+      const isoRow = await db.collection("jobs_isotank_export").findOne({});
+      return res.status(200).json({ success: true,
+        seaExportFields: seaRow ? Object.keys(seaRow).filter(k=>k!=='_id') : [],
+        seaExportSample: seaRow ? Object.fromEntries(Object.entries(seaRow).filter(([k])=>k!=='_id')) : null,
+        isoExportFields: isoRow ? Object.keys(isoRow).filter(k=>k!=='_id') : [],
+        isoExportSample: isoRow ? Object.fromEntries(Object.entries(isoRow).filter(([k])=>k!=='_id')) : null,
+      });
     }
 
     if (action === "lobCheck") {
