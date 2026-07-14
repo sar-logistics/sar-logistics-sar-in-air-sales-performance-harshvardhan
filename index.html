@@ -1175,7 +1175,18 @@ var _tradelaneCache = {};
 var _tradelaneFetchTimer = null;
 var _tradelanePrefetchDone = false;
 
-function getTradelaneDateRange() { return getCustomerDateRange(); }
+function getTradelaneDateRange() {
+  var v = state.tradelanePeriod || state.reportView || 'Monthly';
+  var dateFrom = '', dateTo = '';
+  if (state.tradelaneDateFrom && state.tradelaneDateTo) {
+    dateFrom = state.tradelaneDateFrom; dateTo = state.tradelaneDateTo;
+  } else {
+    // Fall back to sales performance date range
+    var idxs = filteredMonthIndices();
+    if (idxs && idxs.length > 0) { dateFrom = months26[idxs[0]]; dateTo = months26[idxs[idxs.length-1]]; }
+  }
+  return { dateFrom: dateFrom, dateTo: dateTo };
+}
 function getTradelaneCacheKey() { var r = getTradelaneDateRange(); return (r.dateFrom||'all')+'_'+(r.dateTo||'all'); }
 
 function fetchTradelaneData(callback, force) {
@@ -1254,6 +1265,7 @@ function updateUserField(email, fields, callback){
 }
 
 var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:false, dateFrom:'', dateTo:'', rate:94.00, rateEditing:false, feedbackOpen:false, feedbackText:'', feedbackReport:'Sales Performance Dashboard', feedbackError:'', feedbackSent:false, shipOpen:{}, drill:null, pendencyDrill:null, orgEditError:'', zoneOpen:{}, pendencyZoneOpen:{}, customerLob:'Air', customerView:'chart', custSortCol:'gp', custSortDir:1, agentLob:'Air', agentView:'chart', agentSortCol:'gp', agentSortDir:1, tradelaneLob:'Air', tradelaneView:'chart', tradelaneSortCol:'gp', tradelaneSortDir:-1, tradelaneShipOpen:{},
+  tradelaneDateFrom:'', tradelaneDateTo:'', tradelanePeriod:'Monthly',
   customDateFrom: '', customDateTo: '', customCalOpen: false, customCalMonth: new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0'), customSelecting: 'from',
   addUserOpen: false, addUserError: '', addUserDefaultRole: '',
   weeklyMonth: null,
@@ -3020,6 +3032,19 @@ function tradelanePage(){
     )
     +(periodLabel ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+periodLabel+'</span>' : '')
     +(activeView==='table' ? '<span style="font-size:11px;color:#9AAFC8;font-weight:500;padding:2px 8px;background:#F1F5F9;border-radius:999px;">'+(allC.length)+' tradelanes \u00b7 '+fmtCur(totalRev)+' Rev \u00b7 '+overallGPPct+'% GP%</span>' : '')
+    + (function(){
+        var MONTHS = months26.filter(function(m){ return m.endsWith('-25')||m.endsWith('-26')||m.endsWith('-27'); });
+        function mkSel(val, act){
+          return '<select data-act="'+act+'" style="font-size:11px;padding:3px 6px;border:1px solid #D0D9E8;border-radius:6px;background:#fff;color:#15233B;cursor:pointer;">'+
+            MONTHS.map(function(m){ return '<option value="'+m+'"'+(m===val?' selected':'')+'>'+m+'</option>'; }).join('')+'</select>';
+        }
+        var tlFrom = state.tradelaneDateFrom || months26[filteredMonthIndices()[0]] || 'Apr-26';
+        var tlTo   = state.tradelaneDateTo   || months26[filteredMonthIndices()[filteredMonthIndices().length-1]] || 'Jul-26';
+        return '<div style="display:flex;align-items:center;gap:6px;">'
+          +'<span style="font-size:11px;color:#64748B;">From</span>'+mkSel(tlFrom,'setTradelaneDateFrom')
+          +'<span style="font-size:11px;color:#64748B;">To</span>'+mkSel(tlTo,'setTradelaneDateTo')
+          +'</div>';
+      })()
     +'<div style="display:flex;align-items:center;gap:6px;margin-left:auto;">'
       +(tabs ? '<div style="display:flex;gap:6px;">'+tabs+'</div>' : '')
       +viewToggle
@@ -4059,8 +4084,7 @@ function buildCells(fy, monthVals, type, baseColor, entityName, metricLabel, col
   // If not provided, colLabels are the raw keys too
   var keys = rawColKeys || colLabels;
   var series=[fy].concat(monthVals);
-  var isClickable = metricLabel !== 'Target' && metricLabel !== 'Achievement %'
-    && state.reportView !== 'Yearly' && state.reportView !== 'Quarterly';
+  var isClickable = metricLabel !== 'Target' && metricLabel !== 'Achievement %';
   return series.map(function(v,i){
     var val, color=baseColor, isDash=false;
     if(noTarget && (type==='pct' || (type==='cur' && metricLabel==='Target'))){
@@ -6233,6 +6257,8 @@ document.addEventListener('click', function(ev){
     if(state.agentSortCol===col){ state.agentSortDir=(state.agentSortDir||(-1))*-1; } else { state.agentSortCol=col; state.agentSortDir=-1; } render();
   }
   else if(act==='setTradelaneLob'){ ev.stopPropagation(); state.tradelaneLob=el.getAttribute('data-val'); render(); }
+  else if(act==='setTradelaneDateFrom'){ ev.stopPropagation(); state.tradelaneDateFrom=el.value; _tradelanePivotCache={}; _insightDrillCache={}; fetchTradelaneData(function(){render();},true); }
+  else if(act==='setTradelaneDateTo'){   ev.stopPropagation(); state.tradelaneDateTo=el.value;   _tradelanePivotCache={}; _insightDrillCache={}; fetchTradelaneData(function(){render();},true); }
   else if(act==='setTradelaneView'){ ev.stopPropagation(); state.tradelaneView=el.getAttribute('data-val'); render(); }
   else if(act==='tradelaneSort'){
     ev.stopPropagation(); var col=el.getAttribute('data-col');
