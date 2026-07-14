@@ -5522,9 +5522,13 @@ function openInsightDrill(drillType, name) {
         });
       }
 
-      // Filter allDrillRows by shipmentNos
+      // Filter allDrillRows by shipmentNos — deduplicate by shipmentNo (DB may have dupes)
+      var _tlSeenSno = {};
       var _tlRows = (allDrillRows||[]).filter(function(row){
-        return _tlSnoSet && _tlSnoSet[row.shipmentNo];
+        if (!_tlSnoSet || !_tlSnoSet[row.shipmentNo]) return false;
+        if (_tlSeenSno[row.shipmentNo]) return false;
+        _tlSeenSno[row.shipmentNo] = true;
+        return true;
       });
 
       _tlRows.sort(function(a,b){ return (b._d||0)-(a._d||0); });
