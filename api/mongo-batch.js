@@ -1173,7 +1173,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
   function buildStats(custMap) {
     const customers = Object.entries(custMap).map(([name, d]) => ({
       name,
-      shipments: d.shipments,
+      shipments: d.shipmentNos.size, // use unique SNO count — avoids double-counting duplicate SRR entries
       revenue:   Math.round(d.revenue),
       gp:        Math.round(d.gp),
       tons:      Math.round(d.tons * 100) / 100,
