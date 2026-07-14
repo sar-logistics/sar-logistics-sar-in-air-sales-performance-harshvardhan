@@ -2120,7 +2120,7 @@ function topbar(){
         }
 
         // Sales Performance + Customer/Agent/Tradelane Insights: Monthly → pill FROM/TO dropdowns
-        if ((state.page==='sales' || state.page==='customers' || state.page==='agents' || state.page==='tradelane') && v === 'Monthly') {
+        if ((state.page==='sales' || state.page==='customers' || state.page==='agents' || state.page==='tradelane' || state.page==='op' || state.page==='finance') && v === 'Monthly') {
           var fOpen = state.fromDropOpen, tOpen = state.toDropOpen;
           function custMonthPill(act, toggleAct, val, dropId, isOpen){
             var opts = months26.map(function(m){
