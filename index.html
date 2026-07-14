@@ -358,7 +358,7 @@ function _showDashboardBody() {
 
   // Load drill rows in background immediately — so first drill click is instant
   if (!allDrillRows) {
-    setTimeout(function(){ loadDrillData(null); }, 500);
+    loadDrillData(null); // preload drill rows immediately
   }
 
   if (dataReady) {
@@ -691,7 +691,7 @@ function fetchLiveData(callback, force){
           }
           // If allDrillRows not in sales response, fetch it silently in background
           if (!allDrillRows) {
-            setTimeout(function(){ loadDrillData(null); }, 1000);
+            loadDrillData(null); // preload drill rows immediately
           }
           console.log('✅ Live data:', repsRawOriginal.length, 'reps, tgt[0]=', repsRawOriginal[0] && repsRawOriginal[0].tgt);
           // Check if lobData came bundled with sales response (Air keys always included)
@@ -1679,7 +1679,7 @@ function grandEntity(){
   var wkeys = isWeekly ? filteredWeekKeys() : null;
   return {
     name:'Grand Total', initials:'GT', avatarBg:'oklch(0.5 0.14 262)', isGrand:true, zone:'',
-    ship: isWeekly ? wkeys.map(function(k){if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;return allDrillRows.filter(function(r){return r._wk===k&&(!_fl||_fl.indexOf(r.lob)>-1);}).length;}return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
+    ship: isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
                    : idxs.map(function(i){return sum(repsRaw.map(function(r){return r.ship[i]||0;}));}),
     gp:   isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){return sum(repsRaw.map(function(r){return r.gp[i]||0;}));}),
@@ -5531,10 +5531,23 @@ function openDrill(entity, metric, col, valueFmt){
     }
   }
 
-  // 3. Fallback: server fetch (only when allDrillRows not loaded yet)
+  // 3. Fallback: allDrillRows not loaded yet — show loading, fetch, then compute client-side
   state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:true, rows:null,
     lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
   render();
+  // Load drill rows then compute client-side (avoids slow server round-trip)
+  loadDrillData(function(){
+    var result2 = computeDrillResult(entity, metric, col);
+    if (result2) {
+      _drillResultCache[cacheKey] = result2;
+      state.drill = { entity:entity, metric:metric, col:col, valueFmt:valueFmt, loading:false,
+        rows:result2.rows, count:result2.count, totalMetric:result2.totalMetric, totalGP:result2.totalGP,
+        totalProvGP:result2.totalProvGP||0, totalActualGP:result2.totalActualGP||0,
+        totalRevenue:result2.totalRevenue||0, totalCost:result2.totalCost||0,
+        lobTab:_defaultDrillLobTab(), columnFilters:(state.filterLobs&&state.filterLobs.length>0?{lob:state.filterLobs.slice()}:{}), openFilterCol:null, filterDraft:{} };
+      render(); return;
+    }
+  });
 
   var qs = '?action=drill&entity='+encodeURIComponent(entity)+'&metric='+encodeURIComponent(metric)+'&month='+encodeURIComponent(col)
          +(state.filterLobs&&state.filterLobs.length>0?'&lobs='+encodeURIComponent(state.filterLobs.join(',')):'');
