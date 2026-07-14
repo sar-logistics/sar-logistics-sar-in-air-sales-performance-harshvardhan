@@ -1892,12 +1892,12 @@ function sidebarNav(){
       +navItem('Operation Pendency',state.page==='op',IC.clip,'page','op')
       +navItem('Finance Pendency',state.page==='finance',IC.dollar,'page','finance')
     +'</div>'
-    +'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>'
+    +(canSeeAdmin ? ('<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:rgba(255,255,255,0.3);padding:12px 8px 5px;text-transform:uppercase;">Admin</div>'
     +'<div style="display:flex;flex-direction:column;gap:1px;">'
       +navItem('Usage Analytics',state.page==='usage',IC.line,'page','usage')
       +navItem('Teams',state.page==='teams',IC.people,'page','teams')
-      +(canSeeAdmin ? navItem('Admin Panel',state.page==='admin',IC.sliders,'page','admin') : '')
-    +'</div>';
+      +navItem('Admin Panel',state.page==='admin',IC.sliders,'page','admin')
+    +'</div>') : '');
 }
 
 function sidebar(){
@@ -5198,9 +5198,9 @@ function render(){
   mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='agents' ? agentPage()
     : state.page==='tradelane' ? tradelanePage()
-    : state.page==='usage' ? usagePage()
-    : state.page==='teams' ? teamsPage()
-    : state.page==='admin' ? adminPage()
+    : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return salesPage();}()))
+    : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
+    : state.page==='admin' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1) ? adminPage() : (function(){ state.page='sales'; return salesPage(); })())
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : ((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
@@ -5225,8 +5225,8 @@ function renderKeepTopbar(){
   if(mainEl) mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='agents' ? agentPage()
     : state.page==='tradelane' ? tradelanePage()
-    : state.page==='usage' ? usagePage()
-    : state.page==='teams' ? teamsPage()
+    : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return salesPage();}()))
+    : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : ((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
