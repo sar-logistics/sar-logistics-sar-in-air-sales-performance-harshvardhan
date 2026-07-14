@@ -328,8 +328,8 @@ function _showDashboardBody() {
   var _tBoot = performance.now();
   (function bootstrapSecondaryCache() {
     var cc = lsGet('customers'); if (cc && cc.success) { customerData = cc; customerDataReady = true; }
-    var fc = lsGet('finance');   if (fc && fc.success) { financeData  = fc; financeDataReady  = true; }
-    var oc = lsGet('op');        if (oc && oc.success) { opData = oc; opDataReady = true; if (oc.allDrillJobRows && oc.allDrillJobRows.length > 0) allPendencyDrillRows = oc.allDrillJobRows; }
+    var fc = lsGet('finance');   if (fc && fc.success) { fc._isStale = true; financeData  = fc; financeDataReady  = true; }
+    var oc = lsGet('op');        if (oc && oc.success) { oc._isStale = true; opData = oc; opDataReady = true; if (oc.allDrillJobRows && oc.allDrillJobRows.length > 0) allPendencyDrillRows = oc.allDrillJobRows; }
     var gc = lsGet('org');       if (gc && gc.success) { orgData      = gc; orgDataReady      = true; }
     // Bootstrap agent + tradelane default range cache
     var defKey = (state.dateFrom||'Jan-26') + '_' + (state.dateTo||'Jun-26');
@@ -6553,13 +6553,13 @@ window.addEventListener('load', function() {
         }
 
         // ── Finance ──────────────────────────────────────────────────────────
-        if (d.finance && d.finance.success && !financeDataReady) {
+        if (d.finance && d.finance.success) {
           financeData = d.finance; financeDataReady = true;
           lsSet('finance', d.finance);
         }
 
         // ── Op ───────────────────────────────────────────────────────────────
-        if (d.op && d.op.success && !opDataReady) {
+        if (d.op && d.op.success) {
           opData = d.op; opDataReady = true;
           if (d.op.allDrillJobRows) {
             allPendencyDrillRows = d.op.allDrillJobRows;
