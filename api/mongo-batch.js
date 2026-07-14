@@ -1136,7 +1136,8 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
         teu = parseFloat(job["Container TEU"] || 0) || 0;
       }
 
-      const weekKey = rawDateM ? isoWeekInfo(parseSheetDate(rawDateM)).key : '';
+      const _wdObj = rawDateM ? parseSheetDate(rawDateM) : null;
+      const weekKey = _wdObj ? isoWeekInfo(_wdObj).key : '';
 
       function addTo(map, key) {
         if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
