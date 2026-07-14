@@ -2157,8 +2157,8 @@ function topbar(){
       +'</div>'
       // Rate — small chip
       +'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#FFFFFF;border-radius:999px;padding:7px 13px;box-shadow:'+pillShadow+';">Rate '+rateEl+'</div>'
-      // Filters — hidden on customer page
-      +(false ? '' : (function(){
+      // Filters — only on Sales Performance (sales page)
+      +(['customers','agents','tradelane','admin','usage','org','op','finance'].indexOf(state.page) >= 0 ? '' : (function(){
         var activeCount = state.filterLobs.length + state.filterReps.length;
         var isFOpen = state.filtersOpen;
         var btnHtml = '<button data-act="toggleFiltersDrop" style="display:flex;align-items:center;gap:6px;background:'+(activeCount>0?'#EEF3FC':'#FFFFFF')+';border:1.5px solid '+(isFOpen?BRAND_A1:(activeCount>0?'#B7C8EA':'#D8E1F0'))+';border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:'+(activeCount>0?'#1E3A66':'#3C5275')+';cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
