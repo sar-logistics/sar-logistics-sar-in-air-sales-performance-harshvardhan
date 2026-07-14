@@ -1136,6 +1136,8 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
         teu = parseFloat(job["Container TEU"] || 0) || 0;
       }
 
+      const weekKey = rawDateM ? isoWeekInfo(parseSheetDate(rawDateM)).key : '';
+
       function addTo(map, key) {
         if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
         map[key].shipments++; map[key].revenue += revenue; map[key].gp += gp;
@@ -1605,7 +1607,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       }
 
       function addTo(map, key) {
-        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0, salesReps:new Set(), lobs:new Set(), countries:new Set(), shipmentNos:new Set(), monthData:{} };
+        if (!map[key]) map[key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0, salesReps:new Set(), lobs:new Set(), countries:new Set(), shipmentNos:new Set(), monthData:{}, weekData:{} };
         const isNewSno = !map[key].shipmentNos.has(sno);
         if (isNewSno) map[key].shipments++;
         map[key].shipmentNos.add(sno);
@@ -1631,6 +1633,14 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           map[key].monthData[monthLabel].tankTeu += tankTeu;
           map[key].monthData[monthLabel].lcl     += lclVol;
         }
+        if (weekKey) {
+          if (!map[key].weekData[weekKey]) map[key].weekData[weekKey] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, _snos:new Set() };
+          if (!map[key].weekData[weekKey]._snos.has(sno)) { map[key].weekData[weekKey].shipments++; map[key].weekData[weekKey]._snos.add(sno); }
+          map[key].weekData[weekKey].revenue += revenue;
+          map[key].weekData[weekKey].gp += gp;
+          map[key].weekData[weekKey].tons += tons;
+          map[key].weekData[weekKey].teu  += teu;
+        }
       }
       addTo(countryMap, tradelane);
       if (countryMapByLob[cfg.lob]) addTo(countryMapByLob[cfg.lob], tradelane);
@@ -1653,6 +1663,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       lobs:        [...d.lobs].sort(),
       countries:   [...d.countries].sort(),
       shipmentNos: [...d.shipmentNos],
+      weekData:    Object.fromEntries(Object.entries(d.weekData||{}).map(([wk,wd])=>[wk,{shipments:wd.shipments,revenue:Math.round(wd.revenue),gp:Math.round(wd.gp),tons:Math.round(wd.tons*100)/100,teu:Math.round(wd.teu*100)/100}])),
       monthData: Object.fromEntries(
         Object.entries(d.monthData||{}).map(([m, md]) => [m, {
           shipments: md.shipments,
