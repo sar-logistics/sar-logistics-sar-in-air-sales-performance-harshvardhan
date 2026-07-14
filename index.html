@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v55'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v56'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -3065,9 +3065,14 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
   var grand = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
   var grandMD = {};
   rows.forEach(function(r){
-    grand.shipments += r.shipments; grand.revenue += r.revenue; grand.gp += r.gp;
-    grand.tons += r.tons||0; grand.teu += r.teu||0;
-    grand.fclTeu += r.fclTeu||0; grand.tankTeu += r.tankTeu||0; grand.lcl += r.lcl||0;
+    // For grand total ships/rev/gp — use weekData sum if weekly, else use r.shipments
+    if (isWeekly) {
+      Object.values(r.weekData||{}).forEach(function(wd){ grand.shipments+=wd.shipments||0; grand.revenue+=wd.revenue||0; grand.gp+=wd.gp||0; grand.tons+=wd.tons||0; grand.teu+=wd.teu||0; });
+    } else {
+      grand.shipments += r.shipments; grand.revenue += r.revenue; grand.gp += r.gp;
+      grand.tons += r.tons||0; grand.teu += r.teu||0;
+      grand.fclTeu += r.fclTeu||0; grand.tankTeu += r.tankTeu||0; grand.lcl += r.lcl||0;
+    }
     activeMons.forEach(function(m){
       var md = isWeekly ? (r.weekData||{})[m] : (r.monthData||{})[m]; if (!md) return;
       if (!grandMD[m]) grandMD[m] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
@@ -3164,24 +3169,24 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
         subRows += '<tr style="'+subTrS+'">'
           + mTdSub('Tank TEUs')
           + gtTd(fmtT(data.tankTeu||0), '#64748B', false, true)
-          + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.tankTeu||0)>0?(md.tankTeu||0).toFixed(1):'--', '#64748B', true); }).join('')
+          + activeMons.map(function(m){ var md=isWeekly?((data&&data.weekData||{})[m]):(monthData||{})[m]; return mCell(md&&(md.tankTeu||0)>0?(md.tankTeu||0).toFixed(1):'--', '#64748B', true); }).join('')
           +'</tr>';
       } else {
         var totalTeu = (data.fclTeu||0) + (data.tankTeu||0);
         subRows += '<tr style="'+subTrS+'">'
           +'<td data-act="tlShipToggle" data-name="'+esc(name)+'" style="position:sticky;left:160px;z-index:2;background:'+subBg+';padding:6px 10px 6px 18px;font-size:11.5px;font-weight:600;color:#334155;border-right:1px solid '+BORDER+';min-width:130px;cursor:pointer;">◄ Total TEUs</td>'
           + gtTd(fmtT(totalTeu), '#334155', false, true)
-          + activeMons.map(function(m){ var md=(monthData||{})[m]; var v=(md?(md.fclTeu||0)+(md.tankTeu||0):0); return mCell(v>0?v.toFixed(1):'--', '#334155', true); }).join('')
+          + activeMons.map(function(m){ var md=isWeekly?((data&&data.weekData||{})[m]):(monthData||{})[m]; var v=(md?(md.fclTeu||0)+(md.tankTeu||0):0); return mCell(v>0?v.toFixed(1):'--', '#334155', true); }).join('')
           +'</tr>';
         subRows += '<tr style="'+subTrS+'">'
           + mTdSub('FCL TEUs')
           + gtTd(fmtT(data.fclTeu||0), '#64748B', false, true)
-          + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.fclTeu||0)>0?(md.fclTeu||0).toFixed(1):'--', '#64748B', true); }).join('')
+          + activeMons.map(function(m){ var md=isWeekly?((data&&data.weekData||{})[m]):(monthData||{})[m]; return mCell(md&&(md.fclTeu||0)>0?(md.fclTeu||0).toFixed(1):'--', '#64748B', true); }).join('')
           +'</tr>';
         subRows += '<tr style="'+subTrS+'">'
           + mTdSub('LCL (CBM)')
           + gtTd(fmtT(data.lcl||0), '#64748B', false, true)
-          + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.lcl||0)>0?(md.lcl||0).toFixed(1):'--', '#64748B', true); }).join('')
+          + activeMons.map(function(m){ var md=isWeekly?((data&&data.weekData||{})[m]):(monthData||{})[m]; return mCell(md&&(md.lcl||0)>0?(md.lcl||0).toFixed(1):'--', '#64748B', true); }).join('')
           +'</tr>';
       }
     }
@@ -3217,7 +3222,7 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
 
   var tbody = '<tbody>'
     + buildBlock('Grand Total', 'GT', 0, grand, grandMD, true)
-    + rows.map(function(r){ return buildBlock(r.name, tlIni(r.name), tlHue(r.name), r, r.monthData||{}, false); }).join('')
+    + rows.map(function(r){ return buildBlock(r.name, tlIni(r.name), tlHue(r.name), r, isWeekly ? (r.weekData||{}) : (r.monthData||{}), false); }).join('')
     + '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
