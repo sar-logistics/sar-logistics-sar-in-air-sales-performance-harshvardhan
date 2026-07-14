@@ -6158,8 +6158,18 @@ document.addEventListener('click', function(ev){
     } else {
       state.filterLobs = state.filterLobs.concat([lv]);
     }
-    _drillResultCache = {}; _pendencyDrillCache = {}; // clear drill caches when LOB filter changes
-    render(); requestAnimationFrame(positionAllDrops);
+    _drillResultCache = {}; _pendencyDrillCache = {};
+    // If newly selected LOB isn't in lobData yet, fetch full lobData then re-render
+    var _sampleRep = repsRawOriginal && repsRawOriginal[0];
+    var _hasAllLobs = _sampleRep && _sampleRep.lobData &&
+      state.filterLobs.every(function(fl){ return !!_sampleRep.lobData[fl]; });
+    if (!_hasAllLobs && state.filterLobs.length > 0) {
+      _lobDataFetched = false; // force re-fetch with full lobData
+      fetchLobDataIfNeeded(function(){ computeFilteredRepsRaw(); render(); });
+    } else {
+      render();
+    }
+    requestAnimationFrame(positionAllDrops);
   }
   else if(act==='toggleFilterRep'){
     ev.stopPropagation();
