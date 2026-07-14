@@ -1647,9 +1647,10 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       tankTeu:   Math.round(d.tankTeu * 100) / 100,
       lcl:       Math.round(d.lcl * 100) / 100,
       gpPct:     d.revenue > 0 ? Math.round((d.gp / d.revenue) * 1000) / 10 : 0,
-      salesReps: [...d.salesReps],
-      lobs:      [...d.lobs].sort(),
-      countries: [...d.countries].sort(),
+      salesReps:   [...d.salesReps],
+      lobs:        [...d.lobs].sort(),
+      countries:   [...d.countries].sort(),
+      shipmentNos: [...d.shipmentNos],
       monthData: Object.fromEntries(
         Object.entries(d.monthData||{}).map(([m, md]) => [m, {
           shipments: md.shipments,
@@ -1673,7 +1674,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       topByTEU:        top10(rows.filter(r=>r.teu>0), "teu"),
       topByGPPct:      top10(rows.filter(r=>r.shipments>=2), "gpPct"),
       totalCountries:  rows.length,
-      allCountries:    [...rows].sort((a,b)=>b.gp-a.gp).map(r=>({...r, shipmentNos:[...r.shipmentNos]})),
+      allCountries:    [...rows].sort((a,b)=>b.gp-a.gp),
     };
   }
 
