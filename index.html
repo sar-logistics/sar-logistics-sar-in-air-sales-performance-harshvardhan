@@ -2360,10 +2360,7 @@ function kpiRow(M){
         +'<div style="font-size:8px;font-weight:800;letter-spacing:0.1em;color:#5B7298;text-transform:uppercase;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.label+'</div>'
         // Big value
         +'<div style="font-family:\'DM Mono\',monospace;font-size:18px;font-weight:700;color:'+k.vcolor+';line-height:1.1;margin-bottom:5px;letter-spacing:-0.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.value+'</div>'
-        // Delta / sub
-        +(k.delta !== null
-          ? deltaEl(k.delta, k.deltaLabel)
-          : '<div style="font-size:10px;color:#6B82A0;font-weight:600;height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+k.deltaLabel+'</div>')
+        // Delta / sub line removed
       +'</div>';
     }).join('')
   +'</div>';
