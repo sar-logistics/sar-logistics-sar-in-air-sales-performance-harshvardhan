@@ -5437,12 +5437,21 @@ function _defaultDrillLobTab() {
 }
 
 function openInsightDrill(drillType, name) {
+  // Show loading drawer immediately — gives instant visual feedback
+  state.drill = { entity: name, metric: 'Shipments', col: 'FY Total', valueFmt: null,
+    loading: true, rows: null, lobTab: 'ALL', insightDrill: true,
+    columnFilters: {}, openFilterCol: null, filterDraft: {} };
+  render();
+
   // Filter allDrillRows by customer / agent / tradelane name
   if (!allDrillRows || !allDrillRows.length) {
     // Load drill rows first then retry
     loadDrillData(function(){ openInsightDrill(drillType, name); });
     return;
   }
+
+  // Defer heavy computation to next frame so loading state paints first
+  requestAnimationFrame(function(){
   var nameLower = (name || '').toLowerCase();
   // No LOB filter for insight drill — customer/agent/tradelane counts are cross-LOB
   // (e.g. OL USA LLC has Air Exp + Sea Exp + Sea Imp — all count toward its 42 shipments)
@@ -5500,13 +5509,7 @@ function openInsightDrill(drillType, name) {
     lobTab: 'ALL', insightDrill: true,
     columnFilters: {}, openFilterCol: null, filterDraft: {}
   };
-  // Show loading state first so browser paints immediately, then render full drawer
-  state.drill.loading = true;
-  render();
-  requestAnimationFrame(function(){
-    state.drill.loading = false;
-    render();
-  });
+  }); // end requestAnimationFrame
 }
 
 function openDrill(entity, metric, col, valueFmt){
