@@ -2664,6 +2664,18 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ success: true, collection: collectionName, inserted, updated, keyField });
     }
 
+    if (action === "wipeCollection") {
+      // Wipe an entire job collection so Apps Script can re-push clean data
+      const collName = body.collection;
+      if (!collName) return res.status(400).json({ error: "collection required" });
+      const JOB_COLLS = ["jobs_air_export","jobs_air_import","jobs_sea_export","jobs_sea_import",
+        "jobs_isotank_export","jobs_isotank_import","jobs_general","jobs_road",
+        "jobs_clearance_export","jobs_clearance_import"];
+      if (!JOB_COLLS.includes(collName)) return res.status(400).json({ error: "unknown collection" });
+      const result = await db.collection(collName).deleteMany({});
+      return res.json({ success: true, deleted: result.deletedCount, collection: collName });
+    }
+
     if (action === "dedup") {
       // Remove duplicate Shipment No entries — keep the document with the latest _insertedAt (or _id)
       const results = {};
