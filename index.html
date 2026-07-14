@@ -5323,6 +5323,21 @@ function computeDrillResult(entity, metric, month){
 
   var drStart = isDR ? new Date(drBits[1]+'T00:00:00Z') : null;
   var drEnd   = isDR ? new Date(drBits[2]+'T23:59:59Z') : null;
+  // Build allowed month labels for DATERANGE — match server ETD/ETA month bucketing
+  var drAllowedMonths = null;
+  if (isDR) {
+    var FY_DR = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
+    drAllowedMonths = {};
+    FY_DR.forEach(function(ml){
+      // Check if this month overlaps with the date range
+      var parts = ml.split('-');
+      var mIdx = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(parts[0]);
+      var yr = 2000 + parseInt(parts[1]);
+      var mStart = new Date(Date.UTC(yr, mIdx, 1));
+      var mEnd   = new Date(Date.UTC(yr, mIdx+1, 0, 23, 59, 59));
+      if (mStart <= drEnd && mEnd >= drStart) drAllowedMonths[ml] = true;
+    });
+  }
 
   var FY_MONTHS_ALL = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25',
     'Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26',
@@ -5380,8 +5395,8 @@ function computeDrillResult(entity, metric, month){
     if (isRange){ var mi=FY_MONTHS_ALL.indexOf(ml); if(mi<rangeStart||mi>rangeEnd) continue; }
     if (isWeek && row._wk !== month.slice(5)) continue;
     if (isDR){
-      var rd = new Date(new Date(row._d).getTime() + (5.5*60*60*1000));
-      if (rd<drStart||rd>drEnd) continue;
+      // Use _ml (ETD/ETA month label) matching — same as server bucketing
+      if (!drAllowedMonths || !drAllowedMonths[row._ml]) continue;
     }
 
     // 4. Entity filter
