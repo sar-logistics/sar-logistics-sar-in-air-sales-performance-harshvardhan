@@ -3194,22 +3194,32 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   if (isWeekly && allPendencyDrillRows && allPendencyDrillRows.length > 0) {
     _weeklyPendencyIndex = {};
     var _wkSet = {}; activeCols.forEach(function(k){ _wkSet[k]=true; });
+    var _selectedMonth = state.weeklyMonth || months26[months26.length-1];
     allPendencyDrillRows.forEach(function(row) {
-      // Pick the date field (ETD for export, ETA for import, fallback to job date)
-      var rawDate = row.etdLoading || row.etaDischarge || row.jobDate || '';
-      if (!rawDate) return;
-      var d = new Date(rawDate);
-      if (isNaN(d)) return;
-      var wk = getISOWeek(d).key;
-      if (!_wkSet[wk]) return; // not in current week range
+      // Only include rows whose server-bucketed month matches the selected weekly month
+      // This ensures we use the same date logic as the server (ETD for export, ETA for import)
+      if ((row._month || row.month) !== _selectedMonth) return;
       var repName = row._repName || '';
       if (!repName) return;
       // LOB filter
       if (_flobs && _flobs.length > 0) {
-        var lobKey = (row.lob||'').toUpperCase().replace(' ','_');
-        var lobMatch = _flobs.some(function(fl){ return row.lob && row.lob.toUpperCase().replace(' ','_') === fl.replace(' ','_'); });
+        var lobMatch = _flobs.some(function(fl){
+          return row.lob && row.lob.toUpperCase() === fl.toUpperCase();
+        });
         if (!lobMatch) return;
       }
+      // Derive ISO week from the correct primary date
+      // Use ETD for export-type rows, ETA for import-type rows — same as server
+      var lob = (row.lob || '').toUpperCase();
+      var isImport = lob.indexOf('IMPORT') >= 0;
+      var rawDate = isImport
+        ? (row.etaDischarge || row.etdLoading || row.jobDate || '')
+        : (row.etdLoading  || row.etaDischarge || row.jobDate || '');
+      if (!rawDate) return;
+      var d = new Date(rawDate);
+      if (isNaN(d)) return;
+      var wk = getISOWeek(d).key;
+      if (!_wkSet[wk]) return;
       if (!_weeklyPendencyIndex[repName]) _weeklyPendencyIndex[repName] = {};
       if (!_weeklyPendencyIndex[repName][wk]) _weeklyPendencyIndex[repName][wk] = { pending:0, done:0 };
       var isDone = lockType === 'Financial Lock' ? row.flDone : row.olDone;
