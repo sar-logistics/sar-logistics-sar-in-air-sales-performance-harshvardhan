@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v56'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v57'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -1175,7 +1175,15 @@ var _tradelaneCache = {};
 var _tradelaneFetchTimer = null;
 var _tradelanePrefetchDone = false;
 
-function getTradelaneDateRange() { return getCustomerDateRange(); }
+function getTradelaneDateRange() {
+  var v = state.reportView;
+  if (v === 'Weekly') {
+    // Weekly view uses state.weeklyMonth — fetch data for that month
+    var wm = state.weeklyMonth || months26[filteredMonthIndices()[0]] || '';
+    return { dateFrom: wm, dateTo: wm };
+  }
+  return getCustomerDateRange();
+}
 function getTradelaneCacheKey() { var r = getTradelaneDateRange(); return (r.dateFrom||'all')+'_'+(r.dateTo||'all'); }
 
 function fetchTradelaneData(callback, force) {
