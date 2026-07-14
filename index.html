@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v64'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v65'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -3044,10 +3044,14 @@ function tradelanePage(){
 
   if (activeView === 'table') {
     var _tlDR = getTradelaneDateRange();
-    var _openKeys = Object.keys(state.tradelaneShipOpen||{}).filter(function(k){return state.tradelaneShipOpen[k];}).sort().join(',');
+    var _tlOpen = state.tradelaneShipOpen||{};
+    var _openKeys = Object.keys(_tlOpen).filter(function(k){return _tlOpen[k];}).sort().join(',');
     var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(state.weeklyMonth||'')+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+_openKeys;
     if (!_tradelanePivotCache[_tlPivotKey]) {
+      // Build pivot table (expensive) — cache result
+      var _t0 = performance.now();
       _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC);
+      console.log('[PERF] tradelanePivotTable built in', (performance.now()-_t0).toFixed(1)+'ms');
     }
     return header + _tradelanePivotCache[_tlPivotKey];
   }
@@ -5520,7 +5524,7 @@ function openInsightDrill(drillType, name, drillMonth) {
 
   // Check cache first — instant for repeat clicks
   var _iDateR = drillType==='customer' ? getCustomerDateRange() : drillType==='agent' ? getAgentDateRange() : getTradelaneDateRange();
-  var _iCacheKey = drillType + '||' + name + '||' + (_iDateR.dateFrom||'') + '||' + (_iDateR.dateTo||'');
+  var _iCacheKey = drillType + '||' + name + '||' + (_iDateR.dateFrom||'') + '||' + (_iDateR.dateTo||'') + '||' + (drillMonth||'');
   var _iCached = _insightDrillCache[_iCacheKey];
   if (_iCached) {
     state.drill = _iCached;
@@ -5530,6 +5534,13 @@ function openInsightDrill(drillType, name, drillMonth) {
 
   // Tradelane drill: use server API (needs SRR join not available client-side)
   if (drillType === 'tradelane') {
+    // Check cache first
+    var _tlCacheKey = 'tl||'+name+'||'+(drillMonth||'')+'|'+(state.tradelaneLob||'Air');
+    if (_insightDrillCache[_tlCacheKey]) {
+      state.drill = _insightDrillCache[_tlCacheKey];
+      render();
+      return;
+    }
     // Use allDrillRows filtered by shipmentNos from tradelaneData (fast, no server round-trip)
     requestAnimationFrame(function(){
       var _tlActiveLob = state.tradelaneLob || 'Air';
@@ -5566,11 +5577,13 @@ function openInsightDrill(drillType, name, drillMonth) {
       _tlRows.sort(function(a,b){ return (b._d||0)-(a._d||0); });
       var _tlGP=0, _tlRev=0;
       _tlRows.forEach(function(r){ _tlGP+=r.g||0; _tlRev+=r.r||0; });
-      state.drill = { entity:name, metric:'Shipments', col:'FY Total', valueFmt:null,
+      var _tlResult = { entity:name, metric:'Shipments', col:'FY Total', valueFmt:null,
         loading:false, rows:_tlRows.slice(0,6000), count:_tlRows.length,
         totalMetric:_tlRows.length, totalGP:_tlGP, totalProvGP:0, totalActualGP:_tlGP,
         totalRevenue:_tlRev, totalCost:_tlRev-_tlGP,
         lobTab:'ALL', insightDrill:true, columnFilters:{}, openFilterCol:null, filterDraft:{} };
+      _insightDrillCache[_tlCacheKey] = _tlResult;
+      state.drill = _tlResult;
       render();
     });
     return;
