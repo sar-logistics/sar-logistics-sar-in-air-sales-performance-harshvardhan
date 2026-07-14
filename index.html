@@ -3027,7 +3027,9 @@ function tradelanePage(){
   +'</div>';
 
   if (activeView === 'table') {
-    var _tlPivotKey = activeLob+'|'+(state.dateFrom||'')+'|'+(state.dateTo||'')+'|'+(state.tradelaneShipOpen?JSON.stringify(state.tradelaneShipOpen):'');
+    var _tlDR = getTradelaneDateRange();
+    var _openKeys = Object.keys(state.tradelaneShipOpen||{}).filter(function(k){return state.tradelaneShipOpen[k];}).sort().join(',');
+    var _tlPivotKey = activeLob+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+_openKeys;
     if (!_tradelanePivotCache[_tlPivotKey]) {
       _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC);
     }
@@ -3100,8 +3102,9 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
 
     var avatar = '<div style="width:28px;height:28px;border-radius:8px;background:'+avatarBg+';display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0;margin-right:8px;">'+esc(ini)+'</div>';
 
-    var _nd = !isGrand ? ' data-act="insightDrill" data-drill-type="tradelane" data-drill-name="'+esc(name)+'"' : '';
-    var _nc = !isGrand ? 'cursor:pointer;' : '';
+    var _drillN = isGrand ? 'Grand Total' : name;
+    var _nd = ' data-act="insightDrill" data-drill-type="tradelane" data-drill-name="'+esc(_drillN)+'"';
+    var _nc = 'cursor:pointer;';
     var _subCount = open?(activeLob==='Ocean'?3:1):0; var nameTd = '<td rowspan="'+(4+_subCount)+'"'+ _nd +' style="position:sticky;left:0;z-index:2;background:'+bg+';padding:10px 12px;border-bottom:2px solid '+BORDER_STRONG+';vertical-align:middle;box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';min-width:160px;'+_nc+'">'
       +'<div style="display:flex;align-items:center;">'+avatar+'<span style="font-size:12px;font-weight:700;color:'+(!isGrand?'#1D5FCC':'#15233B')+';">'+esc(name)+'</span></div>'
     +'</td>';
@@ -3115,8 +3118,9 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
     }
     function gtTd(val, color, bold, isSub, drillName) {
       var subStyle = isSub ? 'background:'+(isGrand?'#FEF9EC':subBg)+';' : 'background:#FEF9EC;';
-      var _dAttr = (!isGrand && drillName) ? ' data-act="insightDrill" data-drill-type="tradelane" data-drill-name="'+esc(drillName)+'"' : '';
-      var _dSty  = (!isGrand && drillName) ? 'cursor:pointer;color:#1D5FCC;text-decoration:underline dotted;' : '';
+      var _drillName = isGrand ? 'Grand Total' : drillName;
+      var _dAttr = _drillName ? ' data-act="insightDrill" data-drill-type="tradelane" data-drill-name="'+esc(_drillName)+'"' : '';
+      var _dSty  = _drillName ? 'cursor:pointer;color:#1D5FCC;text-decoration:underline dotted;' : '';
       return '<td'+_dAttr+' style="position:sticky;left:290px;z-index:2;'+_dSty+subStyle+'text-align:right;padding:7px 10px;font-size:'+(bold?'12':'11.5')+'px;font-weight:'+(bold?'800':'600')+';color:'+(color||'#334155')+';'+MONO+'box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;min-width:110px;">'+val+'</td>';
     }
     function mCell(val, color, isSub) {
@@ -5496,13 +5500,15 @@ function openInsightDrill(drillType, name) {
   // Tradelane drill: use server API (needs SRR join not available client-side)
   if (drillType === 'tradelane') {
     var _tlDateR = getTradelaneDateRange();
-    var _tlQs = '/api/mongo-batch?action=drill&entity='+encodeURIComponent(name)
+    // Grand Total: fetch all rows; specific tradelane: fetch by entity name
+    var _tlEntity = (name === 'Grand Total') ? 'Grand Total' : name;
+    var _tlQs = '/api/mongo-batch?action=drill&entity='+encodeURIComponent(_tlEntity)
       +'&metric=Shipments&month=FY Total'
       +(_tlDateR.dateFrom ? '&dateFrom='+encodeURIComponent(_tlDateR.dateFrom) : '')
       +(_tlDateR.dateTo   ? '&dateTo='+encodeURIComponent(_tlDateR.dateTo)     : '');
     fetch(_tlQs).then(function(res){return res.json();}).then(function(d){
       if(d.success){
-        state.drill = { entity:name, metric:'Shipments', col:'FY Total', valueFmt:null,
+        state.drill = { entity:_tlEntity, metric:'Shipments', col:'FY Total', valueFmt:null,
           loading:false, rows:d.rows||[], count:d.count||0, totalMetric:d.totalMetric||0,
           totalGP:d.totalGP||0, totalProvGP:0, totalActualGP:d.totalGP||0,
           totalRevenue:d.totalRevenue||0, totalCost:d.totalCost||0,
