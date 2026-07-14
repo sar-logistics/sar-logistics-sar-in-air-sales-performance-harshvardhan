@@ -1107,7 +1107,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
     for (const job of jobs) {
       // Date filter — only include jobs within the selected month range
       if (activeMonthSet) {
-        const rawDate = job[dateCol] || job["Job Date"];
+        const rawDate = job[dateCol]; // ETD/ETA only — no Job Date fallback (matches getDrillRows)
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj) continue;
@@ -1757,7 +1757,7 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     for (const job of jobs) {
       // Date filter
       if (activeMonthSet) {
-        const rawDate = job[dateCol] || job["Job Date"];
+        const rawDate = job[dateCol]; // ETD/ETA only — no Job Date fallback (matches getDrillRows)
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj) continue;
