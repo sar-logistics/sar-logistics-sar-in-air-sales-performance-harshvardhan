@@ -5500,7 +5500,13 @@ function openInsightDrill(drillType, name) {
     lobTab: 'ALL', insightDrill: true,
     columnFilters: {}, openFilterCol: null, filterDraft: {}
   };
+  // Show loading state first so browser paints immediately, then render full drawer
+  state.drill.loading = true;
   render();
+  requestAnimationFrame(function(){
+    state.drill.loading = false;
+    render();
+  });
 }
 
 function openDrill(entity, metric, col, valueFmt){
