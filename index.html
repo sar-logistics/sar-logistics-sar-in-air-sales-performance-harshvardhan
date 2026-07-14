@@ -5440,7 +5440,7 @@ function openInsightDrill(drillType, name) {
   // Filter allDrillRows by customer / agent / tradelane name
   if (!allDrillRows || !allDrillRows.length) {
     // Load drill rows first then retry
-    fetchDrillData(function(){ openInsightDrill(drillType, name); });
+    loadDrillData(function(){ openInsightDrill(drillType, name); });
     return;
   }
   var nameLower = (name || '').toLowerCase();
