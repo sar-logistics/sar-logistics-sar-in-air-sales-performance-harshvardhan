@@ -55,17 +55,24 @@ async function batchInsertJobs(db, records, clearFirst = true, fy = null) {
     }
     try {
       const col = db.collection(collectionName);
-      // Only wipe rows belonging to THIS fiscal year's previous push — never
-      // wipe the whole collection, since FY26 and FY27 data now coexist in
-      // the same collections. If no fy tag is given, fall back to wiping the
-      // whole collection (legacy single-FY behavior) for backward compatibility.
-      if (clearFirst) {
-        if (fy) await col.deleteMany({ _fy: fy });
-        else await col.deleteMany({});
-      }
+      // Use upsert on "Shipment No" + "_fy" — prevents duplicates on re-runs
+      // and works correctly with multi-chunk pushes (no delete+reinsert race).
       const stamped = rows.map((row) => ({ ...row, _tab: tabName, _fy: fy || null, _insertedAt: new Date() }));
-      const result  = await col.insertMany(stamped, { ordered: false });
-      summary[tabName] = result.insertedCount;
+      let upsertCount = 0;
+      for (const doc of stamped) {
+        const shipNo = doc["Shipment No"];
+        if (shipNo) {
+          await col.updateOne(
+            { "Shipment No": shipNo, _fy: doc._fy },
+            { $set: doc },
+            { upsert: true }
+          );
+        } else {
+          await col.insertOne(doc);
+        }
+        upsertCount++;
+      }
+      summary[tabName] = upsertCount;
     } catch (err) {
       errors.push(`${tabName}: ${err.message}`);
       summary[tabName] = 0;
