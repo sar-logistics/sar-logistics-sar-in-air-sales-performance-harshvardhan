@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v73'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v74'; // v46: force Vercel redeploy — clears browser cache
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -4870,9 +4870,7 @@ function drawer(){
       return '<span style="color:#374151;">'+esc(val||'—')+'</span>';
     }
 
-    var DRILL_PAGE_SIZE = 500;
-    var drillShowAll = state.drill._showAll || false;
-    var renderRows = drillShowAll ? visibleRows : visibleRows.slice(0, DRILL_PAGE_SIZE);
+    var renderRows = visibleRows; // no row limit
     var hiddenCount = visibleRows.length - renderRows.length;
 
     var bodyRows = renderRows.map(function(s, idx){
@@ -5520,7 +5518,7 @@ function computeDrillResult(entity, metric, month){
   matched.sort(function(a,b){ return new Date(b.row._d) - new Date(a.row._d); });
 
   var allGP=0, allRev=0, allMetric=0, allProvGP=0, allActualGP=0;
-  var outRows = matched.slice(0,6000).map(function(item){
+  var outRows = matched.map(function(item){
     var r = item.row;
     allGP  += r.g||0; allRev += r.r||0; allMetric += item.m||0;
     if (r.prov === 1) allProvGP   += r.g||0;
@@ -5703,7 +5701,7 @@ function openInsightDrill(drillType, name, drillMonth) {
   var _iResult = {
     entity: name, metric: 'Shipments', col: 'FY Total', valueFmt: null,
     loading: false,
-    rows: matched.slice(0, 6000),
+    rows: matched,
     count: matched.length,
     totalMetric: totalShip,
     totalGP: totalGP, totalProvGP: 0, totalActualGP: totalGP,
