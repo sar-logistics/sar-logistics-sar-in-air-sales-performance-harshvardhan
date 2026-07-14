@@ -6019,7 +6019,19 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation(); var col=el.getAttribute('data-col');
     if(state.agentSortCol===col){ state.agentSortDir=(state.agentSortDir||(-1))*-1; } else { state.agentSortCol=col; state.agentSortDir=-1; } render();
   }
-  else if(act==='setTradelaneLob'){ ev.stopPropagation(); state.tradelaneLob=el.getAttribute('data-val'); render(); }
+  else if(act==='setTradelaneLob'){
+  ev.stopPropagation();
+  var _tl = el.getAttribute('data-val');
+  state.tradelaneLob = _tl;
+  // Sync LOB filter to match the selected tradelane tab
+  var _lobMap = {
+    'Air':      ['AIR EXPORT','AIR IMPORT'],
+    'Ocean':    ['SEA EXPORT','SEA IMPORT'],
+    'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
+  };
+  if (_lobMap[_tl]) state.filterLobs = _lobMap[_tl];
+  render();
+}
   else if(act==='setTradelaneView'){ ev.stopPropagation(); state.tradelaneView=el.getAttribute('data-val'); render(); }
   else if(act==='tradelaneSort'){
     ev.stopPropagation(); var col=el.getAttribute('data-col');
