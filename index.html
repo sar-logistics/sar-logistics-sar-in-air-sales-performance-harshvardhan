@@ -3086,7 +3086,7 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
 
     var _nd = !isGrand ? ' data-act="insightDrill" data-drill-type="tradelane" data-drill-name="'+esc(name)+'"' : '';
     var _nc = !isGrand ? 'cursor:pointer;' : '';
-    var nameTd = '<td rowspan="'+(open?8:4)+'"'+ _nd +' style="position:sticky;left:0;z-index:2;background:'+bg+';padding:10px 12px;border-bottom:2px solid '+BORDER_STRONG+';vertical-align:middle;box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';min-width:160px;'+_nc+'">'
+    var _subCount = open?(activeLob==='Ocean'?3:1):0; var nameTd = '<td rowspan="'+(4+_subCount)+'"'+ _nd +' style="position:sticky;left:0;z-index:2;background:'+bg+';padding:10px 12px;border-bottom:2px solid '+BORDER_STRONG+';vertical-align:middle;box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';min-width:160px;'+_nc+'">'
       +'<div style="display:flex;align-items:center;">'+avatar+'<span style="font-size:12px;font-weight:700;color:'+(!isGrand?'#1D5FCC':'#15233B')+';">'+esc(name)+'</span></div>'
     +'</td>';
 
@@ -3122,32 +3122,36 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
     // Sub-rows (only when open)
     var subRows = '';
     if (open) {
-      var totalTeu = (data.fclTeu||0) + (data.tankTeu||0);
-      subRows += '<tr style="'+subTrS+'">'
-        +'<td data-act="tlShipToggle" data-name="'+esc(name)+'" style="position:sticky;left:160px;z-index:2;background:'+subBg+';padding:6px 10px 6px 18px;font-size:11.5px;font-weight:600;color:#334155;border-right:1px solid '+BORDER+';min-width:130px;cursor:pointer;">\u25c4 Total TEUs</td>'
-        + gtTd(fmtT(totalTeu), '#334155', false, true)
-        + activeMons.map(function(m){ var md=(monthData||{})[m]; var v=(md?(md.fclTeu||0)+(md.tankTeu||0):0); return mCell(v>0?v.toFixed(1):'--', '#334155', true); }).join('')
-        +'</tr>';
-      subRows += '<tr style="'+subTrS+'">'
-        + mTdSub('FCL TEUs')
-        + gtTd(fmtT(data.fclTeu||0), '#64748B', false, true)
-        + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.fclTeu||0)>0?(md.fclTeu||0).toFixed(1):'--', '#64748B', true); }).join('')
-        +'</tr>';
-      subRows += '<tr style="'+subTrS+'">'
-        + mTdSub('Tank TEUs')
-        + gtTd(fmtT(data.tankTeu||0), '#64748B', false, true)
-        + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.tankTeu||0)>0?(md.tankTeu||0).toFixed(1):'--', '#64748B', true); }).join('')
-        +'</tr>';
-      subRows += '<tr style="'+subTrS+'">'
-        + mTdSub('LCL (CBM)')
-        + gtTd(fmtT(data.lcl||0), '#64748B', false, true)
-        + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.lcl||0)>0?(md.lcl||0).toFixed(1):'--', '#64748B', true); }).join('')
-        +'</tr>';
-      subRows += '<tr style="'+subTrS+'">'
-        + mTdSub('Tons (Air)')
-        + gtTd(fmtT(data.tons||0), '#64748B', false, true)
-        + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.tons||0)>0?(md.tons||0).toFixed(1):'--', '#64748B', true); }).join('')
-        +'</tr>';
+      if (activeLob === 'Air') {
+        subRows += '<tr style="'+subTrS+'">'
+          + mTdSub('Tons (Air)')
+          + gtTd(fmtT(data.tons||0), '#64748B', false, true)
+          + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.tons||0)>0?(md.tons||0).toFixed(1):'--', '#64748B', true); }).join('')
+          +'</tr>';
+      } else if (activeLob === 'ISO Tank') {
+        subRows += '<tr style="'+subTrS+'">'
+          + mTdSub('Tank TEUs')
+          + gtTd(fmtT(data.tankTeu||0), '#64748B', false, true)
+          + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.tankTeu||0)>0?(md.tankTeu||0).toFixed(1):'--', '#64748B', true); }).join('')
+          +'</tr>';
+      } else {
+        var totalTeu = (data.fclTeu||0) + (data.tankTeu||0);
+        subRows += '<tr style="'+subTrS+'">'
+          +'<td data-act="tlShipToggle" data-name="'+esc(name)+'" style="position:sticky;left:160px;z-index:2;background:'+subBg+';padding:6px 10px 6px 18px;font-size:11.5px;font-weight:600;color:#334155;border-right:1px solid '+BORDER+';min-width:130px;cursor:pointer;">◄ Total TEUs</td>'
+          + gtTd(fmtT(totalTeu), '#334155', false, true)
+          + activeMons.map(function(m){ var md=(monthData||{})[m]; var v=(md?(md.fclTeu||0)+(md.tankTeu||0):0); return mCell(v>0?v.toFixed(1):'--', '#334155', true); }).join('')
+          +'</tr>';
+        subRows += '<tr style="'+subTrS+'">'
+          + mTdSub('FCL TEUs')
+          + gtTd(fmtT(data.fclTeu||0), '#64748B', false, true)
+          + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.fclTeu||0)>0?(md.fclTeu||0).toFixed(1):'--', '#64748B', true); }).join('')
+          +'</tr>';
+        subRows += '<tr style="'+subTrS+'">'
+          + mTdSub('LCL (CBM)')
+          + gtTd(fmtT(data.lcl||0), '#64748B', false, true)
+          + activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.lcl||0)>0?(md.lcl||0).toFixed(1):'--', '#64748B', true); }).join('')
+          +'</tr>';
+      }
     }
 
     // Revenue row
