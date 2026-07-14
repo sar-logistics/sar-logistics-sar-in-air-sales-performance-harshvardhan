@@ -3274,11 +3274,16 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
 
   var repsFiltered = _pendencyReps.map(function(rep){
     var colData = activeCols.map(function(col){
-      // Weekly view: use per-row bucketed index from allPendencyDrillRows
-      if (isWeekly && _weeklyPendencyIndex) {
-        return (_weeklyPendencyIndex[rep.name] && _weeklyPendencyIndex[rep.name][col]) || { pending:0, done:0 };
+      // Weekly view ALWAYS uses the week-bucketed index — must come first
+      // _pendencyLobIndex is month-keyed and would return wrong data for week keys
+      if (isWeekly) {
+        if (_weeklyPendencyIndex) {
+          return (_weeklyPendencyIndex[rep.name] && _weeklyPendencyIndex[rep.name][col]) || { pending:0, done:0 };
+        }
+        // fallback: no drill rows loaded yet
+        return { pending:0, done:0 };
       }
-      // Use LOB-filtered index when available — keyed by displayName = rep.name
+      // Monthly/Custom/Yearly: use LOB-filtered index when available
       if (_pendencyLobIndex) {
         return (_pendencyLobIndex[rep.name] && _pendencyLobIndex[rep.name][col]) || { pending:0, done:0 };
       }
