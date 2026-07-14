@@ -5499,25 +5499,50 @@ function openInsightDrill(drillType, name) {
 
   // Tradelane drill: use server API (needs SRR join not available client-side)
   if (drillType === 'tradelane') {
-    var _tlDateR = getTradelaneDateRange();
-    // Grand Total: fetch all rows; specific tradelane: fetch by entity name
-    var _tlEntity = (name === 'Grand Total') ? 'Grand Total' : name;
-    var _tlQs = '/api/mongo-batch?action=drill&entity='+encodeURIComponent(_tlEntity)
-      +'&metric=Shipments&month=FY Total'
-      +(_tlDateR.dateFrom ? '&dateFrom='+encodeURIComponent(_tlDateR.dateFrom) : '')
-      +(_tlDateR.dateTo   ? '&dateTo='+encodeURIComponent(_tlDateR.dateTo)     : '');
-    fetch(_tlQs).then(function(res){return res.json();}).then(function(d){
-      if(d.success){
-        state.drill = { entity:_tlEntity, metric:'Shipments', col:'FY Total', valueFmt:null,
-          loading:false, rows:d.rows||[], count:d.count||0, totalMetric:d.totalMetric||0,
-          totalGP:d.totalGP||0, totalProvGP:0, totalActualGP:d.totalGP||0,
-          totalRevenue:d.totalRevenue||0, totalCost:d.totalCost||0,
-          lobTab:'ALL', insightDrill:true, columnFilters:{}, openFilterCol:null, filterDraft:{} };
-        render();
+    // Use allDrillRows client-side for tradelane drill — filter by date + LOB + RLS
+    // This matches exactly what the table shows
+    requestAnimationFrame(function(){
+      var _tlDateR = getTradelaneDateRange();
+      var _tlFrom = _tlDateR.dateFrom, _tlTo = _tlDateR.dateTo;
+      var FY_ALL = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25','Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26','Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
+      var _tlFi = _tlFrom ? FY_ALL.indexOf(_tlFrom) : 0;
+      var _tlTi = _tlTo   ? FY_ALL.indexOf(_tlTo)   : FY_ALL.length-1;
+      // LOB filter from active tradelane tab
+      var _ILOB = {'Air':['AIR EXPORT','AIR IMPORT'],'Ocean':['SEA EXPORT','SEA IMPORT'],'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT']};
+      var _tlLob = _ILOB[state.tradelaneLob||'Air'] || null;
+      // RLS rep filter
+      var _tlRls = [];
+      if (currentUser) {
+        var _tlRole = (currentUser.role||'').toLowerCase().trim();
+        if (_tlRole === 'sales rep') _tlRls = [normalizeName(currentUser.name)];
+        else if (_tlRole === 'zonal manager') _tlRls = repsRaw.filter(function(r){return !r.isBranch;}).map(function(r){return normalizeName(r.name);});
       }
-    }).catch(function(){});
+      var _tlRows = (allDrillRows||[]).filter(function(row){
+        if (_tlLob && _tlLob.indexOf(row.lob) === -1) return false;
+        var ri = FY_ALL.indexOf(row._ml);
+        if (ri < _tlFi || ri > _tlTi) return false;
+        if (_tlRls.length > 0 && _tlRls.indexOf(row._sp) === -1) return false;
+        // For specific tradelane: match by country name in lobData
+        if (name !== 'Grand Total') {
+          // Match rows belonging to this tradelane via allCountries shipment nos
+          var _tlCountry = (lobData_tl||[]).find(function(c){return c.name===name;});
+          if (!_tlCountry || !_tlCountry.shipmentNos) return true; // fallback show all
+          return _tlCountry.shipmentNos.indexOf(row.shipmentNo) > -1;
+        }
+        return true;
+      });
+      var _tlGP=0,_tlRev=0;
+      _tlRows.forEach(function(r){_tlGP+=r.g||0;_tlRev+=r.r||0;});
+      state.drill = { entity: name, metric:'Shipments', col:'FY Total', valueFmt:null,
+        loading:false, rows:_tlRows.slice(0,6000), count:_tlRows.length,
+        totalMetric:_tlRows.length, totalGP:_tlGP, totalProvGP:0, totalActualGP:_tlGP,
+        totalRevenue:_tlRev, totalCost:_tlRev-_tlGP,
+        lobTab:'ALL', insightDrill:true, columnFilters:{}, openFilterCol:null, filterDraft:{} };
+      render();
+    });
     return;
   }
+  var lobData_tl = null; // unused outside tradelane block
 
   // Defer heavy computation to next frame so loading state paints first
   requestAnimationFrame(function(){
