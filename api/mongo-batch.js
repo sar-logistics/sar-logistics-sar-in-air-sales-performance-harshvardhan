@@ -58,21 +58,17 @@ async function batchInsertJobs(db, records, clearFirst = true, fy = null) {
       // Use upsert on "Shipment No" + "_fy" — prevents duplicates on re-runs
       // and works correctly with multi-chunk pushes (no delete+reinsert race).
       const stamped = rows.map((row) => ({ ...row, _tab: tabName, _fy: fy || null, _insertedAt: new Date() }));
-      let upsertCount = 0;
-      for (const doc of stamped) {
+      // Use bulkWrite with upsert — fast and prevents duplicates
+      const ops = stamped.map((doc) => {
         const shipNo = doc["Shipment No"];
         if (shipNo) {
-          await col.updateOne(
-            { "Shipment No": shipNo, _fy: doc._fy },
-            { $set: doc },
-            { upsert: true }
-          );
+          return { updateOne: { filter: { "Shipment No": shipNo, _fy: doc._fy }, update: { $set: doc }, upsert: true } };
         } else {
-          await col.insertOne(doc);
+          return { insertOne: { document: doc } };
         }
-        upsertCount++;
-      }
-      summary[tabName] = upsertCount;
+      });
+      const bulkResult = await col.bulkWrite(ops, { ordered: false });
+      summary[tabName] = (bulkResult.upsertedCount || 0) + (bulkResult.modifiedCount || 0) + (bulkResult.insertedCount || 0);
     } catch (err) {
       errors.push(`${tabName}: ${err.message}`);
       summary[tabName] = 0;
