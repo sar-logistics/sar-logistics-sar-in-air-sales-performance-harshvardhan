@@ -1506,6 +1506,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
     "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
     "Consignee Country": 1, "Shipper Country": 1, "Trade Lane": 1,
+    "Destination Country": 1, "Origin Port Country": 1,
     "Discharge Port": 1, "Loading Port": 1,
   };
 
@@ -1548,9 +1549,11 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
         // Ocean / ISO Tank: use country fields directly on the job row
         // Export: foreign country = Consignee Country (destination)
         // Import: foreign country = Shipper Country (origin)
+        // Export: Consignee Country or Destination Country (foreign destination)
+        // Import: Shipper Country or Origin Port Country (foreign origin)
         const rawCountry = cfg.dir === "Export"
-          ? String(job["Consignee Country"] || "").trim()
-          : String(job["Shipper Country"]   || "").trim();
+          ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
+          : (String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim());
 
         if (!rawCountry || rawCountry.toLowerCase() === "india") {
           // Try Trade Lane field as last resort
