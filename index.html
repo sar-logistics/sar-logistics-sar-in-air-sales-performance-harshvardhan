@@ -577,6 +577,12 @@ function computeFilteredRepsRaw(){
     }
   }
 
+  // Zone filter — expand selected zones to rep names, then intersect with rep filter
+  var filterZones = state.filterZones || [];
+  if (filterZones.length > 0) {
+    base = base.filter(function(r){ return filterZones.indexOf(r.zone) > -1; });
+  }
+
   // Rep filter
   if (filterReps.length > 0) {
     base = base.filter(function(r){ return filterReps.indexOf(r.name) > -1; });
@@ -1280,8 +1286,10 @@ var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:f
   filtersOpen: false,
   filterLobDropOpen: false,
   filterRepDropOpen: false,
+  filterZoneDropOpen: false,
   filterLobs: ['AIR EXPORT','AIR IMPORT'],   // default Air Export + Air Import; empty = All LOBs
-  filterReps: []    // empty = All Reps; else array of selected rep names
+  filterReps: [],   // empty = All Reps; else array of selected rep names
+  filterZones: []   // empty = All Zones; else array of selected zone names
 };
 
 /* ====================== HELPERS ====================== */
@@ -2181,7 +2189,7 @@ function topbar(){
       +'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#FFFFFF;border-radius:999px;padding:7px 13px;box-shadow:'+pillShadow+';">Rate '+rateEl+'</div>'
       // Filters — only on Sales Performance (sales page)
       +(['customers','agents','tradelane','admin','usage','org','teams'].indexOf(state.page) >= 0 ? '' : (function(){
-        var activeCount = state.filterLobs.length + state.filterReps.length;
+        var activeCount = state.filterLobs.length + state.filterReps.length + (state.filterZones||[]).length;
         var isFOpen = state.filtersOpen;
         var btnHtml = '<button data-act="toggleFiltersDrop" style="display:flex;align-items:center;gap:6px;background:'+(activeCount>0?'#EEF3FC':'#FFFFFF')+';border:1.5px solid '+(isFOpen?BRAND_A1:(activeCount>0?'#B7C8EA':'#D8E1F0'))+';border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:'+(activeCount>0?'#1E3A66':'#3C5275')+';cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink:0;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>'
@@ -2252,15 +2260,12 @@ function topbar(){
                 + '</div>'
               + '</div>' : '');
 
-          var panelHtml = '<div id="filters-drop" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:14px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;width:280px;padding:16px;pointer-events:auto;">'
-            +'<div style="font-size:10px;font-weight:800;letter-spacing:0.08em;color:#97A1B2;text-transform:uppercase;margin-bottom:12px;">Filters</div>'
-            +'<div style="display:flex;flex-direction:column;gap:8px;">'+lobSection+repSection+'</div>'
-            +'<div style="height:1px;background:#EEF2F8;margin:14px 0 12px;"></div>'
-            +'<div style="display:flex;align-items:center;justify-content:space-between;">'
-              +'<button data-act="filterResetAll" style="background:none;border:none;color:#94A3B8;font-size:12px;font-weight:600;cursor:pointer;padding:6px 4px;">Reset all</button>'
-              +'<button data-act="toggleFiltersDrop" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;color:#fff;font-size:12px;font-weight:700;padding:8px 20px;cursor:pointer;">Done</button>'
-            +'</div>'
-          +'</div>';
+          var allZoneNames = sortZones(Object.keys(function(){ var z={}; repsRawOriginal.forEach(function(r){ if(r.zone) z[r.zone]=true; }); return z; }()));
+          var zoneOpen = state.filterZoneDropOpen;
+          var zoneSection = sectionHeader('Zones', (state.filterZones||[]).length, zoneOpen, 'toggleFilterZoneDrop')
+            + (zoneOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'                + '<div id="zone-checklist" style="max-height:180px;overflow-y:auto;">'                  + checkRow('All Zones', (state.filterZones||[]).length===0, 'filterZoneAll', '')                  + allZoneNames.map(function(z){ return checkRow(z, (state.filterZones||[]).indexOf(z)>-1, 'toggleFilterZone', z); }).join('')                + '</div>'              + '</div>' : '');
+
+          var panelHtml = '<div id="filters-drop" data-stop="1" style="position:fixed;background:#FFFFFF;border-radius:14px;box-shadow:0 12px 36px rgba(13,43,94,0.2),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;width:280px;padding:16px;pointer-events:auto;">'            +'<div style="font-size:10px;font-weight:800;letter-spacing:0.08em;color:#97A1B2;text-transform:uppercase;margin-bottom:12px;">Filters</div>'            +'<div style="display:flex;flex-direction:column;gap:8px;">'+lobSection+repSection+zoneSection+'</div>'            +'<div style="height:1px;background:#EEF2F8;margin:14px 0 12px;"></div>'            +'<div style="display:flex;align-items:center;justify-content:space-between;">'              +'<button data-act="filterResetAll" style="background:none;border:none;color:#94A3B8;font-size:12px;font-weight:600;cursor:pointer;padding:6px 4px;">Reset all</button>'              +'<button data-act="toggleFiltersDrop" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;color:#fff;font-size:12px;font-weight:700;padding:8px 20px;cursor:pointer;">Done</button>'            +'</div>'          +'</div>';
           return btnHtml + panelHtml;
         }
         return btnHtml;
@@ -2559,12 +2564,22 @@ function customerPage(){
     'SEA EXPORT':      'Sea Exp',  'SEA IMPORT':      'Sea Imp',
     'ISOTANK EXPORT':  'ISO Exp',  'ISOTANK IMPORT':  'ISO Imp'
   };
-  var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
+  // Zone filter: expand selected zones to rep names
+  var _filterZones = state.filterZones || [];
+  var _zoneReps = [];
+  if (_filterZones.length > 0) {
+    repsRawOriginal.forEach(function(r){ if (_filterZones.indexOf(r.zone) > -1) _zoneReps.push(normalizeName(r.name)); });
+  }
+  var _effectiveFilterReps = filterReps.length > 0
+    ? filterReps.map(function(x){ return normalizeName(x); })
+    : (_zoneReps.length > 0 ? _zoneReps : null); // null = no rep filter
+
+  var hasFilters = filterReps.length > 0 || filterLobs.length > 0 || _filterZones.length > 0;
   if (hasFilters && lobData.allCustomers) {
-    var _frNorm = filterReps.map(function(x){ return normalizeName(x); });
+    var _frNorm = _effectiveFilterReps || [];
     // For zone-scoped RLS: re-aggregate metrics using only zone reps' contributions
     var filteredCusts = lobData.allCustomers.filter(function(c) {
-      var repOk = filterReps.length === 0 || (c.salesReps || []).some(function(r){
+      var repOk = !_effectiveFilterReps || (c.salesReps || []).some(function(r){
         return _frNorm.indexOf(normalizeName(r||'')) > -1;
       });
       var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
@@ -2574,7 +2589,7 @@ function customerPage(){
       return repOk && lobOk;
     }).map(function(c) {
       // Re-sum metrics from only the allowed reps' contributions
-      if (filterReps.length === 0 || !c.repMetrics) return c;
+      if (!_effectiveFilterReps || !c.repMetrics) return c;
       var ship=0, rev=0, gp=0, tons=0, teu=0;
       Object.keys(c.repMetrics).forEach(function(rep){
         if (_frNorm.indexOf(normalizeName(rep)) === -1) return;
@@ -2818,12 +2833,22 @@ function agentPage(){
     'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
     'ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp'
   };
-  var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
+  // Zone filter
+  var _filterZonesA = state.filterZones || [];
+  var _zoneRepsA = [];
+  if (_filterZonesA.length > 0) {
+    repsRawOriginal.forEach(function(r){ if (_filterZonesA.indexOf(r.zone) > -1) _zoneRepsA.push(normalizeName(r.name)); });
+  }
+  var _effectiveFilterRepsA = filterReps.length > 0
+    ? filterReps.map(function(x){ return normalizeName(x); })
+    : (_zoneRepsA.length > 0 ? _zoneRepsA : null);
+
+  var hasFilters = filterReps.length > 0 || filterLobs.length > 0 || _filterZonesA.length > 0;
   if (hasFilters && lobData.allAgents) {
-    var _frNormA = filterReps.map(function(x){ return normalizeName(x); });
+    var _frNormA = _effectiveFilterRepsA || [];
     var filteredAgents = lobData.allAgents.filter(function(a) {
       var _frNorm = _frNormA;
-      var repOk = filterReps.length === 0 || (a.salesReps||[]).some(function(r){ return _frNorm.indexOf(normalizeName(r||''))>-1; });
+      var repOk = !_effectiveFilterRepsA || (a.salesReps||[]).some(function(r){ return _frNorm.indexOf(normalizeName(r||''))>-1; });
       var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
         var needle = LOB_KEY_TO_CUST[fk]||'';
         return needle && (a.lobs||[]).indexOf(needle)>-1;
@@ -3017,11 +3042,21 @@ function tradelanePage(){
     'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
     'ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp'
   };
-  var hasFilters = filterReps.length > 0 || filterLobs.length > 0;
+  // Zone filter
+  var _filterZonesTL = state.filterZones || [];
+  var _zoneRepsTL = [];
+  if (_filterZonesTL.length > 0) {
+    repsRawOriginal.forEach(function(r){ if (_filterZonesTL.indexOf(r.zone) > -1) _zoneRepsTL.push(normalizeName(r.name)); });
+  }
+  var _effectiveFilterRepsTL = filterReps.length > 0
+    ? filterReps.map(function(x){ return normalizeName(x); })
+    : (_zoneRepsTL.length > 0 ? _zoneRepsTL : null);
+
+  var hasFilters = filterReps.length > 0 || filterLobs.length > 0 || _filterZonesTL.length > 0;
   if (hasFilters && lobData.allCountries) {
-    var _frNormT = filterReps.map(function(x){ return normalizeName(x); });
+    var _frNormT = _effectiveFilterRepsTL || [];
     var filtered = lobData.allCountries.filter(function(c) {
-      var repOk = filterReps.length === 0 || (c.salesReps||[]).some(function(r){ return _frNormT.indexOf(normalizeName(r||''))>-1; });
+      var repOk = !_effectiveFilterRepsTL || (c.salesReps||[]).some(function(r){ return _frNormT.indexOf(normalizeName(r||''))>-1; });
       var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
         var needle = LOB_KEY_TO_LABEL[fk]||'';
         return needle && (c.lobs||[]).indexOf(needle)>-1;
@@ -3542,9 +3577,19 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       repsRaw.forEach(function(r){ _allowedRepNames[normalizeName(r.name)] = true; });
     }
   }
-  var _pendencyReps = _allowedRepNames
-    ? (d.reps || []).filter(function(rep){ return !!_allowedRepNames[normalizeName(rep.name)]; })
-    : (d.reps || []);
+  // Zone filter for pendency
+  var _filterZonesP = state.filterZones || [];
+  var _pendencyZoneSet = null;
+  if (_filterZonesP.length > 0) {
+    _pendencyZoneSet = {};
+    _filterZonesP.forEach(function(z){ _pendencyZoneSet[z] = true; });
+  }
+
+  var _pendencyReps = (d.reps || []).filter(function(rep){
+    if (_allowedRepNames && !_allowedRepNames[normalizeName(rep.name)]) return false;
+    if (_pendencyZoneSet && !_pendencyZoneSet[rep.zone]) return false;
+    return true;
+  });
 
   var repsFiltered = _pendencyReps.map(function(rep){
     var colData;
@@ -5522,8 +5567,8 @@ function topbarHash(){
     state.currency+'|'+state.rate+'|'+state.yearType+'|'+
     state.viewDropOpen+'|'+state.fromDropOpen+'|'+state.toDropOpen+'|'+
     state.weeklyDropOpen+'|'+state.quarterDropOpen+'|'+state.qyrDropOpen+'|'+state.yearTypeDropOpen+'|'+
-    state.filtersOpen+'|'+state.filterLobDropOpen+'|'+state.filterRepDropOpen+'|'+
-    state.rateEditing+'|'+JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps)+'|'+
+    state.filtersOpen+'|'+state.filterLobDropOpen+'|'+state.filterRepDropOpen+'|'+state.filterZoneDropOpen+'|'+
+    state.rateEditing+'|'+JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps)+'|'+JSON.stringify(state.filterZones||[])+'|'+
     state.selectedQuarter;
 }
 
@@ -6695,7 +6740,20 @@ document.addEventListener('click', function(ev){
     }
     render(); requestAnimationFrame(positionAllDrops);
   }
-  else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobs=[]; state.filterReps=[]; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterZoneAll'){ ev.stopPropagation(); state.filterZones=[]; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='toggleFilterZone'){
+    ev.stopPropagation();
+    var zv = el.getAttribute('data-val');
+    if (!state.filterZones) state.filterZones = [];
+    if (state.filterZones.indexOf(zv) > -1) {
+      state.filterZones = state.filterZones.filter(function(x){ return x !== zv; });
+    } else {
+      state.filterZones = state.filterZones.concat([zv]);
+    }
+    _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
+  }
+  else if(act==='toggleFilterZoneDrop'){ ev.stopPropagation(); state.filterZoneDropOpen=!state.filterZoneDropOpen; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobs=[]; state.filterReps=[]; state.filterZones=[]; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
   else if(act==='rateCommit'){ var v=parseFloat(document.getElementById('rate-input').value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
   else if(act==='feedbackOpen'){ ev.stopPropagation(); state.feedbackOpen=true; state.feedbackSent=false; state.feedbackText=''; render(); }
