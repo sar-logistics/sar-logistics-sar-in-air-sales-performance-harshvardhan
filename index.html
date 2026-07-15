@@ -3162,13 +3162,13 @@ function tradelanePage(){
 
     function reaggregateTL(c) {
       // Re-aggregate metrics using only shipmentNos belonging to filtered reps
-      // r.g=GP, r.r=revenue, r.tons=air tons (calculatedTons), r.t=TEU, r.teu=TEU
+      // r.g=GP, r.r=billedRevenue, r.tons=air tons (calculatedTons), r.t=TEU
       if (!_drillBySnо || !c.shipmentNos) return c;
       var ship=0, gp=0, rev=0, tons=0, teu=0;
       c.shipmentNos.forEach(function(sno){
         var r = _drillBySnо[sno];
         if (!r) return;
-        ship++; gp += r.g||0; rev += r.r||0;
+        ship++; gp += r.g||0; rev += effectiveRevenue(r);
         tons += r.tons||0;   // calculatedTons (air weight tons)
         teu  += r.t||0;      // Container TEU
       });
@@ -3277,6 +3277,16 @@ function tradelanePage(){
 
 function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) {
   var rows = (lobData.allCountries || []).slice().sort(function(a,b){ return b.gp - a.gp; });
+
+  // Effective revenue per drill row:
+  // Air Export/Import: billedRevenue if financialLock filled, else provRevenue
+  // Other LOBs: billedRevenue if operationLock filled, else provRevenue
+  function effectiveRevenue(r) {
+    var isAir = r.lob === 'AIR EXPORT' || r.lob === 'AIR IMPORT';
+    var locked = isAir ? !!r.financialLock : !!r.operationLock;
+    return locked ? (r.billedRevenue || r.r || 0) : (r.provRevenue || r.r || 0);
+  }
+
   var BORDER = '#D5DCE6';
   var BORDER_STRONG = '#B0BAC8';
   var MONO = "font-family:'DM Mono',monospace;";
@@ -3349,25 +3359,28 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
       var inActive = _fyGroups ? !!_gtFyMonsSet[r._ml] : !!_gtActiveMonsSet[r._ml];
       if (!inActive) return;
-      _gtGrand.shipments++; _gtGrand.gp += r.g||0; _gtGrand.revenue += r.r||0; _gtGrand.tons += r.tons||0; _gtGrand.teu += r.t||0;
+      var _eRev = effectiveRevenue(r);
+      _gtGrand.shipments++; _gtGrand.gp += r.g||0; _gtGrand.revenue += _eRev; _gtGrand.tons += r.tons||0; _gtGrand.teu += r.t||0;
       var colKey = _fyGroups ? _gtFyMonsSet[r._ml] : r._ml;
       if (!_gtMD[colKey]) _gtMD[colKey] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
-      _gtMD[colKey].shipments++; _gtMD[colKey].gp += r.g||0; _gtMD[colKey].revenue += r.r||0;
+      _gtMD[colKey].shipments++; _gtMD[colKey].gp += r.g||0; _gtMD[colKey].revenue += _eRev;
       _gtMD[colKey].tons += r.tons||0; _gtMD[colKey].teu += r.t||0;
     });
-    // Override shipments, tons, gp — revenue/teu/gpPct from tradelaneData (SRR)
+    // Override shipments, tons, gp, revenue from allDrillRows (accurate, lock-based)
     grand.shipments = _gtGrand.shipments;
     grand.tons      = _gtGrand.tons;
     grand.gp        = _gtGrand.gp;
+    grand.revenue   = _gtGrand.revenue;
     grand.gpPct     = grand.revenue > 0 ? (grand.gp/grand.revenue*100) : 0;
-    // Override per-month/FY shipments+tons+gp in grandMD
+    // Override per-month/FY shipments+tons+gp+revenue in grandMD
     var _allMDKeys = _fyGroups ? _fyGroups.map(function(g){ return g.key; }) : activeMons;
     _allMDKeys.forEach(function(k){
       if (!grandMD[k]) grandMD[k] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
-      var d = _gtMD[k] || { shipments:0, gp:0, tons:0 };
+      var d = _gtMD[k] || { shipments:0, gp:0, tons:0, revenue:0 };
       grandMD[k].shipments = d.shipments;
       grandMD[k].gp        = d.gp;
       grandMD[k].tons      = d.tons;
+      grandMD[k].revenue   = d.revenue;
     });
   }
 
