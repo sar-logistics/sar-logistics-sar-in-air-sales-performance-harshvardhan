@@ -3418,7 +3418,17 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var d = data;
   var isWeekly = state.reportView === 'Weekly';
   var isQuarterly = state.reportView === 'Quarterly';
+  var isYearly = state.reportView === 'Yearly';
   var activeCols, colHeaders;
+
+  // Yearly: build FY groups (reuse yearGroups() same as sales performance)
+  var _pFyGroups = null; // [{key,label,range,idxs:[...]}, ...]
+  if (isYearly) {
+    _pFyGroups = yearGroups(); // e.g. [{key:'FY25',label:'FY 2025-26',range:'Apr 2025 – Mar 2026',idxs:[...]}]
+    activeCols = [];
+    _pFyGroups.forEach(function(g){ g.idxs.forEach(function(i){ activeCols.push(months26[i]); }); });
+    colHeaders = _pFyGroups.map(function(g){ return g.label; });
+  }
 
   // Quarterly: build two summary columns — prev year Q and current year Q
   var _qGroups = null; // [{label, months:[...month labels]}, ...]
@@ -3538,7 +3548,20 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
 
   var repsFiltered = _pendencyReps.map(function(rep){
     var colData;
-    if (isQuarterly && _qGroups) {
+    if (isYearly && _pFyGroups) {
+      // Yearly: one aggregated {pending,done} per FY group
+      colData = _pFyGroups.map(function(g){
+        return g.idxs.reduce(function(acc, i){
+          var m = months26[i];
+          var src = _pendencyLobIndex
+            ? ((_pendencyLobIndex[rep.name] && _pendencyLobIndex[rep.name][m]) || { pending:0, done:0 })
+            : (rep.monthData[m] || { pending:0, done:0 });
+          acc.pending += src.pending || 0;
+          acc.done    += src.done    || 0;
+          return acc;
+        }, { pending:0, done:0 });
+      });
+    } else if (isQuarterly && _qGroups) {
       // Quarterly: one aggregated {pending,done} per year-group
       colData = _qGroups.map(function(g){
         return g.months.reduce(function(acc, m){
@@ -3577,7 +3600,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var gtPending = repsFiltered.reduce(function(s,r){ return s+r.totalPending; }, 0);
   var gtDone    = repsFiltered.reduce(function(s,r){ return s+r.totalDone;    }, 0);
   var gtTotal   = gtPending + gtDone;
-  var gtColData = (isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
+  var gtColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
     return {
       pending: repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
       done:    repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
@@ -3590,7 +3613,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     if (!zoneTotals[r.zone]) {
       zoneTotals[r.zone] = {
         totalPending: 0, totalDone: 0, total: 0,
-        colData: (isQuarterly && _qGroups ? _qGroups : activeCols).map(function(){ return {pending:0, done:0}; })
+        colData: (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(){ return {pending:0, done:0}; })
       };
     }
     var zt = zoneTotals[r.zone];
@@ -3608,7 +3631,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
 
   var BRAND = brandColor || '#1D5FCC';
   var _qRangeLabel = {'Q1':'Apr–Jun','Q2':'Jul–Sep','Q3':'Oct–Dec','Q4':'Jan–Mar'};
-  var dateLabel = isQuarterly
+  var dateLabel = isYearly
+    ? (state.yearType === 'Calendar' ? 'Calendar' : 'Financial') + ' Year — Year on Year'
+    : isQuarterly
     ? (state.selectedQuarter || 'Q1') + ' (' + (_qRangeLabel[state.selectedQuarter]||'') + ') — Year on Year'
     : (activeCols.length===0 ? '—' : activeCols.length===1 ? activeCols[0] : activeCols[0]+' – '+activeCols[activeCols.length-1]);
 
@@ -3639,13 +3664,22 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var PBORDER = '#D5DCE6'; var PBORDER_STRONG = '#B0BAC8';
   var thBase = 'padding:9px 12px;font-size:10px;font-weight:700;letter-spacing:0.07em;color:#8B97A8;text-transform:uppercase;white-space:nowrap;background:#F0F4FA;border-bottom:2px solid '+PBORDER_STRONG+';border-right:1px solid '+PBORDER+';';
   var colThs;
-  if (isQuarterly && _qGroups) {
+  if (isYearly && _pFyGroups) {
+    // Yearly: FY columns with label + range sub-label
+    colThs = _pFyGroups.map(function(g, gi){
+      var isLast = gi === _pFyGroups.length - 1;
+      var shadow = isLast ? 'box-shadow:inset 2px 0 0 '+PBORDER_STRONG+';' : 'box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;';
+      return '<th style="'+thBase+'text-align:right;background:#FCF3DA;color:#A8720E;min-width:130px;'+shadow+'">'
+        +'<div style="font-size:10px;font-weight:800;">'+g.label+'</div>'
+        +'<div style="font-size:8.5px;font-weight:500;color:#B8870F;letter-spacing:0.03em;">'+g.range+'</div>'
+        +'</th>';
+    }).join('');
+  } else if (isQuarterly && _qGroups) {
     // Quarterly: alternating golden columns like sales performance yearly view
     colThs = _qGroups.map(function(g, gi){
       var isLast = gi === _qGroups.length - 1;
-      var bg = '#FCF3DA'; var color = '#A8720E';
       var shadow = isLast ? 'box-shadow:inset 2px 0 0 '+PBORDER_STRONG+';' : 'box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;';
-      return '<th style="'+thBase+'text-align:right;background:'+bg+';color:'+color+';min-width:120px;'+shadow+'">'+g.label+'</th>';
+      return '<th style="'+thBase+'text-align:right;background:#FCF3DA;color:#A8720E;min-width:120px;'+shadow+'">'+g.label+'</th>';
     }).join('');
   } else {
     colThs = colHeaders.map(function(h){ return '<th style="'+thBase+'text-align:right;">'+h+'</th>'; }).join('');
@@ -3653,7 +3687,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var thead = '<thead style="position:sticky;top:0;z-index:4;"><tr>'
     +'<th style="position:sticky;left:0;z-index:5;'+thBase+'width:190px;min-width:190px;">Sales Rep / Job Owner</th>'
     +'<th style="position:sticky;left:190px;z-index:5;'+thBase+'width:150px;min-width:150px;">Metric</th>'
-    +(isQuarterly ? '' : '<th style="'+thBase+'text-align:right;background:#FCF3DA;color:#A8720E;min-width:90px;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;border-right:none;">Grand Total</th>')
+    +((isQuarterly || isYearly) ? '' : '<th style="'+thBase+'text-align:right;background:#FCF3DA;color:#A8720E;min-width:90px;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;border-right:none;">Grand Total</th>')
     +colThs
     +'</tr></thead>';
 
@@ -3688,6 +3722,20 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           : (zoneGroup === 'Cross Sales') ? 'branch'
           : (zoneGroup && zoneGroup.startsWith('branch__')) ? 'branch'
           : isZone ? 'zone' : 'rep';
+        if (isYearly && _pFyGroups) {
+          // Yearly: golden FY column, drillCol is RANGE of that FY group's months
+          var g = _pFyGroups[ci];
+          var _fyMs = g ? g.idxs.map(function(i){ return months26[i]; }) : [];
+          var col = _fyMs.length > 0 ? 'RANGE:'+_fyMs[0]+':'+_fyMs[_fyMs.length-1] : '';
+          var isLastCol = ci === _pFyGroups.length - 1;
+          var qShadow = isLastCol ? 'box-shadow:inset 2px 0 0 '+PBORDER_STRONG+';' : 'box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;';
+          var qColor = v > 0 ? '#0D2B5E' : '#C5D0E0'; var qFw = v > 0 ? '700' : '400';
+          var qStyle = 'padding:9px 12px;text-align:right;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:'+qFw+';color:'+qColor+';white-space:nowrap;background:#FCF3DA;'+qShadow;
+          if (entityName && v > 0) {
+            return '<td class="pcell" data-act="pendencyDrill" data-rep="'+esc(entityName)+'" data-col="'+esc(col)+'" data-status="'+esc(drillStatus||'all')+'" data-lock="'+esc(lockType||'')+'" data-type="'+esc(dtype)+'" style="'+qStyle+'cursor:pointer;">'+v+'</td>';
+          }
+          return '<td style="'+qStyle+'">'+v+'</td>';
+        }
         if (isQuarterly && _qGroups) {
           // Quarterly: golden column, drillCol is RANGE of that group's months
           var g = _qGroups[ci];
@@ -3728,7 +3776,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       return '<tr'+zgAttr+rgAttr+' style="background:'+rowBg+';'+rowTopBorder+(isLast&&bottomBorderStyle?rowBottomBorder:'')+hidden+'">'
         + nameTd
         +'<td style="position:sticky;left:190px;z-index:2;background:'+rowBg+';padding:9px 12px;font-size:12px;font-weight:500;color:#374151;white-space:nowrap;border-right:2px solid '+PBORDER_STRONG+';min-width:150px;'+rowTopBorder+rowBottomBorder+'">'+icon+' '+label+'</td>'
-        + (isQuarterly ? '' : gtTd)
+        + ((isQuarterly || isYearly) ? '' : gtTd)
         + colCells
         +'</tr>';
     }
@@ -3808,7 +3856,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         var bPending = branchReps.reduce(function(s,r){ return s+r.totalPending; }, 0);
         var bDone    = branchReps.reduce(function(s,r){ return s+r.totalDone;    }, 0);
         var bTotal   = bPending + bDone;
-        var bColData = (isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
+        var bColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
           return {
             pending: branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
             done:    branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
@@ -3855,7 +3903,14 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           if (hasOwners && !repCollapsed) {
             rep.jobOwners.forEach(function(jo){
               var joColData;
-              if (isQuarterly && _qGroups) {
+              if (isYearly && _pFyGroups) {
+                joColData = _pFyGroups.map(function(g){
+                  return g.idxs.reduce(function(acc,i){
+                    var src = jo.monthData[months26[i]] || { pending:0, done:0 };
+                    acc.pending += src.pending||0; acc.done += src.done||0; return acc;
+                  }, { pending:0, done:0 });
+                });
+              } else if (isQuarterly && _qGroups) {
                 joColData = _qGroups.map(function(g){
                   return g.months.reduce(function(acc,m){
                     var src = jo.monthData[m] || { pending:0, done:0 };
@@ -3906,7 +3961,14 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       if (hasOwners && !repCollapsed) {
         rep.jobOwners.forEach(function(jo){
           var joColData;
-          if (isQuarterly && _qGroups) {
+          if (isYearly && _pFyGroups) {
+            joColData = _pFyGroups.map(function(g){
+              return g.idxs.reduce(function(acc,i){
+                var src = jo.monthData[months26[i]] || { pending:0, done:0 };
+                acc.pending += src.pending||0; acc.done += src.done||0; return acc;
+              }, { pending:0, done:0 });
+            });
+          } else if (isQuarterly && _qGroups) {
             joColData = _qGroups.map(function(g){
               return g.months.reduce(function(acc,m){
                 var src = jo.monthData[m] || { pending:0, done:0 };
@@ -3965,7 +4027,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     +'</div>'
   +'</div>';
 
-  var _showKpi = state.reportView === 'Monthly' || state.reportView === 'Custom'; // Quarterly shows year-on-year columns, no KPI cards needed
+  var _showKpi = !isYearly && !isQuarterly && (state.reportView === 'Monthly' || state.reportView === 'Custom');
   return (_showKpi ? kpis : '') + table;
 }
 
