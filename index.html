@@ -3072,18 +3072,53 @@ function tradelanePage(){
   };
   // Zone filter
   var _filterZonesTL = state.filterZones || [];
-  var _zoneRepsTL = [];
+  // Build zone→reps mapping using display names (for rep panel) AND raw _sp names (for salesReps matching)
+  var _zoneDisplayReps = []; // normalized display names from repsRawOriginal (for rep filter panel)
+  var _zoneRawReps = null;   // normalized raw SP names from allDrillRows (for c.salesReps matching)
   if (_filterZonesTL.length > 0) {
-    repsRawOriginal.forEach(function(r){ if (_filterZonesTL.indexOf(r.zone) > -1) _zoneRepsTL.push(normalizeName(r.name)); });
+    repsRawOriginal.forEach(function(r){
+      if (_filterZonesTL.indexOf(r.zone) > -1) _zoneDisplayReps.push(normalizeName(r.name));
+    });
+    // Build raw SP set from allDrillRows for zone — these match c.salesReps in tradelaneData
+    if (allDrillRows && allDrillRows.length > 0) {
+      var _zoneRawSet = {};
+      allDrillRows.forEach(function(r){
+        if (_zoneDisplayReps.indexOf(normalizeName(r._sp||'')) > -1) _zoneRawSet[normalizeName(r._sp||'')] = true;
+      });
+      _zoneRawReps = Object.keys(_zoneRawSet);
+    } else {
+      _zoneRawReps = _zoneDisplayReps; // fallback to display names
+    }
   }
-  var _effectiveFilterRepsTL;
-  if (_zoneRepsTL.length > 0 && (state.filterReps||[]).length > 0) {
-    var _frNormPreTL = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
-    _effectiveFilterRepsTL = _zoneRepsTL.filter(function(r){ return _frNormPreTL.indexOf(r) > -1; });
-  } else if (_zoneRepsTL.length > 0) {
-    _effectiveFilterRepsTL = _zoneRepsTL;
-  } else if ((state.filterReps||[]).length > 0) {
-    _effectiveFilterRepsTL = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
+  // Rep filter uses display names (from filter panel); zone filter uses raw SP names
+  var _selectedRepsNorm = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
+  var _effectiveFilterRepsTL; // raw SP names for c.salesReps matching
+  if (_zoneRawReps && _selectedRepsNorm.length > 0) {
+    // Both zone and rep selected — intersect (rep names are display names, need raw equivalents)
+    var _selRawReps = [];
+    if (allDrillRows && allDrillRows.length > 0) {
+      var _selRawSet = {};
+      allDrillRows.forEach(function(r){
+        if (_selectedRepsNorm.indexOf(normalizeName(r._sp||'')) > -1) _selRawSet[normalizeName(r._sp||'')] = true;
+      });
+      _selRawReps = Object.keys(_selRawSet);
+    } else {
+      _selRawReps = _selectedRepsNorm;
+    }
+    _effectiveFilterRepsTL = _zoneRawReps.filter(function(r){ return _selRawReps.indexOf(r) > -1; });
+  } else if (_zoneRawReps) {
+    _effectiveFilterRepsTL = _zoneRawReps;
+  } else if (_selectedRepsNorm.length > 0) {
+    // Rep only — convert display names to raw SP names via allDrillRows
+    if (allDrillRows && allDrillRows.length > 0) {
+      var _repRawSet = {};
+      allDrillRows.forEach(function(r){
+        if (_selectedRepsNorm.indexOf(normalizeName(r._sp||'')) > -1) _repRawSet[normalizeName(r._sp||'')] = true;
+      });
+      _effectiveFilterRepsTL = Object.keys(_repRawSet);
+    } else {
+      _effectiveFilterRepsTL = _selectedRepsNorm;
+    }
   } else {
     _effectiveFilterRepsTL = null;
   }
@@ -3239,68 +3274,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     }
   });
   grand.gpPct = grand.revenue > 0 ? (grand.gp/grand.revenue*100) : 0;
-
-  // Override grand total shipments/GP/tons with allDrillRows for accuracy
-  // Uses a cache keyed by LOB+months so the 60K scan only runs once per unique view, not on every ship-toggle
-  if (allDrillRows && allDrillRows.length > 0) {
-    var _tlLobFilter = filterLobs && filterLobs.length > 0 ? filterLobs : null;
-    var _tlColKeys = _fyGroups
-      ? _fyGroups.map(function(g){ return g.key+'='+g.idxs.map(function(i){return months26[i];}).join(','); }).join('|')
-      : activeMons.join(',');
-    var _tlGrandKey = (_tlLobFilter ? _tlLobFilter.join(',') : 'ALL') + '|' + _tlColKeys + '|' + JSON.stringify(effectiveReps||null);
-
-    if (!_tlGrandDrillCache[_tlGrandKey]) {
-      var _tlActiveMonsSet = {};
-      activeMons.forEach(function(m){ _tlActiveMonsSet[m] = true; });
-      var _fyMonsSet = {};
-      if (_fyGroups) {
-        _fyGroups.forEach(function(g){
-          g.idxs.forEach(function(i){ _fyMonsSet[months26[i]] = g.key; });
-        });
-      }
-      var _drillGrand = { shipments:0, gp:0, tons:0 };
-      var _drillGrandMD = {};
-      allDrillRows.forEach(function(r){
-        if (_tlLobFilter && _tlLobFilter.indexOf(r.lob) === -1) return;
-        var inActive = _fyGroups ? !!_fyMonsSet[r._ml] : !!_tlActiveMonsSet[r._ml];
-        if (!inActive) return;
-        if (effectiveReps && effectiveReps.indexOf(normalizeName(r._sp||'')) === -1) return;
-        _drillGrand.shipments++;
-        _drillGrand.gp   += r.g || 0;
-        _drillGrand.tons += r.t || 0;
-        var colKey = _fyGroups ? _fyMonsSet[r._ml] : r._ml;
-        if (!_drillGrandMD[colKey]) _drillGrandMD[colKey] = { shipments:0, gp:0, tons:0 };
-        _drillGrandMD[colKey].shipments++;
-        _drillGrandMD[colKey].gp   += r.g || 0;
-        _drillGrandMD[colKey].tons += r.t || 0;
-      });
-      _tlGrandDrillCache[_tlGrandKey] = { grand: _drillGrand, md: _drillGrandMD };
-    }
-
-    var _cached = _tlGrandDrillCache[_tlGrandKey];
-    grand.shipments = _cached.grand.shipments;
-    grand.gp        = _cached.grand.gp;
-    grand.tons      = _cached.grand.tons;
-    grand.gpPct     = grand.revenue > 0 ? (grand.gp/grand.revenue*100) : 0;
-
-    if (_fyGroups) {
-      _fyGroups.forEach(function(g){
-        var d = _cached.md[g.key] || { shipments:0, gp:0, tons:0 };
-        if (!grandMD[g.key]) grandMD[g.key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
-        grandMD[g.key].shipments = d.shipments;
-        grandMD[g.key].gp       = d.gp;
-        grandMD[g.key].tons     = d.tons;
-      });
-    } else {
-      activeMons.forEach(function(m){
-        var d = _cached.md[m] || { shipments:0, gp:0, tons:0 };
-        if (!grandMD[m]) grandMD[m] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
-        grandMD[m].shipments = d.shipments;
-        grandMD[m].gp       = d.gp;
-        grandMD[m].tons     = d.tons;
-      });
-    }
-  }
+  // Grand total is summed from rows (lobData.allCountries already filtered by zone/rep)
 
   function tlHue(n){ var h=0; for(var i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))&0xffff; return h%360; }
   function tlIni(n){ return n.split(/[\s\-]+/).map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase(); }
