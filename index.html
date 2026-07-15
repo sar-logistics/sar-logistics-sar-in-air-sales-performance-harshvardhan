@@ -5250,14 +5250,25 @@ function drawer(){
     }).join('');
 
 
-    // Client-side subtotals for the two derived OL-status GP columns
+    // Compute totals for ALL numeric columns from visibleRows
+    var colSums = {};
     var dActualGpSum = 0, dProvGpSum = 0;
     visibleRows.forEach(function(r){
       if (r.operationLock) dActualGpSum += (r.actualProfit || 0);
       else dProvGpSum += (r.provisionalProfit || 0);
+      COLS.forEach(function(c){
+        if (c.t !== 'cur' && c.t !== 'num') return;
+        var v = c.derived ? c.derived(r) : r[c.k];
+        if (v !== null && v !== undefined && !isNaN(Number(v))) {
+          colSums[c.k] = (colSums[c.k] || 0) + Number(v);
+        }
+      });
     });
+    // Override derived OL-status GP columns with their correct sums
+    colSums['gpOlDone']    = dActualGpSum;
+    colSums['gpOlNotDone'] = dProvGpSum;
 
-    // Sticky total row — Revenue/Cost/GP always shown regardless of which metric was clicked
+    // Sticky total row — all numeric columns summed
     var totalRowBg = '#EEF3FC';
     var totalRow = '<tr style="background:'+totalRowBg+';border-top:2.5px solid #0D2B5E;">'
       + COLS.map(function(c, i){
@@ -5268,12 +5279,18 @@ function drawer(){
             : '';
           if (i === 0) return '<td style="padding:10px 10px;font-size:12px;font-weight:800;color:#0D2B5E;white-space:nowrap;'+stickyStyle+'">TOTAL ('+visibleRows.length.toLocaleString()+')</td>';
           if (isSticky) return '<td style="padding:10px 10px;'+stickyStyle+'"></td>';
-          if (c.k === 'teu') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+dTeuSum.toFixed(1)+'</td>';
-          if (c.k === 'billedRevenue') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#2563EB;text-align:right;">'+fmtCur(fullRevSum)+'</td>';
-          if (c.k === 'postedCost') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#DC2626;text-align:right;">'+fmtCur(fullCostSum)+'</td>';
-          if (c.k === 'actualProfit') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:13px;font-weight:800;color:'+(fullGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(fullGpSum)+'</td>';
-          if (c.k === 'gpOlDone') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+(dActualGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dActualGpSum)+'</td>';
-          if (c.k === 'gpOlNotDone') return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:'+(dProvGpSum>=0?'#15875A':'#DC2626')+';text-align:right;">'+fmtCur(dProvGpSum)+'</td>';
+          var sum = colSums[c.k];
+          if (c.t === 'cur' && sum !== undefined) {
+            var isSigned = !!c.signed;
+            var clr = isSigned ? (sum >= 0 ? '#15875A' : '#DC2626') : (c.color || '#0D2B5E');
+            var fw  = (c.k === 'actualProfit' || c.k === 'gp') ? '800' : '700';
+            var fs  = (c.k === 'actualProfit' || c.k === 'gp') ? '13' : '12';
+            return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:'+fs+'px;font-weight:'+fw+';color:'+clr+';text-align:right;">'+fmtCur(sum)+'</td>';
+          }
+          if (c.t === 'num' && sum !== undefined) {
+            var numStr = Number.isInteger(sum) ? sum.toLocaleString() : sum.toFixed(2);
+            return '<td style="padding:10px 10px;font-family:\'DM Mono\',monospace;font-size:12px;font-weight:700;color:#0D2B5E;text-align:right;">'+numStr+'</td>';
+          }
           return '<td style="padding:10px 10px;"></td>';
         }).join('')
     +'</tr>';
