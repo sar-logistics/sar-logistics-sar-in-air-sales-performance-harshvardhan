@@ -3091,7 +3091,7 @@ function tradelanePage(){
     if (!_tradelanePivotCache[_tlPivotKey]) {
       // Build pivot table (expensive) — cache result
       var _t0 = performance.now();
-      _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC);
+      _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC, filterLobs);
       console.log('[PERF] tradelanePivotTable built in', (performance.now()-_t0).toFixed(1)+'ms');
     }
     return header + _tradelanePivotCache[_tlPivotKey];
@@ -3110,7 +3110,7 @@ function tradelanePage(){
   +'</div>';
 }
 
-function tradelanePivotTable(lobData, activeLob, brandC) {
+function tradelanePivotTable(lobData, activeLob, brandC, filterLobs) {
   var rows = (lobData.allCountries || []).slice().sort(function(a,b){ return b.gp - a.gp; });
   var BORDER = '#D5DCE6';
   var BORDER_STRONG = '#B0BAC8';
