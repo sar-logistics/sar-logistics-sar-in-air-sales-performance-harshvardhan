@@ -3686,7 +3686,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         var bPending = branchReps.reduce(function(s,r){ return s+r.totalPending; }, 0);
         var bDone    = branchReps.reduce(function(s,r){ return s+r.totalDone;    }, 0);
         var bTotal   = bPending + bDone;
-        var bColData = activeCols.map(function(_,ci){
+        var bColData = (isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
           return {
             pending: branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
             done:    branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
