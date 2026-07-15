@@ -3295,9 +3295,33 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
 function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobOwners, lockType){
   var d = data;
   var isWeekly = state.reportView === 'Weekly';
+  var isQuarterly = state.reportView === 'Quarterly';
   var activeCols, colHeaders;
 
-  if (isWeekly) {
+  // Quarterly: build two summary columns — prev year Q and current year Q
+  var _qGroups = null; // [{label, months:[...month labels]}, ...]
+  if (isQuarterly) {
+    var _qMap = { 'Q1':['Apr','May','Jun'], 'Q2':['Jul','Aug','Sep'], 'Q3':['Oct','Nov','Dec'], 'Q4':['Jan','Feb','Mar'] };
+    var _qMos = _qMap[state.selectedQuarter] || [];
+    var _qRangeNames = {'Q1':'Apr–Jun','Q2':'Jul–Sep','Q3':'Oct–Dec','Q4':'Jan–Mar'};
+    // Find all year suffixes in months26 that have data for this quarter
+    var _yearGroups = {};
+    months26.forEach(function(m){
+      var parts = m.split('-'); var mo = parts[0]; var yr = parts[1];
+      if (_qMos.indexOf(mo) >= 0) {
+        if (!_yearGroups[yr]) _yearGroups[yr] = [];
+        _yearGroups[yr].push(m);
+      }
+    });
+    var _sortedYrs = Object.keys(_yearGroups).sort();
+    _qGroups = _sortedYrs.map(function(yr){
+      return { label: _qRangeNames[state.selectedQuarter] + ' 20' + yr, months: _yearGroups[yr], yr: yr };
+    });
+    // activeCols = flat list of all months across all groups (for LOB index lookup)
+    activeCols = [];
+    _qGroups.forEach(function(g){ g.months.forEach(function(m){ activeCols.push(m); }); });
+    colHeaders = _qGroups.map(function(g){ return g.label; });
+  } else if (isWeekly) {
     activeCols = filteredWeekKeys();
     colHeaders = activeCols.map(function(wk){ return wk.replace('2026-','').replace('2025-',''); });
   } else {
@@ -3391,22 +3415,34 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     : (d.reps || []);
 
   var repsFiltered = _pendencyReps.map(function(rep){
-    var colData = activeCols.map(function(col){
-      // Weekly view ALWAYS uses the week-bucketed index — must come first
-      // _pendencyLobIndex is month-keyed and would return wrong data for week keys
-      if (isWeekly) {
-        if (_weeklyPendencyIndex) {
-          return (_weeklyPendencyIndex[rep.name] && _weeklyPendencyIndex[rep.name][col]) || { pending:0, done:0 };
+    var colData;
+    if (isQuarterly && _qGroups) {
+      // Quarterly: one aggregated {pending,done} per year-group
+      colData = _qGroups.map(function(g){
+        return g.months.reduce(function(acc, m){
+          var src = _pendencyLobIndex
+            ? ((_pendencyLobIndex[rep.name] && _pendencyLobIndex[rep.name][m]) || { pending:0, done:0 })
+            : (rep.monthData[m] || { pending:0, done:0 });
+          acc.pending += src.pending || 0;
+          acc.done    += src.done    || 0;
+          return acc;
+        }, { pending:0, done:0 });
+      });
+    } else {
+      colData = activeCols.map(function(col){
+        // Weekly view ALWAYS uses the week-bucketed index — must come first
+        if (isWeekly) {
+          if (_weeklyPendencyIndex) {
+            return (_weeklyPendencyIndex[rep.name] && _weeklyPendencyIndex[rep.name][col]) || { pending:0, done:0 };
+          }
+          return { pending:0, done:0 };
         }
-        // fallback: no drill rows loaded yet
-        return { pending:0, done:0 };
-      }
-      // Monthly/Custom/Yearly: use LOB-filtered index when available
-      if (_pendencyLobIndex) {
-        return (_pendencyLobIndex[rep.name] && _pendencyLobIndex[rep.name][col]) || { pending:0, done:0 };
-      }
-      return rep.monthData[col] || { pending:0, done:0 };
-    });
+        if (_pendencyLobIndex) {
+          return (_pendencyLobIndex[rep.name] && _pendencyLobIndex[rep.name][col]) || { pending:0, done:0 };
+        }
+        return rep.monthData[col] || { pending:0, done:0 };
+      });
+    }
     var tp = colData.reduce(function(s,c){ return s+c.pending; }, 0);
     var td = colData.reduce(function(s,c){ return s+c.done;    }, 0);
     // If zone not in Sales Performance → Cross Sales; keep originalZone as branch
@@ -3419,7 +3455,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var gtPending = repsFiltered.reduce(function(s,r){ return s+r.totalPending; }, 0);
   var gtDone    = repsFiltered.reduce(function(s,r){ return s+r.totalDone;    }, 0);
   var gtTotal   = gtPending + gtDone;
-  var gtColData = activeCols.map(function(_,ci){
+  var gtColData = (isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
     return {
       pending: repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
       done:    repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
@@ -3432,7 +3468,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     if (!zoneTotals[r.zone]) {
       zoneTotals[r.zone] = {
         totalPending: 0, totalDone: 0, total: 0,
-        colData: activeCols.map(function(){ return {pending:0, done:0}; })
+        colData: (isQuarterly && _qGroups ? _qGroups : activeCols).map(function(){ return {pending:0, done:0}; })
       };
     }
     var zt = zoneTotals[r.zone];
@@ -3449,7 +3485,10 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var zoneOrder = sortZones(Object.keys(zoneTotals));
 
   var BRAND = brandColor || '#1D5FCC';
-  var dateLabel = activeCols.length===0 ? '\u2014' : activeCols.length===1 ? activeCols[0] : activeCols[0]+' \u2013 '+activeCols[activeCols.length-1];
+  var _qRangeLabel = {'Q1':'Apr–Jun','Q2':'Jul–Sep','Q3':'Oct–Dec','Q4':'Jan–Mar'};
+  var dateLabel = isQuarterly
+    ? (state.selectedQuarter || 'Q1') + ' (' + (_qRangeLabel[state.selectedQuarter]||'') + ') — Year on Year'
+    : (activeCols.length===0 ? '—' : activeCols.length===1 ? activeCols[0] : activeCols[0]+' – '+activeCols[activeCols.length-1]);
 
   function ini(name){ return name.split(' ').map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase(); }
   function hue(name){ var h=0; for(var i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))&0xffff; return h%360; }
@@ -3477,11 +3516,22 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // Table styles — match sales performance sizing
   var PBORDER = '#D5DCE6'; var PBORDER_STRONG = '#B0BAC8';
   var thBase = 'padding:9px 12px;font-size:10px;font-weight:700;letter-spacing:0.07em;color:#8B97A8;text-transform:uppercase;white-space:nowrap;background:#F0F4FA;border-bottom:2px solid '+PBORDER_STRONG+';border-right:1px solid '+PBORDER+';';
-  var colThs = colHeaders.map(function(h){ return '<th style="'+thBase+'text-align:right;">'+h+'</th>'; }).join('');
+  var colThs;
+  if (isQuarterly && _qGroups) {
+    // Quarterly: alternating golden columns like sales performance yearly view
+    colThs = _qGroups.map(function(g, gi){
+      var isLast = gi === _qGroups.length - 1;
+      var bg = '#FCF3DA'; var color = '#A8720E';
+      var shadow = isLast ? 'box-shadow:inset 2px 0 0 '+PBORDER_STRONG+';' : 'box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;';
+      return '<th style="'+thBase+'text-align:right;background:'+bg+';color:'+color+';min-width:120px;'+shadow+'">'+g.label+'</th>';
+    }).join('');
+  } else {
+    colThs = colHeaders.map(function(h){ return '<th style="'+thBase+'text-align:right;">'+h+'</th>'; }).join('');
+  }
   var thead = '<thead style="position:sticky;top:0;z-index:4;"><tr>'
-    +'<th style="position:sticky;left:0;z-index:5;'+thBase+'width:190px;min-width:190px;">Sales Rep</th>'
+    +'<th style="position:sticky;left:0;z-index:5;'+thBase+'width:190px;min-width:190px;">Sales Rep / Job Owner</th>'
     +'<th style="position:sticky;left:190px;z-index:5;'+thBase+'width:150px;min-width:150px;">Metric</th>'
-    +'<th style="'+thBase+'text-align:right;background:#FCF3DA;color:#A8720E;min-width:90px;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;border-right:none;">Grand Total</th>'
+    +(isQuarterly ? '' : '<th style="'+thBase+'text-align:right;background:#FCF3DA;color:#A8720E;min-width:90px;box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;border-right:none;">Grand Total</th>')
     +colThs
     +'</tr></thead>';
 
@@ -3510,13 +3560,26 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       var rowBottomBorder = (isLast && bottomBorderStyle) ? bottomBorderStyle : '';
       var colCells = data.colData.map(function(cd, ci){
         var v = getV(cd);
-        var col = activeCols[ci] || '';
         var dtype = isGrand ? 'grand'
           : (entityName && entityName.indexOf('||') > -1) ? 'jobowner'
           : (entityName === 'Cross Sales') ? 'crosssales'
           : (zoneGroup === 'Cross Sales') ? 'branch'
           : (zoneGroup && zoneGroup.startsWith('branch__')) ? 'branch'
           : isZone ? 'zone' : 'rep';
+        if (isQuarterly && _qGroups) {
+          // Quarterly: golden column, drillCol is RANGE of that group's months
+          var g = _qGroups[ci];
+          var col = g ? 'RANGE:'+g.months[0]+':'+g.months[g.months.length-1] : '';
+          var isLastCol = ci === _qGroups.length - 1;
+          var qShadow = isLastCol ? 'box-shadow:inset 2px 0 0 '+PBORDER_STRONG+';' : 'box-shadow:inset 2px 0 0 '+PBORDER_STRONG+', inset -2px 0 0 #D9B45C;';
+          var qColor = v > 0 ? '#0D2B5E' : '#C5D0E0'; var qFw = v > 0 ? '700' : '400';
+          var qStyle = 'padding:9px 12px;text-align:right;font-family:'DM Mono',monospace;font-size:13px;font-weight:'+qFw+';color:'+qColor+';white-space:nowrap;background:#FCF3DA;'+qShadow;
+          if (entityName && v > 0) {
+            return '<td class="pcell" data-act="pendencyDrill" data-rep="'+esc(entityName)+'" data-col="'+esc(col)+'" data-status="'+esc(drillStatus||'all')+'" data-lock="'+esc(lockType||'')+'" data-type="'+esc(dtype)+'" style="'+qStyle+'cursor:pointer;">'+v+'</td>';
+          }
+          return '<td style="'+qStyle+'">'+v+'</td>';
+        }
+        var col = activeCols[ci] || '';
         return numCell(v, null, entityName||null, col, drillStatus||null, lockType||null, dtype);
       }).join('');
       var nameAccent = leftAccent || 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';';
@@ -3543,7 +3606,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       return '<tr'+zgAttr+rgAttr+' style="background:'+rowBg+';'+rowTopBorder+(isLast&&bottomBorderStyle?rowBottomBorder:'')+hidden+'">'
         + nameTd
         +'<td style="position:sticky;left:190px;z-index:2;background:'+rowBg+';padding:9px 12px;font-size:12px;font-weight:500;color:#374151;white-space:nowrap;border-right:2px solid '+PBORDER_STRONG+';min-width:150px;'+rowTopBorder+rowBottomBorder+'">'+icon+' '+label+'</td>'
-        + gtTd
+        + (isQuarterly ? '' : gtTd)
         + colCells
         +'</tr>';
     }
@@ -3760,7 +3823,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     +'</div>'
   +'</div>';
 
-  var _showKpi = state.reportView === 'Monthly' || state.reportView === 'Custom';
+  var _showKpi = state.reportView === 'Monthly' || state.reportView === 'Custom'; // Quarterly shows year-on-year columns, no KPI cards needed
   return (_showKpi ? kpis : '') + table;
 }
 
