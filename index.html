@@ -1707,8 +1707,26 @@ function grandEntity(){
   var wkeys = isWeekly ? filteredWeekKeys() : null;
   return {
     name:'Grand Total', initials:'GT', avatarBg:'oklch(0.5 0.14 262)', isGrand:true, zone:'',
-    ship: isWeekly ? wkeys.map(function(k){ if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;return allDrillRows.filter(function(r){return r._wk===k&&(!_fl||_fl.indexOf(r.lob)>-1);}).length;} return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
-                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1);}).length;} return sum(repsRaw.map(function(r){return r.ship[i]||0;})); }),
+    ship: (function(){
+      var _fl = state.filterLobs&&state.filterLobs.length>0 ? state.filterLobs : null;
+      var _fz = state.filterZones&&state.filterZones.length>0 ? state.filterZones : null;
+      var _fr = state.filterReps&&state.filterReps.length>0 ? state.filterReps.map(function(x){return normalizeName(x);}) : null;
+      function drillMatch(r, key, isWeek) {
+        if(isWeek ? (r._wk!==key) : (r._ml!==key)) return false;
+        if(_fl && _fl.indexOf(r.lob)===-1) return false;
+        if(_fz && (!r._zone || _fz.indexOf(r._zone)===-1)) return false;
+        if(_fr && (!r._sp  || _fr.indexOf(r._sp)===-1)) return false;
+        return true;
+      }
+      if(isWeekly) return wkeys.map(function(k){
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return drillMatch(r,k,true);}).length;
+        return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);
+      });
+      return idxs.map(function(i){ var _ml=months26[i];
+        if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return drillMatch(r,_ml,false);}).length;
+        return sum(repsRaw.map(function(r){return r.ship[i]||0;}));
+      });
+    })(),
     gp:   isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){return sum(repsRaw.map(function(r){return r.gp[i]||0;}));}),
     tons: isWeekly ? wkeys.map(function(k){return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
@@ -1722,7 +1740,23 @@ function grandEntity(){
     tank: (isWeekly ? wkeys : idxs).map(function(){return 0;}),
     tgt:  (function(){
       var v = state.reportView;
-      var realZones = zonesRaw.filter(function(z){ return z.zone !== 'Cross Sales'; });
+      var _fz = state.filterZones&&state.filterZones.length>0 ? state.filterZones : null;
+      var _fr = state.filterReps&&state.filterReps.length>0 ? state.filterReps : null;
+      // When zone filter active: sum only selected zones' targets
+      // When rep filter active: sum only that rep's targets from repsRaw
+      if (_fr && _fr.length > 0) {
+        // Rep filter — sum targets of filtered reps only
+        var frNorm = _fr.map(function(x){return normalizeName(x);});
+        var filtReps = repsRaw.filter(function(r){ return frNorm.indexOf(normalizeName(r.name))>-1; });
+        if (v === 'Weekly')  return sum(filtReps.map(function(r){ return r.weeklyTgt||r.tgt||0; }));
+        if (v === 'Yearly')  return sum(filtReps.map(function(r){ return r.yearlyTgt ? r.yearlyTgt/12 : (r.tgt||0); }));
+        return sum(filtReps.map(function(r){ return r.tgt||0; }));
+      }
+      var realZones = zonesRaw.filter(function(z){
+        if(z.zone === 'Cross Sales') return false;
+        if(_fz && _fz.indexOf(z.zone)===-1) return false;
+        return true;
+      });
       if (v === 'Weekly')  return sum(realZones.map(function(z){ return z.weeklyTarget||0; }));
       if (v === 'Yearly')  return sum(realZones.map(function(z){ return z.yearlyTarget ? z.yearlyTarget/12 : 0; }));
       if (v === 'Custom' && state.customDateFrom && state.customDateTo) {
