@@ -3291,6 +3291,15 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs) {
       return '<td'+_dAttr+' style="position:sticky;left:290px;z-index:2;'+_dSty+subStyle+'text-align:right;padding:7px 10px;font-size:'+(bold?'12':'11.5')+'px;font-weight:'+(bold?'800':'600')+';color:'+(color||'#334155')+';'+MONO+'box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;min-width:110px;">'+val+'</td>';
     }
     // Yearly FY column cell helper
+    // _fyAgg: get aggregate for a FY group — for grand total reads grandMD[g.key] directly,
+    // for regular rows sums monthData across the group's months
+    function _fyAgg(md, g) {
+      if (isGrand) {
+        // grandMD is keyed by fyKey (e.g. 'FY25') — read directly, no re-summing
+        return md[g.key] || { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
+      }
+      return _sumMD(md || {}, g.idxs.map(function(i){ return months26[i]; }));
+    }
     function fyTd(val, color, bold, isSub, drillName, fyGroup, gi) {
       var subStyle = isSub ? 'background:'+(isGrand?'#FEF9EC':subBg)+';' : 'background:#FEF9EC;';
       var _drillName = isGrand ? 'Grand Total' : drillName;
@@ -3324,7 +3333,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs) {
     var r1 = '<tr style="'+trS+'">' + nameTd
       +'<td data-act="tlShipToggle" data-name="'+esc(name)+'" style="position:sticky;left:160px;z-index:2;background:'+bg+';padding:7px 10px;font-size:11.5px;font-weight:600;color:#15233B;border-right:1px solid '+BORDER+';min-width:130px;cursor:pointer;">'+arrowChar+'Shipments</td>'
       + gtTd(fmtN(data.shipments), '#15233B', true, false, name)
-      + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_sumMD(monthData||{}, g.idxs.map(function(i){return months26[i];})); return fyTd(agg.shipments>0?String(Math.round(agg.shipments)):'--','#15233B',true,false,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCellDrill(md&&md.shipments>0?md.shipments:'--', null, false, name, m); }).join(''))
+      + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); return fyTd(agg.shipments>0?String(Math.round(agg.shipments)):'--','#15233B',true,false,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCellDrill(md&&md.shipments>0?md.shipments:'--', null, false, name, m); }).join(''))
       +'</tr>';
 
     // Sub-rows (only when open)
@@ -3334,30 +3343,30 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs) {
         subRows += '<tr style="'+subTrS+'">'
           + mTdSub('Tons (Air)')
           + gtTd(fmtT(data.tons||0), '#64748B', false, true)
-          + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_sumMD(monthData||{}, g.idxs.map(function(i){return months26[i];})); return fyTd(agg.tons>0?agg.tons.toFixed(1):'--','#64748B',false,true,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.tons||0)>0?(md.tons||0).toFixed(1):'--', '#64748B', true); }).join(''))
+          + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); return fyTd(agg.tons>0?agg.tons.toFixed(1):'--','#64748B',false,true,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.tons||0)>0?(md.tons||0).toFixed(1):'--', '#64748B', true); }).join(''))
           +'</tr>';
       } else if (activeLob === 'ISO Tank') {
         subRows += '<tr style="'+subTrS+'">'
           + mTdSub('Tank TEUs')
           + gtTd(fmtT(data.tankTeu||0), '#64748B', false, true)
-          + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_sumMD(monthData||{}, g.idxs.map(function(i){return months26[i];})); return fyTd(agg.tankTeu>0?agg.tankTeu.toFixed(1):'--','#64748B',false,true,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.tankTeu||0)>0?(md.tankTeu||0).toFixed(1):'--', '#64748B', true); }).join(''))
+          + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); return fyTd(agg.tankTeu>0?agg.tankTeu.toFixed(1):'--','#64748B',false,true,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.tankTeu||0)>0?(md.tankTeu||0).toFixed(1):'--', '#64748B', true); }).join(''))
           +'</tr>';
       } else {
         var totalTeu = (data.fclTeu||0) + (data.tankTeu||0);
         subRows += '<tr style="'+subTrS+'">'
           +'<td data-act="tlShipToggle" data-name="'+esc(name)+'" style="position:sticky;left:160px;z-index:2;background:'+subBg+';padding:6px 10px 6px 18px;font-size:11.5px;font-weight:600;color:#334155;border-right:1px solid '+BORDER+';min-width:130px;cursor:pointer;">◄ Total TEUs</td>'
           + gtTd(fmtT(totalTeu), '#334155', false, true)
-          + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_sumMD(monthData||{}, g.idxs.map(function(i){return months26[i];})); var v=(agg.fclTeu||0)+(agg.tankTeu||0); return fyTd(v>0?v.toFixed(1):'--','#334155',false,true,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; var v=(md?(md.fclTeu||0)+(md.tankTeu||0):0); return mCell(v>0?v.toFixed(1):'--', '#334155', true); }).join(''))
+          + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); var v=(agg.fclTeu||0)+(agg.tankTeu||0); return fyTd(v>0?v.toFixed(1):'--','#334155',false,true,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; var v=(md?(md.fclTeu||0)+(md.tankTeu||0):0); return mCell(v>0?v.toFixed(1):'--', '#334155', true); }).join(''))
           +'</tr>';
         subRows += '<tr style="'+subTrS+'">'
           + mTdSub('FCL TEUs')
           + gtTd(fmtT(data.fclTeu||0), '#64748B', false, true)
-          + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_sumMD(monthData||{}, g.idxs.map(function(i){return months26[i];})); return fyTd(agg.fclTeu>0?agg.fclTeu.toFixed(1):'--','#64748B',false,true,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.fclTeu||0)>0?(md.fclTeu||0).toFixed(1):'--', '#64748B', true); }).join(''))
+          + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); return fyTd(agg.fclTeu>0?agg.fclTeu.toFixed(1):'--','#64748B',false,true,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.fclTeu||0)>0?(md.fclTeu||0).toFixed(1):'--', '#64748B', true); }).join(''))
           +'</tr>';
         subRows += '<tr style="'+subTrS+'">'
           + mTdSub('LCL (CBM)')
           + gtTd(fmtT(data.lcl||0), '#64748B', false, true)
-          + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_sumMD(monthData||{}, g.idxs.map(function(i){return months26[i];})); return fyTd(agg.lcl>0?agg.lcl.toFixed(1):'--','#64748B',false,true,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.lcl||0)>0?(md.lcl||0).toFixed(1):'--', '#64748B', true); }).join(''))
+          + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); return fyTd(agg.lcl>0?agg.lcl.toFixed(1):'--','#64748B',false,true,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCell(md&&(md.lcl||0)>0?(md.lcl||0).toFixed(1):'--', '#64748B', true); }).join(''))
           +'</tr>';
       }
     }
@@ -3366,21 +3375,21 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs) {
     var r2 = '<tr style="'+trS+'">'
       + mTd('Revenue', 0, false)
       + gtTd(fmtV(data.revenue), '#334155', false)
-      + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_sumMD(monthData||{}, g.idxs.map(function(i){return months26[i];})); return fyTd(agg.revenue>0?fmtV(agg.revenue):'--',null,false,false,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCellDrill(md?fmtV(md.revenue):'--', null, false, name, m); }).join(''))
+      + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); return fyTd(agg.revenue>0?fmtV(agg.revenue):'--',null,false,false,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; return mCellDrill(md?fmtV(md.revenue):'--', null, false, name, m); }).join(''))
       +'</tr>';
 
     // GP row
     var r3 = '<tr style="'+trS+'">'
       + mTd('GP', 0, false)
       + gtTd(fmtV(data.gp), gpColor, false)
-      + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_sumMD(monthData||{}, g.idxs.map(function(i){return months26[i];})); var c=agg.gp>=0?'#059669':'#DC2626'; return fyTd(fmtV(agg.gp),c,false,false,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; var c=md&&md.gp>=0?'#059669':'#DC2626'; return mCellDrill(md?fmtV(md.gp):'--', c, false, name, m); }).join(''))
+      + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); var c=agg.gp>=0?'#059669':'#DC2626'; return fyTd(fmtV(agg.gp),c,false,false,name,g,gi); }).join('') : activeMons.map(function(m){ var md=(monthData||{})[m]; var c=md&&md.gp>=0?'#059669':'#DC2626'; return mCellDrill(md?fmtV(md.gp):'--', c, false, name, m); }).join(''))
       +'</tr>';
 
     // GP% row
     var r4 = '<tr style="'+trS+';border-bottom:2px solid '+BORDER_STRONG+';">'
       + mTd('GP %', 0, false)
       + gtTd(fmtP(gpPct), gpPct>=10?'#059669':gpPct>=5?'#D97706':'#DC2626', false)
-      + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_sumMD(monthData||{}, g.idxs.map(function(i){return months26[i];})); var pct=agg.revenue>0?(agg.gp/agg.revenue*100):null; var c=pct===null?'#94A3B8':pct>=10?'#059669':pct>=5?'#D97706':'#DC2626'; return fyTd(pct!==null?pct.toFixed(1)+'%':'--',c,false,false,name,g,gi); }).join('') : activeMons.map(function(m){
+      + (_fyGroups ? _fyGroups.map(function(g,gi){ var agg=_fyAgg(monthData||{}, g); var pct=agg.revenue>0?(agg.gp/agg.revenue*100):null; var c=pct===null?'#94A3B8':pct>=10?'#059669':pct>=5?'#D97706':'#DC2626'; return fyTd(pct!==null?pct.toFixed(1)+'%':'--',c,false,false,name,g,gi); }).join('') : activeMons.map(function(m){
           var md=(monthData||{})[m];
           var pct=md&&md.revenue>0?(md.gp/md.revenue*100):null;
           var c=pct===null?'#94A3B8':pct>=10?'#059669':pct>=5?'#D97706':'#DC2626';
@@ -3391,19 +3400,8 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs) {
     return r1 + subRows + r2 + r3 + r4;
   }
 
-  // For yearly: wrap grandMD (fyKey->agg) into a month-level dict so _sumMD works
-  // by expanding each fyGroup's months to point to the group aggregate
-  var _grandMonthData = grandMD;
-  if (_fyGroups) {
-    _grandMonthData = {};
-    _fyGroups.forEach(function(g){
-      var agg = grandMD[g.key] || { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
-      g.idxs.forEach(function(i){ _grandMonthData[months26[i]] = agg; });
-    });
-  }
-
   var tbody = '<tbody>'
-    + buildBlock('Grand Total', 'GT', 0, grand, _grandMonthData, true)
+    + buildBlock('Grand Total', 'GT', 0, grand, grandMD, true)
     + rows.map(function(r){ return buildBlock(r.name, tlIni(r.name), tlHue(r.name), r, isWeekly ? (r.weekData||{}) : (r.monthData||{}), false); }).join('')
     + '</tbody>';
 
