@@ -3732,10 +3732,20 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           // Job Owners under rep
           if (hasOwners && !repCollapsed) {
             rep.jobOwners.forEach(function(jo){
-              var joColData = activeCols.map(function(col){
-                if (isWeekly) { var m = state.weeklyMonth || months26[months26.length-1]; return jo.monthData[m] || { pending:0, done:0 }; }
-                return jo.monthData[col] || { pending:0, done:0 };
-              });
+              var joColData;
+              if (isQuarterly && _qGroups) {
+                joColData = _qGroups.map(function(g){
+                  return g.months.reduce(function(acc,m){
+                    var src = jo.monthData[m] || { pending:0, done:0 };
+                    acc.pending += src.pending||0; acc.done += src.done||0; return acc;
+                  }, { pending:0, done:0 });
+                });
+              } else {
+                joColData = activeCols.map(function(col){
+                  if (isWeekly) { var m = state.weeklyMonth || months26[months26.length-1]; return jo.monthData[m] || { pending:0, done:0 }; }
+                  return jo.monthData[col] || { pending:0, done:0 };
+                });
+              }
               var joFiltered = { colData: joColData, totalPending: joColData.reduce(function(s,c){return s+c.pending;},0), totalDone: joColData.reduce(function(s,c){return s+c.done;},0), total: 0 };
               joFiltered.total = joFiltered.totalPending + joFiltered.totalDone;
               if (joFiltered.total === 0) return;
@@ -3773,13 +3783,23 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // Job owners nested under rep (OL page only)
       if (hasOwners && !repCollapsed) {
         rep.jobOwners.forEach(function(jo){
-          var joColData = activeCols.map(function(col){
-            if (isWeekly) {
-              var m = state.weeklyMonth || months26[months26.length-1];
-              return jo.monthData[m] || { pending:0, done:0 };
-            }
-            return jo.monthData[col] || { pending:0, done:0 };
-          });
+          var joColData;
+          if (isQuarterly && _qGroups) {
+            joColData = _qGroups.map(function(g){
+              return g.months.reduce(function(acc,m){
+                var src = jo.monthData[m] || { pending:0, done:0 };
+                acc.pending += src.pending||0; acc.done += src.done||0; return acc;
+              }, { pending:0, done:0 });
+            });
+          } else {
+            joColData = activeCols.map(function(col){
+              if (isWeekly) {
+                var m = state.weeklyMonth || months26[months26.length-1];
+                return jo.monthData[m] || { pending:0, done:0 };
+              }
+              return jo.monthData[col] || { pending:0, done:0 };
+            });
+          }
           var joFiltered = { colData: joColData, totalPending: joColData.reduce(function(s,c){return s+c.pending;},0), totalDone: joColData.reduce(function(s,c){return s+c.done;},0), total: 0 };
           joFiltered.total = joFiltered.totalPending + joFiltered.totalDone;
           if (joFiltered.total === 0) return;
