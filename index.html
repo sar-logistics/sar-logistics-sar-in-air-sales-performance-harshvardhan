@@ -1746,6 +1746,7 @@ function sortZones(arr){
 function getZones(){
   var seen = {}, zones = [];
   repsRaw.forEach(function(r){
+    if (r.zone === 'Others') return; // exclude Others zone (mapped to Cross Sales instead)
     if (!seen[r.zone]) { seen[r.zone] = true; zones.push(r.zone); }
   });
   return sortZones(zones);
