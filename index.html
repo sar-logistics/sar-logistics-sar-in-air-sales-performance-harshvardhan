@@ -3217,6 +3217,7 @@ function tradelanePage(){
 }
 
 function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) {
+  console.log('[TL Debug] tradelanePivotTable called: countries=', (lobData.allCountries||[]).length, 'effectiveReps=', effectiveReps);
   var rows = (lobData.allCountries || []).slice().sort(function(a,b){ return b.gp - a.gp; });
   var BORDER = '#D5DCE6';
   var BORDER_STRONG = '#B0BAC8';
