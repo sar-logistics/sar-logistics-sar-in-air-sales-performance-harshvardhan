@@ -987,32 +987,9 @@ async function computeSalesAggregate(db) {
     rep.lcl.forEach((v, i)  => { zonesMap[rep.zone].lcl[i]  += v; });
   }
 
-  // After building zonesMap, compute zonal manager target:
-  // ZM target = zone target - sum(all other reps' targets in that zone)
-  for (const [zoneName, zData] of Object.entries(zonesMap)) {
-    const zm = zData.zonalManager;
-    if (!zm) continue;
-    const zmNorm = normalizeName(zm);
-    const zoneReps = repsRaw.filter(r => r.zone === zoneName && !r.isBranch);
-    // Match ZM by normalized full name OR first word of name (handles "Aniket M" → "Aniket")
-    const zmFirstWord = zmNorm.split(" ")[0];
-    const zmRep = zoneReps.find(r => {
-      const rNorm = normalizeName(r.name);
-      return rNorm === zmNorm || rNorm.startsWith(zmFirstWord + " ") || rNorm === zmFirstWord;
-    });
-    if (!zmRep) continue;
-
-    const otherReps = zoneReps.filter(r => r !== zmRep);
-    const otherMonthly  = otherReps.reduce((s, r) => s + (r.tgt       || 0), 0);
-    const otherWeekly   = otherReps.reduce((s, r) => s + (r.weeklyTgt || 0), 0);
-    const otherYearly   = otherReps.reduce((s, r) => s + (r.yearlyTgt || 0), 0);
-    const otherDaily    = otherReps.reduce((s, r) => s + (r.dailyTgt  || 0), 0);
-
-    zmRep.tgt       = Math.max(0, Math.round((zData.monthlyTarget || 0) - otherMonthly));
-    zmRep.weeklyTgt = Math.max(0, Math.round((zData.weeklyTarget  || 0) - otherWeekly));
-    zmRep.yearlyTgt = Math.max(0, Math.round((zData.yearlyTarget  || 0) - otherYearly));
-    zmRep.dailyTgt  = Math.max(0, Math.round(((zData.dailyTarget  || 0) - otherDaily) * 100) / 100);
-  }
+  // Zone targets come directly from mapping_zone_targets (already in zonesMap).
+  // Rep targets (including Zonal Manager) come directly from mapping_sales_targets.
+  // They are independent — rep targets do NOT need to add up to zone target.
 
 
   return {
