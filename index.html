@@ -5704,7 +5704,7 @@ var _lastTopbarHash = '';
 function stateHash(){
   return state.page+'|'+state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+
     state.weeklyMonth+'|'+state.currency+'|'+state.rate+'|'+state.yearType+'|'+state.selectedQuarter+'|'+
-    JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps)+'|'+
+    JSON.stringify(state.filterLobs)+'|'+JSON.stringify(state.filterReps)+'|'+JSON.stringify(state.filterZones||[])+'|'+
     JSON.stringify(state.shipOpen)+'|'+JSON.stringify(state.gpOpen)+'|'+
     JSON.stringify(state.zoneOpen)+'|'+state.filtersOpen+'|'+dataReady;
 }
@@ -7187,8 +7187,19 @@ function positionAllDrops(){
     var btn = document.querySelector('[data-act="'+p[0]+'"]');
     if(!btn) return;
     var rect = btn.getBoundingClientRect();
-    drop.style.top  = (rect.bottom + 6) + 'px';
-    drop.style.left = rect.left + 'px';
+    var dropW = parseInt(drop.style.width) || drop.offsetWidth || 280;
+    var top = rect.bottom + 6;
+    // Anchor filters-drop to right edge of button so it stays near the button on all pages
+    var left;
+    if (p[0] === 'toggleFiltersDrop') {
+      left = Math.max(8, rect.right - dropW);
+    } else {
+      left = rect.left;
+    }
+    // Clamp so it doesn't overflow viewport
+    if (left + dropW > window.innerWidth - 8) left = window.innerWidth - dropW - 8;
+    drop.style.top  = top + 'px';
+    drop.style.left = left + 'px';
     drop.style.display = 'block';
     var active = drop.querySelector('[style*="color:#1D5FCC"]');
     if(active) active.scrollIntoView({block:'nearest'});
