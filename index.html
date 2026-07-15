@@ -5571,14 +5571,16 @@ function openInsightDrill(drillType, name, drillMonth) {
     return;
   }
 
-  // Check cache first — instant for repeat clicks
-  var _iDateR = drillType==='customer' ? getCustomerDateRange() : drillType==='agent' ? getAgentDateRange() : getTradelaneDateRange();
-  var _iCacheKey = drillType + '||' + name + '||' + (_iDateR.dateFrom||'') + '||' + (_iDateR.dateTo||'') + '||' + (drillMonth||'');
-  var _iCached = _insightDrillCache[_iCacheKey];
-  if (_iCached) {
-    state.drill = _iCached;
-    render();
-    return;
+  // Check cache first — instant for repeat clicks (skip for tradelane — has its own LOB-keyed cache below)
+  if (drillType !== 'tradelane') {
+    var _iDateR = drillType==='customer' ? getCustomerDateRange() : getAgentDateRange();
+    var _iCacheKey = drillType + '||' + name + '||' + (_iDateR.dateFrom||'') + '||' + (_iDateR.dateTo||'') + '||' + (drillMonth||'');
+    var _iCached = _insightDrillCache[_iCacheKey];
+    if (_iCached) {
+      state.drill = _iCached;
+      render();
+      return;
+    }
   }
 
   // Tradelane drill: use server API (needs SRR join not available client-side)
@@ -6326,7 +6328,7 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation(); var col=el.getAttribute('data-col');
     if(state.agentSortCol===col){ state.agentSortDir=(state.agentSortDir||(-1))*-1; } else { state.agentSortCol=col; state.agentSortDir=-1; } render();
   }
-  else if(act==='setTradelaneLob'){ ev.stopPropagation(); state.tradelaneLob=el.getAttribute('data-val'); render(); }
+  else if(act==='setTradelaneLob'){ ev.stopPropagation(); state.tradelaneLob=el.getAttribute('data-val'); _insightDrillCache={}; _tradelanePivotCache={}; render(); }
   else if(act==='setTradelaneView'){ ev.stopPropagation(); state.tradelaneView=el.getAttribute('data-val'); render(); }
   else if(act==='tradelaneSort'){
     ev.stopPropagation(); var col=el.getAttribute('data-col');
