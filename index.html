@@ -5106,9 +5106,17 @@ function drawer(){
       { k:'cargoType', l:'Cargo Type', t:'text' },
       { k:'carrier', l:'Carrier', t:'text', truncate:130 },
       { k:'gp', l:'GP', t:'cur', signed:true, derived:function(s){ return s.g; } },
-      { k:'gpOlDone', l:'Actual GP', t:'cur', signed:true, derived:function(s){ return s.operationLock ? s.actualProfit : null; } },
-      { k:'gpOlNotDone', l:'Provisional GP', t:'cur', signed:true, derived:function(s){ return !s.operationLock ? s.provisionalProfit : null; } },
-      { k:'firstOlStatus', l:'First OL Status', t:'olbadge', derived:function(s){ return !!s.operationLock; } },
+      { k:'gpOlDone', l:'Actual GP', t:'cur', signed:true, derived:function(s){
+          var locked = (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
+          return locked ? s.actualProfit : null;
+        } },
+      { k:'gpOlNotDone', l:'Provisional GP', t:'cur', signed:true, derived:function(s){
+          var locked = (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
+          return !locked ? s.provisionalProfit : null;
+        } },
+      { k:'firstOlStatus', l:'Lock Status', t:'olbadge', derived:function(s){
+          return (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
+        } },
       { k:'provRevenue', l:'Provisional Revenue (A)', t:'cur' },
       { k:'billedRevenue', l:'Billed Revenue (C)', t:'cur', color:'#2563EB' },
       { k:'unbilledRevenue', l:'Unbilled Revenue (D=A-C)', t:'cur' },
@@ -5226,7 +5234,7 @@ function drawer(){
       if (c.t === 'mono') return '<span style="font-family:\'DM Mono\',monospace;font-weight:600;color:'+(c.color||'#374151')+';">'+esc(val||'—')+'</span>';
       if (c.t === 'badge') return '<span style="font-size:9.5px;font-weight:700;color:#5678C2;background:#EEF2FF;border-radius:4px;padding:2px 7px;text-transform:uppercase;white-space:nowrap;">'+esc(val||'—')+'</span>';
       if (c.t === 'olbadge') return val
-        ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:#0A7E53;background:#E8F7EF;border-radius:5px;padding:3px 8px;white-space:nowrap;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0A7E53" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>OL Done</span>'
+        ? '<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:#0A7E53;background:#E8F7EF;border-radius:5px;padding:3px 8px;white-space:nowrap;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0A7E53" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>✓ Done</span>'
         : '<span style="font-size:10px;font-weight:600;color:#9AAFC8;background:#F4F7FA;border-radius:5px;padding:3px 8px;white-space:nowrap;">Pending</span>';
       if (c.truncate) return '<span style="color:#374151;max-width:'+c.truncate+'px;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;" title="'+esc(val||'')+'">'+esc(val||'—')+'</span>';
       return '<span style="color:#374151;">'+esc(val||'—')+'</span>';
@@ -5254,7 +5262,8 @@ function drawer(){
     var colSums = {};
     var dActualGpSum = 0, dProvGpSum = 0;
     visibleRows.forEach(function(r){
-      if (r.operationLock) dActualGpSum += (r.actualProfit || 0);
+      var _locked = (r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT') ? !!r.financialLock : !!r.operationLock;
+      if (_locked) dActualGpSum += (r.actualProfit || 0);
       else dProvGpSum += (r.provisionalProfit || 0);
       COLS.forEach(function(c){
         if (c.t !== 'cur' && c.t !== 'num') return;
