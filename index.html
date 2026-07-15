@@ -2294,7 +2294,7 @@ function topbar(){
       +'<div style="flex:1;"></div>'
       +'<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">'
         +'<button data-act="feedbackOpen" class="btnq" style="display:flex;align-items:center;gap:5px;background:#FFFFFF;border:none;border-radius:999px;padding:6px 12px;font-size:11px;font-weight:700;color:#3C5275;cursor:pointer;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Feedback</button>'
-        +'<button data-act="refreshData" id="refresh-btn" class="btnq" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;color:#FFFFFF;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;white-space:nowrap;box-shadow:0 2px 6px '+BRAND_A2+'45,0 1px 2px '+BRAND_A2+'30;"><svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s ease;flex-shrink:0;"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>'
+        +'<button data-act="logoutUser" class="btnq" style="display:flex;align-items:center;gap:6px;background:#FFFFFF;border:1.5px solid #E2E8F0;border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;color:#64748B;cursor:pointer;transition:border-color 0.15s,box-shadow 0.15s;white-space:nowrap;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Logout</button>'+'<button data-act="refreshData" id="refresh-btn" class="btnq" style="display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:7px 14px;font-size:11.5px;font-weight:700;color:#FFFFFF;cursor:pointer;transition:box-shadow 0.15s,transform 0.15s;white-space:nowrap;box-shadow:0 2px 6px '+BRAND_A2+'45,0 1px 2px '+BRAND_A2+'30;"><svg id="refresh-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transition:transform 0.5s ease;flex-shrink:0;"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Refresh</button>'
       +'</div>'
     +'</div>'
   +'</header>'
@@ -6505,6 +6505,21 @@ document.addEventListener('click', function(ev){
     if(state.page==='teams' && !orgDataReady){
       fetchOrgData(function(){ render(); });
     }
+  }
+  else if(act==='logoutUser'){
+    ev.stopPropagation();
+    // Clear session
+    try { localStorage.removeItem('sar_user_session'); } catch(e) {}
+    currentUser = null;
+    // Revoke Google token if available
+    if (window.google && google.accounts && google.accounts.oauth2) {
+      try { google.accounts.oauth2.revoke(undefined, function(){}); } catch(e) {}
+    }
+    // Show login screen
+    var app = document.getElementById('app');
+    var login = document.getElementById('login-screen');
+    if (app) app.style.display = 'none';
+    if (login) login.style.display = 'flex';
   }
   else if(act==='refreshData'){
     ev.stopPropagation();
