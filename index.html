@@ -2204,9 +2204,22 @@ function topbar(){
           // Always list from the FULL unfiltered dataset — otherwise once you filter
           // down to a subset, you could never see/re-select the excluded reps again
           var _fzPanel = state.filterZones || [];
+          // Use allDrillRows._zone for accurate zone→rep mapping in rep panel
+          var _panelRepNames = null;
+          if (_fzPanel.length > 0 && allDrillRows && allDrillRows.length > 0) {
+            var _panelRepSet = {};
+            allDrillRows.forEach(function(r){
+              if (r._zone && _fzPanel.indexOf(r._zone) > -1 && r._dn) _panelRepSet[r._dn] = true;
+            });
+            _panelRepNames = Object.keys(_panelRepSet);
+          }
           var allRepEntries = Array.from(
             new Map(repsRawOriginal
-              .filter(function(r){ return _fzPanel.length === 0 || _fzPanel.indexOf(r.zone) > -1; })
+              .filter(function(r){
+                if (_fzPanel.length === 0) return true;
+                if (_panelRepNames) return _panelRepNames.some(function(n){ return normalizeName(n) === normalizeName(r.name); });
+                return _fzPanel.indexOf(r.zone) > -1;
+              })
               .map(function(r){ return [r.name, r.isBranch]; })).entries()
           ).sort(function(a,b){ return a[0].localeCompare(b[0]); });
 
@@ -2569,27 +2582,22 @@ function customerPage(){
     'SEA EXPORT':      'Sea Exp',  'SEA IMPORT':      'Sea Imp',
     'ISOTANK EXPORT':  'ISO Exp',  'ISOTANK IMPORT':  'ISO Imp'
   };
-  // Zone filter: expand selected zones to rep names
+  // Zone + Rep filter using allDrillRows._zone for accurate SP matching
   var _filterZones = state.filterZones || [];
-  var _zoneReps = [];
-  if (_filterZones.length > 0) {
-    repsRawOriginal.forEach(function(r){ if (_filterZones.indexOf(r.zone) > -1) _zoneReps.push(normalizeName(r.name)); });
-  }
-  // Compute effective rep list: RLS takes priority, then intersect zone+rep filters
+  var _zoneRawSPs = _filterZones.length > 0 ? zoneToRawSPs(_filterZones) : null;
+  var _selReps = (state.filterReps||[]).length > 0
+    ? (state.filterReps||[]).map(function(x){ return normalizeName(x); }) : null;
   var _effectiveFilterReps;
   if (_rlsReps.length > 0) {
-    // RLS active — use as-is (already zone-scoped by role)
     _effectiveFilterReps = _rlsReps.map(function(x){ return normalizeName(x); });
-  } else if (_zoneReps.length > 0 && (state.filterReps||[]).length > 0) {
-    // Both zone and rep selected — intersect
-    var _frNormPre = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
-    _effectiveFilterReps = _zoneReps.filter(function(r){ return _frNormPre.indexOf(r) > -1; });
-  } else if (_zoneReps.length > 0) {
-    _effectiveFilterReps = _zoneReps;
-  } else if ((state.filterReps||[]).length > 0) {
-    _effectiveFilterReps = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
+  } else if (_zoneRawSPs && _selReps) {
+    _effectiveFilterReps = _zoneRawSPs.filter(function(sp){ return _selReps.indexOf(sp) > -1; });
+  } else if (_zoneRawSPs) {
+    _effectiveFilterReps = _zoneRawSPs;
+  } else if (_selReps) {
+    _effectiveFilterReps = _selReps;
   } else {
-    _effectiveFilterReps = null; // no filter
+    _effectiveFilterReps = null;
   }
 
   var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZones.length > 0;
@@ -2851,22 +2859,20 @@ function agentPage(){
     'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
     'ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp'
   };
-  // Zone filter
+  // Zone + Rep filter using allDrillRows._zone for accurate SP matching
   var _filterZonesA = state.filterZones || [];
-  var _zoneRepsA = [];
-  if (_filterZonesA.length > 0) {
-    repsRawOriginal.forEach(function(r){ if (_filterZonesA.indexOf(r.zone) > -1) _zoneRepsA.push(normalizeName(r.name)); });
-  }
+  var _zoneRawSPsA = _filterZonesA.length > 0 ? zoneToRawSPs(_filterZonesA) : null;
+  var _selRepsA = (state.filterReps||[]).length > 0
+    ? (state.filterReps||[]).map(function(x){ return normalizeName(x); }) : null;
   var _effectiveFilterRepsA;
   if (_rlsReps.length > 0) {
     _effectiveFilterRepsA = _rlsReps.map(function(x){ return normalizeName(x); });
-  } else if (_zoneRepsA.length > 0 && (state.filterReps||[]).length > 0) {
-    var _frNormPreA = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
-    _effectiveFilterRepsA = _zoneRepsA.filter(function(r){ return _frNormPreA.indexOf(r) > -1; });
-  } else if (_zoneRepsA.length > 0) {
-    _effectiveFilterRepsA = _zoneRepsA;
-  } else if ((state.filterReps||[]).length > 0) {
-    _effectiveFilterRepsA = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
+  } else if (_zoneRawSPsA && _selRepsA) {
+    _effectiveFilterRepsA = _zoneRawSPsA.filter(function(sp){ return _selRepsA.indexOf(sp) > -1; });
+  } else if (_zoneRawSPsA) {
+    _effectiveFilterRepsA = _zoneRawSPsA;
+  } else if (_selRepsA) {
+    _effectiveFilterRepsA = _selRepsA;
   } else {
     _effectiveFilterRepsA = null;
   }
@@ -3070,55 +3076,21 @@ function tradelanePage(){
     'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
     'ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp'
   };
-  // Zone filter
+  // Zone + Rep filter — use allDrillRows._zone for authoritative zone→rawSP mapping
   var _filterZonesTL = state.filterZones || [];
-  // Build zone→reps mapping using display names (for rep panel) AND raw _sp names (for salesReps matching)
-  var _zoneDisplayReps = []; // normalized display names from repsRawOriginal (for rep filter panel)
-  var _zoneRawReps = null;   // normalized raw SP names from allDrillRows (for c.salesReps matching)
-  if (_filterZonesTL.length > 0) {
-    repsRawOriginal.forEach(function(r){
-      if (_filterZonesTL.indexOf(r.zone) > -1) _zoneDisplayReps.push(normalizeName(r.name));
-    });
-    // Build raw SP set from allDrillRows for zone — these match c.salesReps in tradelaneData
-    if (allDrillRows && allDrillRows.length > 0) {
-      var _zoneRawSet = {};
-      allDrillRows.forEach(function(r){
-        if (_zoneDisplayReps.indexOf(normalizeName(r._sp||'')) > -1) _zoneRawSet[normalizeName(r._sp||'')] = true;
-      });
-      _zoneRawReps = Object.keys(_zoneRawSet);
-    } else {
-      _zoneRawReps = _zoneDisplayReps; // fallback to display names
-    }
-  }
-  // Rep filter uses display names (from filter panel); zone filter uses raw SP names
-  var _selectedRepsNorm = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
-  var _effectiveFilterRepsTL; // raw SP names for c.salesReps matching
-  if (_zoneRawReps && _selectedRepsNorm.length > 0) {
-    // Both zone and rep selected — intersect (rep names are display names, need raw equivalents)
-    var _selRawReps = [];
-    if (allDrillRows && allDrillRows.length > 0) {
-      var _selRawSet = {};
-      allDrillRows.forEach(function(r){
-        if (_selectedRepsNorm.indexOf(normalizeName(r._sp||'')) > -1) _selRawSet[normalizeName(r._sp||'')] = true;
-      });
-      _selRawReps = Object.keys(_selRawSet);
-    } else {
-      _selRawReps = _selectedRepsNorm;
-    }
-    _effectiveFilterRepsTL = _zoneRawReps.filter(function(r){ return _selRawReps.indexOf(r) > -1; });
-  } else if (_zoneRawReps) {
-    _effectiveFilterRepsTL = _zoneRawReps;
-  } else if (_selectedRepsNorm.length > 0) {
-    // Rep only — convert display names to raw SP names via allDrillRows
-    if (allDrillRows && allDrillRows.length > 0) {
-      var _repRawSet = {};
-      allDrillRows.forEach(function(r){
-        if (_selectedRepsNorm.indexOf(normalizeName(r._sp||'')) > -1) _repRawSet[normalizeName(r._sp||'')] = true;
-      });
-      _effectiveFilterRepsTL = Object.keys(_repRawSet);
-    } else {
-      _effectiveFilterRepsTL = _selectedRepsNorm;
-    }
+  var _zoneRawSPsTL = _filterZonesTL.length > 0 ? zoneToRawSPs(_filterZonesTL) : null;
+  var _selRepsTL = (state.filterReps||[]).length > 0
+    ? (state.filterReps||[]).map(function(x){ return normalizeName(x); })
+    : null;
+  // _effectiveFilterRepsTL: raw _sp values (lowercase) for matching against c.salesReps
+  var _effectiveFilterRepsTL;
+  if (_zoneRawSPsTL && _selRepsTL) {
+    // Both zone and rep — intersect
+    _effectiveFilterRepsTL = _zoneRawSPsTL.filter(function(sp){ return _selRepsTL.indexOf(sp) > -1; });
+  } else if (_zoneRawSPsTL) {
+    _effectiveFilterRepsTL = _zoneRawSPsTL;
+  } else if (_selRepsTL) {
+    _effectiveFilterRepsTL = _selRepsTL;
   } else {
     _effectiveFilterRepsTL = null;
   }
@@ -5714,6 +5686,17 @@ function getDrillMapping(){
 // Mirror of backend normalizeName — strips pipe-suffixes, lowercases, collapses spaces
 function normalizeName(name){
   return String(name||'').split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
+}
+
+// Build set of raw SP names for given zones from allDrillRows (authoritative zone mapping)
+function zoneToRawSPs(zones) {
+  if (!zones || !zones.length || !allDrillRows) return null;
+  var spSet = {};
+  allDrillRows.forEach(function(r){
+    if (r._zone && zones.indexOf(r._zone) > -1 && r._sp) spSet[r._sp] = true;
+  });
+  var keys = Object.keys(spSet);
+  return keys.length > 0 ? keys : []; // empty array = zone has no jobs
 }
 
 // Pure in-browser drill filtering — filters allDrillRows by entity+metric+month
