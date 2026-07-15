@@ -2203,8 +2203,11 @@ function topbar(){
           var LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import'};
           // Always list from the FULL unfiltered dataset — otherwise once you filter
           // down to a subset, you could never see/re-select the excluded reps again
+          var _fzPanel = state.filterZones || [];
           var allRepEntries = Array.from(
-            new Map(repsRawOriginal.map(function(r){ return [r.name, r.isBranch]; })).entries()
+            new Map(repsRawOriginal
+              .filter(function(r){ return _fzPanel.length === 0 || _fzPanel.indexOf(r.zone) > -1; })
+              .map(function(r){ return [r.name, r.isBranch]; })).entries()
           ).sort(function(a,b){ return a[0].localeCompare(b[0]); });
 
           function checkRow(label, checked, act, val, searchText){
@@ -2572,11 +2575,24 @@ function customerPage(){
   if (_filterZones.length > 0) {
     repsRawOriginal.forEach(function(r){ if (_filterZones.indexOf(r.zone) > -1) _zoneReps.push(normalizeName(r.name)); });
   }
-  var _effectiveFilterReps = filterReps.length > 0
-    ? filterReps.map(function(x){ return normalizeName(x); })
-    : (_zoneReps.length > 0 ? _zoneReps : null); // null = no rep filter
+  // Compute effective rep list: RLS takes priority, then intersect zone+rep filters
+  var _effectiveFilterReps;
+  if (_rlsReps.length > 0) {
+    // RLS active — use as-is (already zone-scoped by role)
+    _effectiveFilterReps = _rlsReps.map(function(x){ return normalizeName(x); });
+  } else if (_zoneReps.length > 0 && (state.filterReps||[]).length > 0) {
+    // Both zone and rep selected — intersect
+    var _frNormPre = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
+    _effectiveFilterReps = _zoneReps.filter(function(r){ return _frNormPre.indexOf(r) > -1; });
+  } else if (_zoneReps.length > 0) {
+    _effectiveFilterReps = _zoneReps;
+  } else if ((state.filterReps||[]).length > 0) {
+    _effectiveFilterReps = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
+  } else {
+    _effectiveFilterReps = null; // no filter
+  }
 
-  var hasFilters = filterReps.length > 0 || filterLobs.length > 0 || _filterZones.length > 0;
+  var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZones.length > 0;
   if (hasFilters && lobData.allCustomers) {
     var _frNorm = _effectiveFilterReps || [];
     // For zone-scoped RLS: re-aggregate metrics using only zone reps' contributions
@@ -2841,11 +2857,21 @@ function agentPage(){
   if (_filterZonesA.length > 0) {
     repsRawOriginal.forEach(function(r){ if (_filterZonesA.indexOf(r.zone) > -1) _zoneRepsA.push(normalizeName(r.name)); });
   }
-  var _effectiveFilterRepsA = filterReps.length > 0
-    ? filterReps.map(function(x){ return normalizeName(x); })
-    : (_zoneRepsA.length > 0 ? _zoneRepsA : null);
+  var _effectiveFilterRepsA;
+  if (_rlsReps.length > 0) {
+    _effectiveFilterRepsA = _rlsReps.map(function(x){ return normalizeName(x); });
+  } else if (_zoneRepsA.length > 0 && (state.filterReps||[]).length > 0) {
+    var _frNormPreA = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
+    _effectiveFilterRepsA = _zoneRepsA.filter(function(r){ return _frNormPreA.indexOf(r) > -1; });
+  } else if (_zoneRepsA.length > 0) {
+    _effectiveFilterRepsA = _zoneRepsA;
+  } else if ((state.filterReps||[]).length > 0) {
+    _effectiveFilterRepsA = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
+  } else {
+    _effectiveFilterRepsA = null;
+  }
 
-  var hasFilters = filterReps.length > 0 || filterLobs.length > 0 || _filterZonesA.length > 0;
+  var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZonesA.length > 0;
   if (hasFilters && lobData.allAgents) {
     var _frNormA = _effectiveFilterRepsA || [];
     var filteredAgents = lobData.allAgents.filter(function(a) {
@@ -3050,11 +3076,19 @@ function tradelanePage(){
   if (_filterZonesTL.length > 0) {
     repsRawOriginal.forEach(function(r){ if (_filterZonesTL.indexOf(r.zone) > -1) _zoneRepsTL.push(normalizeName(r.name)); });
   }
-  var _effectiveFilterRepsTL = filterReps.length > 0
-    ? filterReps.map(function(x){ return normalizeName(x); })
-    : (_zoneRepsTL.length > 0 ? _zoneRepsTL : null);
+  var _effectiveFilterRepsTL;
+  if (_zoneRepsTL.length > 0 && (state.filterReps||[]).length > 0) {
+    var _frNormPreTL = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
+    _effectiveFilterRepsTL = _zoneRepsTL.filter(function(r){ return _frNormPreTL.indexOf(r) > -1; });
+  } else if (_zoneRepsTL.length > 0) {
+    _effectiveFilterRepsTL = _zoneRepsTL;
+  } else if ((state.filterReps||[]).length > 0) {
+    _effectiveFilterRepsTL = (state.filterReps||[]).map(function(x){ return normalizeName(x); });
+  } else {
+    _effectiveFilterRepsTL = null;
+  }
 
-  var hasFilters = filterReps.length > 0 || filterLobs.length > 0 || _filterZonesTL.length > 0;
+  var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZonesTL.length > 0;
   if (hasFilters && lobData.allCountries) {
     var _frNormT = _effectiveFilterRepsTL || [];
     var filtered = lobData.allCountries.filter(function(c) {
@@ -6752,6 +6786,8 @@ document.addEventListener('click', function(ev){
     } else {
       state.filterZones = state.filterZones.concat([zv]);
     }
+    // Clear rep filter when zone changes so rep list resets to zone's reps
+    state.filterReps = [];
     _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
   }
   else if(act==='toggleFilterZoneDrop'){ ev.stopPropagation(); state.filterZoneDropOpen=!state.filterZoneDropOpen; render(); requestAnimationFrame(positionAllDrops); }
