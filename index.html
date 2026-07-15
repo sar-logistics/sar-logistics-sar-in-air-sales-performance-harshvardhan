@@ -3098,14 +3098,47 @@ function tradelanePage(){
   var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZonesTL.length > 0;
   if (hasFilters && lobData.allCountries) {
     var _frNormT = _effectiveFilterRepsTL || [];
-    var filtered = lobData.allCountries.filter(function(c) {
+
+    // Build a drill row index keyed by shipmentNo for fast lookup when rep filter active
+    var _drillBySnо = null;
+    if (_effectiveFilterRepsTL && allDrillRows && allDrillRows.length > 0) {
+      _drillBySnо = {};
+      allDrillRows.forEach(function(r){
+        if (_frNormT.indexOf(r._sp) > -1) {
+          if (!_drillBySnо[r.shipmentNo]) _drillBySnо[r.shipmentNo] = r;
+        }
+      });
+    }
+
+    function reaggregateTL(c) {
+      // Re-aggregate metrics using only shipmentNos belonging to filtered reps
+      if (!_drillBySnо || !c.shipmentNos) return c;
+      var ship=0, gp=0, rev=0, tons=0, teu=0, fclTeu=0, tankTeu=0, lcl=0;
+      c.shipmentNos.forEach(function(sno){
+        var r = _drillBySnо[sno];
+        if (!r) return;
+        ship++; gp += r.g||0; rev += r.r||0; tons += r.t||0;
+      });
+      if (ship === 0) return null; // no contribution from filtered reps
+      return Object.assign({}, c, {
+        shipments: ship,
+        gp: Math.round(gp),
+        revenue: Math.round(rev),
+        tons: Math.round(tons*100)/100,
+        gpPct: rev > 0 ? Math.round((gp/rev)*1000)/10 : 0
+      });
+    }
+
+    var filtered = lobData.allCountries.map(function(c) {
       var repOk = !_effectiveFilterRepsTL || (c.salesReps||[]).some(function(r){ return _frNormT.indexOf(normalizeName(r||''))>-1; });
       var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
         var needle = LOB_KEY_TO_LABEL[fk]||'';
         return needle && (c.lobs||[]).indexOf(needle)>-1;
       });
-      return repOk && lobOk;
-    });
+      if (!repOk || !lobOk) return null;
+      return _drillBySnо ? reaggregateTL(c) : c;
+    }).filter(Boolean);
+
     function top10tl(arr,key){ return arr.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,10); }
     lobData = {
       allCountries:   filtered,
@@ -3113,8 +3146,8 @@ function tradelanePage(){
       topByShipments: top10tl(filtered,'shipments'),
       topByRevenue:   top10tl(filtered,'revenue'),
       topByGP:        top10tl(filtered,'gp'),
-      topByTons:      top10tl(filtered.filter(function(c){return c.tons>0;}),'tons'),
-      topByTEU:       top10tl(filtered.filter(function(c){return c.teu>0;}),'teu'),
+      topByTons:      top10tl(filtered.filter(function(c){return (c.tons||0)>0;}),'tons'),
+      topByTEU:       top10tl(filtered.filter(function(c){return (c.teu||0)>0;}),'teu'),
       topByGPPct:     top10tl(filtered.filter(function(c){return c.shipments>=2;}),'gpPct'),
     };
   }
