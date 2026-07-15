@@ -3112,12 +3112,15 @@ function tradelanePage(){
 
     function reaggregateTL(c) {
       // Re-aggregate metrics using only shipmentNos belonging to filtered reps
+      // r.g=GP, r.r=revenue, r.tons=air tons (calculatedTons), r.t=TEU, r.teu=TEU
       if (!_drillBySnо || !c.shipmentNos) return c;
-      var ship=0, gp=0, rev=0, tons=0, teu=0, fclTeu=0, tankTeu=0, lcl=0;
+      var ship=0, gp=0, rev=0, tons=0, teu=0;
       c.shipmentNos.forEach(function(sno){
         var r = _drillBySnо[sno];
         if (!r) return;
-        ship++; gp += r.g||0; rev += r.r||0; tons += r.t||0;
+        ship++; gp += r.g||0; rev += r.r||0;
+        tons += r.tons||0;   // calculatedTons (air weight tons)
+        teu  += r.t||0;      // Container TEU
       });
       if (ship === 0) return null; // no contribution from filtered reps
       return Object.assign({}, c, {
@@ -3125,6 +3128,7 @@ function tradelanePage(){
         gp: Math.round(gp),
         revenue: Math.round(rev),
         tons: Math.round(tons*100)/100,
+        teu: Math.round(teu*100)/100,
         gpPct: rev > 0 ? Math.round((gp/rev)*1000)/10 : 0
       });
     }
@@ -3280,6 +3284,30 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
   });
   grand.gpPct = grand.revenue > 0 ? (grand.gp/grand.revenue*100) : 0;
   // Grand total is summed from rows (lobData.allCountries already filtered by zone/rep)
+
+  // When effectiveReps filter active: re-build grand + grandMD from allDrillRows
+  // so per-month columns show zone-only numbers (r.monthData has full totals)
+  if (effectiveReps && effectiveReps.length > 0 && allDrillRows && allDrillRows.length > 0) {
+    var _gtGrand = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
+    var _gtMD = {};
+    var _gtActiveMonsSet = {};
+    activeMons.forEach(function(m){ _gtActiveMonsSet[m] = true; });
+    var _gtFyMonsSet = {};
+    if (_fyGroups) { _fyGroups.forEach(function(g){ g.idxs.forEach(function(i){ _gtFyMonsSet[months26[i]] = g.key; }); }); }
+    allDrillRows.forEach(function(r){
+      if (effectiveReps.indexOf(r._sp) === -1) return;
+      var inActive = _fyGroups ? !!_gtFyMonsSet[r._ml] : !!_gtActiveMonsSet[r._ml];
+      if (!inActive) return;
+      _gtGrand.shipments++; _gtGrand.gp += r.g||0; _gtGrand.revenue += r.r||0; _gtGrand.tons += r.tons||0; _gtGrand.teu += r.t||0;
+      var colKey = _fyGroups ? _gtFyMonsSet[r._ml] : r._ml;
+      if (!_gtMD[colKey]) _gtMD[colKey] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
+      _gtMD[colKey].shipments++; _gtMD[colKey].gp += r.g||0; _gtMD[colKey].revenue += r.r||0;
+      _gtMD[colKey].tons += r.tons||0; _gtMD[colKey].teu += r.t||0;
+    });
+    grand = _gtGrand;
+    grand.gpPct = grand.revenue > 0 ? (grand.gp/grand.revenue*100) : 0;
+    grandMD = _gtMD;
+  }
 
   function tlHue(n){ var h=0; for(var i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))&0xffff; return h%360; }
   function tlIni(n){ return n.split(/[\s\-]+/).map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase(); }
