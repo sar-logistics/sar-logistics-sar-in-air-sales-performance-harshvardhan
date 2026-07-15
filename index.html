@@ -3158,11 +3158,11 @@ function tradelanePage(){
     var _tlDR = getTradelaneDateRange();
     var _tlOpen = state.tradelaneShipOpen||{};
     var _openKeys = Object.keys(_tlOpen).filter(function(k){return _tlOpen[k];}).sort().join(',');
-    var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(state.yearType||'Financial')+'|'+(state.selectedQuarter||'')+'|'+(state.weeklyMonth||'')+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+_openKeys;
+    var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(state.yearType||'Financial')+'|'+(state.selectedQuarter||'')+'|'+(state.weeklyMonth||'')+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+_openKeys;
     if (!_tradelanePivotCache[_tlPivotKey]) {
       // Build pivot table (expensive) — cache result
       var _t0 = performance.now();
-      _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC, filterLobs);
+      _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterRepsTL);
       console.log('[PERF] tradelanePivotTable built in', (performance.now()-_t0).toFixed(1)+'ms');
     }
     return header + _tradelanePivotCache[_tlPivotKey];
@@ -3181,7 +3181,7 @@ function tradelanePage(){
   +'</div>';
 }
 
-function tradelanePivotTable(lobData, activeLob, brandC, filterLobs) {
+function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) {
   var rows = (lobData.allCountries || []).slice().sort(function(a,b){ return b.gp - a.gp; });
   var BORDER = '#D5DCE6';
   var BORDER_STRONG = '#B0BAC8';
@@ -3247,7 +3247,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs) {
     var _tlColKeys = _fyGroups
       ? _fyGroups.map(function(g){ return g.key+'='+g.idxs.map(function(i){return months26[i];}).join(','); }).join('|')
       : activeMons.join(',');
-    var _tlGrandKey = (_tlLobFilter ? _tlLobFilter.join(',') : 'ALL') + '|' + _tlColKeys;
+    var _tlGrandKey = (_tlLobFilter ? _tlLobFilter.join(',') : 'ALL') + '|' + _tlColKeys + '|' + JSON.stringify(effectiveReps||null);
 
     if (!_tlGrandDrillCache[_tlGrandKey]) {
       var _tlActiveMonsSet = {};
@@ -3264,6 +3264,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs) {
         if (_tlLobFilter && _tlLobFilter.indexOf(r.lob) === -1) return;
         var inActive = _fyGroups ? !!_fyMonsSet[r._ml] : !!_tlActiveMonsSet[r._ml];
         if (!inActive) return;
+        if (effectiveReps && effectiveReps.indexOf(normalizeName(r._sp||'')) === -1) return;
         _drillGrand.shipments++;
         _drillGrand.gp   += r.g || 0;
         _drillGrand.tons += r.t || 0;
