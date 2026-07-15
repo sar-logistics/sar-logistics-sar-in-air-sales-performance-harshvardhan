@@ -650,7 +650,7 @@ function fetchLiveData(callback, force){
         .forEach(function(k){ localStorage.removeItem(k); });
       localStorage.removeItem('sar_user_session');
       _weekDataFetched = false;
-      _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {};
+      _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {};
       allDrillRows = null;
 
       try {
@@ -3087,7 +3087,7 @@ function tradelanePage(){
     var _tlDR = getTradelaneDateRange();
     var _tlOpen = state.tradelaneShipOpen||{};
     var _openKeys = Object.keys(_tlOpen).filter(function(k){return _tlOpen[k];}).sort().join(',');
-    var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(state.weeklyMonth||'')+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+_openKeys;
+    var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(state.yearType||'Financial')+'|'+(state.selectedQuarter||'')+'|'+(state.weeklyMonth||'')+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+_openKeys;
     if (!_tradelanePivotCache[_tlPivotKey]) {
       // Build pivot table (expensive) — cache result
       var _t0 = performance.now();
@@ -3170,50 +3170,50 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
   grand.gpPct = grand.revenue > 0 ? (grand.gp/grand.revenue*100) : 0;
 
   // Override grand total shipments/GP/tons with allDrillRows for accuracy
-  // (tradelaneData includes unmapped jobs; allDrillRows = sales-mapped only, matches Sales Performance)
+  // Uses a cache keyed by LOB+months so the 60K scan only runs once per unique view, not on every ship-toggle
   if (allDrillRows && allDrillRows.length > 0) {
     var _tlLobFilter = filterLobs && filterLobs.length > 0 ? filterLobs : null;
-    var _tlActiveMonsSet = {};
-    activeMons.forEach(function(m){ _tlActiveMonsSet[m] = true; });
+    var _tlColKeys = _fyGroups
+      ? _fyGroups.map(function(g){ return g.key+'='+g.idxs.map(function(i){return months26[i];}).join(','); }).join('|')
+      : activeMons.join(',');
+    var _tlGrandKey = (_tlLobFilter ? _tlLobFilter.join(',') : 'ALL') + '|' + _tlColKeys;
 
-    // For yearly: build per-FY overrides for grandMD too
-    var _fyMonsSet = {};
-    if (_fyGroups) {
-      _fyGroups.forEach(function(g){
-        g.idxs.forEach(function(i){ _fyMonsSet[months26[i]] = g.key; });
+    if (!_tlGrandDrillCache[_tlGrandKey]) {
+      var _tlActiveMonsSet = {};
+      activeMons.forEach(function(m){ _tlActiveMonsSet[m] = true; });
+      var _fyMonsSet = {};
+      if (_fyGroups) {
+        _fyGroups.forEach(function(g){
+          g.idxs.forEach(function(i){ _fyMonsSet[months26[i]] = g.key; });
+        });
+      }
+      var _drillGrand = { shipments:0, gp:0, tons:0 };
+      var _drillGrandMD = {};
+      allDrillRows.forEach(function(r){
+        if (_tlLobFilter && _tlLobFilter.indexOf(r.lob) === -1) return;
+        var inActive = _fyGroups ? !!_fyMonsSet[r._ml] : !!_tlActiveMonsSet[r._ml];
+        if (!inActive) return;
+        _drillGrand.shipments++;
+        _drillGrand.gp   += r.g || 0;
+        _drillGrand.tons += r.t || 0;
+        var colKey = _fyGroups ? _fyMonsSet[r._ml] : r._ml;
+        if (!_drillGrandMD[colKey]) _drillGrandMD[colKey] = { shipments:0, gp:0, tons:0 };
+        _drillGrandMD[colKey].shipments++;
+        _drillGrandMD[colKey].gp   += r.g || 0;
+        _drillGrandMD[colKey].tons += r.t || 0;
       });
+      _tlGrandDrillCache[_tlGrandKey] = { grand: _drillGrand, md: _drillGrandMD };
     }
 
-    var _drillGrand = { shipments:0, gp:0, tons:0 };
-    var _drillGrandMD = {}; // month or fyKey -> {shipments,gp,tons}
-
-    allDrillRows.forEach(function(r){
-      if (_tlLobFilter && _tlLobFilter.indexOf(r.lob) === -1) return;
-      var inActive = _fyGroups ? !!_fyMonsSet[r._ml] : !!_tlActiveMonsSet[r._ml];
-      if (!inActive) return;
-      _drillGrand.shipments++;
-      _drillGrand.gp   += r.g || 0;
-      _drillGrand.tons += r.t || 0;
-      var colKey = _fyGroups ? _fyMonsSet[r._ml] : r._ml;
-      if (!_drillGrandMD[colKey]) _drillGrandMD[colKey] = { shipments:0, gp:0, tons:0 };
-      _drillGrandMD[colKey].shipments++;
-      _drillGrandMD[colKey].gp   += r.g || 0;
-      _drillGrandMD[colKey].tons += r.t || 0;
-    });
-
-    // Override grand totals
-    grand.shipments = _drillGrand.shipments;
-    grand.gp        = _drillGrand.gp;
-    grand.tons      = _drillGrand.tons;
+    var _cached = _tlGrandDrillCache[_tlGrandKey];
+    grand.shipments = _cached.grand.shipments;
+    grand.gp        = _cached.grand.gp;
+    grand.tons      = _cached.grand.tons;
     grand.gpPct     = grand.revenue > 0 ? (grand.gp/grand.revenue*100) : 0;
 
-    // Override grandMD shipments/gp/tons per month or FY key
-    // For non-yearly: update grandMD[month]
-    // For yearly: update the expanded _grandMonthData later via _fyGroups
     if (_fyGroups) {
-      // Store per-FY overrides; _grandMonthData expansion below will pick these up
       _fyGroups.forEach(function(g){
-        var d = _drillGrandMD[g.key] || { shipments:0, gp:0, tons:0 };
+        var d = _cached.md[g.key] || { shipments:0, gp:0, tons:0 };
         if (!grandMD[g.key]) grandMD[g.key] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
         grandMD[g.key].shipments = d.shipments;
         grandMD[g.key].gp       = d.gp;
@@ -3221,7 +3221,7 @@ function tradelanePivotTable(lobData, activeLob, brandC) {
       });
     } else {
       activeMons.forEach(function(m){
-        var d = _drillGrandMD[m] || { shipments:0, gp:0, tons:0 };
+        var d = _cached.md[m] || { shipments:0, gp:0, tons:0 };
         if (!grandMD[m]) grandMD[m] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
         grandMD[m].shipments = d.shipments;
         grandMD[m].gp       = d.gp;
@@ -5751,9 +5751,10 @@ function computeDrillResult(entity, metric, month){
   };
 }
 
-var _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {};
+var _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {};
 var _insightDrillCache = {}; // cache for customer/agent/tradelane drill results
-var _tradelanePivotCache = {}; // cache rendered tradelane pivot HTML // in-memory: entity||metric||col → full result object
+var _tradelanePivotCache = {}; _tlGrandDrillCache = {}; // cache rendered tradelane pivot HTML // in-memory: entity||metric||col → full result object
+var _tlGrandDrillCache = {}; // cache grand total drill row aggregates keyed by lob+months
 
 // Returns the default LOB tab for the drill drawer based on active filterLobs
 function _defaultDrillLobTab() {
@@ -6370,7 +6371,7 @@ document.addEventListener('click', function(ev){
         .forEach(function(k){ localStorage.removeItem(k); });
     } catch(e){}
     _weekDataFetched = false;
-    _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {};
+    _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {};
     // Reset all secondary data ready flags so pages show fresh data
     customerDataReady = false; financeDataReady = false; financeDataLoading = false;
     opDataReady = false; opDataLoading = false; usageDataReady = false; orgDataReady = false;
@@ -6601,7 +6602,7 @@ document.addEventListener('click', function(ev){
   }
   else if(act==='toggleFilterLobDrop'){ ev.stopPropagation(); state.filterLobDropOpen=!state.filterLobDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterRepDrop'){ ev.stopPropagation(); state.filterRepDropOpen=!state.filterRepDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='filterLobAll'){ ev.stopPropagation(); _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterLobAll'){ ev.stopPropagation(); _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='filterRepAll'){ ev.stopPropagation(); state.filterReps=[]; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterLob'){
     ev.stopPropagation();
@@ -6611,7 +6612,7 @@ document.addEventListener('click', function(ev){
     } else {
       state.filterLobs = state.filterLobs.concat([lv]);
     }
-    _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _pendencyDrillCache = {};
+    _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _pendencyDrillCache = {};
     // If newly selected LOB isn't in lobData yet, fetch full lobData then re-render
     var _sampleRep = repsRawOriginal && repsRawOriginal[0];
     var _hasAllLobs = _sampleRep && _sampleRep.lobData &&
