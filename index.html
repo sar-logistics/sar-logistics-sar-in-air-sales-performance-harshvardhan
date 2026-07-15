@@ -4805,6 +4805,7 @@ function salesTable(M){
   var isYearly2    = state.reportView === 'Yearly';
   var isWeekly2    = state.reportView === 'Weekly';
   var isQuarterly2 = state.reportView === 'Quarterly';
+  var isCustom2    = state.reportView === 'Custom';
   var yGroups2  = isYearly2    ? yearGroups()    : null;
   var qGroups2  = isQuarterly2 ? quarterGroups() : null;
   var activeGroups2 = yGroups2 || qGroups2 || null;
@@ -4817,7 +4818,7 @@ function salesTable(M){
   var head='<tr>'
     +'<th style="position:sticky;left:0;z-index:3;background:#F0F4FA;text-align:left;padding:7px 12px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';box-shadow:inset -1.5px 0 0 '+BORDER_STRONG+';width:210px;min-width:210px;">Zones/Sales Rep</th>'
     +'<th style="position:sticky;left:210px;z-index:3;background:#F0F4FA;text-align:left;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#475569;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';width:140px;min-width:140px;">Metrics</th>'
-    +(isWeekly2||isYearly2||isQuarterly2 ? '' : '<th style="position:sticky;left:'+FY_COL_LEFT+'px;z-index:3;text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#FCF3DA;white-space:nowrap;box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">Grand Total</th>')
+    +(isWeekly2||isYearly2||isQuarterly2||isCustom2 ? '' : '<th style="position:sticky;left:'+FY_COL_LEFT+'px;z-index:3;text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';background:#FCF3DA;white-space:nowrap;box-shadow:inset 2px 0 0 '+BORDER_STRONG+', inset -2px 0 0 #D9B45C;">Grand Total</th>')
     + (activeGroups2 ? activeGroups2.map(function(g, gi){
         return '<th style="text-align:right;padding:7px 10px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#A8720E;text-transform:uppercase;border-bottom:2px solid '+BORDER_STRONG+';border-right:1px solid '+BORDER+';background:#FCF3DA;white-space:nowrap;">'
           +'<div style="font-size:11px;font-weight:800;color:#A8720E;">'+g.label+'</div>'
@@ -4888,7 +4889,7 @@ function salesTable(M){
     var isMiddleOfBlock = (blockMiddleIdx[idx] === idx);
     var isLastRowOverall = idx === allRows.length - 1;
 
-    var allCells = (isWeekly2||isYearly2||isQuarterly2 ? row.cells.slice(1) : row.cells).map(function(c, ci){
+    var allCells = (isWeekly2||isYearly2||isQuarterly2||isCustom2 ? row.cells.slice(1) : row.cells).map(function(c, ci){
       var isFY = ci === 0;
       var stickyStyle = isFY ? ('position:sticky;left:'+FY_COL_LEFT+'px;z-index:2;') : '';
       var cellBg = isFY ? (rowBg !== '#FFFFFF' ? rowBg : '#FCF9EE') : (rowBg !== '#FFFFFF' ? rowBg : c.bg);
