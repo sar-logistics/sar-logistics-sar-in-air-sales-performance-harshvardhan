@@ -3128,17 +3128,40 @@ function tradelanePage(){
   };
   // Zone + Rep filter — use allDrillRows._zone for authoritative zone→rawSP mapping
   var _filterZonesTL = state.filterZones || [];
-  var _zoneRawSPsTL = _filterZonesTL.length > 0 ? zoneToRawSPs(_filterZonesTL) : null;
+
+  // If zone filter active but allDrillRows not yet loaded, trigger load
+  if (_filterZonesTL.length > 0 && !allDrillRows) {
+    loadDrillData(function(){ _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); });
+  }
+
+  // Build effective SP list — prefer allDrillRows (authoritative), fallback to repsRawOriginal display names
+  var _zoneRawSPsTL;
+  if (_filterZonesTL.length > 0) {
+    if (allDrillRows) {
+      _zoneRawSPsTL = zoneToRawSPs(_filterZonesTL);
+    } else {
+      // Fallback: use display names from repsRawOriginal — normalized to match c.salesReps via normalizeName
+      var _fbSet = {};
+      repsRawOriginal.forEach(function(r){
+        if (_filterZonesTL.indexOf(r.zone) > -1) _fbSet[normalizeName(r.name)] = true;
+      });
+      _zoneRawSPsTL = Object.keys(_fbSet);
+    }
+  } else {
+    _zoneRawSPsTL = null;
+  }
+
   var _selRepsTL = (state.filterReps||[]).length > 0
     ? (state.filterReps||[]).map(function(x){ return normalizeName(x); })
     : null;
   // _effectiveFilterRepsTL: raw _sp values (lowercase) for matching against c.salesReps
   var _effectiveFilterRepsTL;
   if (_zoneRawSPsTL && _selRepsTL) {
-    // Both zone and rep — intersect
     _effectiveFilterRepsTL = _zoneRawSPsTL.filter(function(sp){ return _selRepsTL.indexOf(sp) > -1; });
-  } else if (_zoneRawSPsTL) {
+  } else if (_zoneRawSPsTL && _zoneRawSPsTL.length > 0) {
     _effectiveFilterRepsTL = _zoneRawSPsTL;
+  } else if (_zoneRawSPsTL && _zoneRawSPsTL.length === 0 && _filterZonesTL.length > 0) {
+    _effectiveFilterRepsTL = []; // zone selected but no matching SPs — show nothing
   } else if (_selRepsTL) {
     _effectiveFilterRepsTL = _selRepsTL;
   } else {
@@ -7187,17 +7210,23 @@ function positionAllDrops(){
     var btn = document.querySelector('[data-act="'+p[0]+'"]');
     if(!btn) return;
     var rect = btn.getBoundingClientRect();
-    var dropW = parseInt(drop.style.width) || drop.offsetWidth || 280;
     var top = rect.bottom + 6;
-    // Anchor filters-drop to right edge of button so it stays near the button on all pages
     var left;
     if (p[0] === 'toggleFiltersDrop') {
+      // Must be visible to measure actual rendered width
+      drop.style.visibility = 'hidden';
+      drop.style.display = 'block';
+      var dropW = drop.offsetWidth || 280;
+      drop.style.display = 'none';
+      drop.style.visibility = '';
       left = Math.max(8, rect.right - dropW);
+      if (left + dropW > window.innerWidth - 8) left = window.innerWidth - dropW - 8;
     } else {
+      drop.style.display = 'block';
+      var dropW = drop.offsetWidth || 200;
       left = rect.left;
+      if (left + dropW > window.innerWidth - 8) left = window.innerWidth - dropW - 8;
     }
-    // Clamp so it doesn't overflow viewport
-    if (left + dropW > window.innerWidth - 8) left = window.innerWidth - dropW - 8;
     drop.style.top  = top + 'px';
     drop.style.left = left + 'px';
     drop.style.display = 'block';
