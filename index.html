@@ -4406,8 +4406,10 @@ function allZonesToggleButton(){
   var zones = getZones();
   if (zones.length === 0) return '';
   var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
-  var label = anyExpanded ? 'Collapse All' : 'Expand All';
-  var icon = anyExpanded
+  var anyShipOpen = Object.keys(state.shipOpen||{}).some(function(k){ return state.shipOpen[k]; });
+  var anyOpen = anyExpanded || anyShipOpen;
+  var label = anyOpen ? 'Collapse All' : 'Expand All';
+  var icon = anyOpen
     ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>'
     : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
   return '<button data-act="toggleAllZones" class="btnq" style="display:flex;align-items:center;gap:5px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:5px 12px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;">'+icon+label+'</button>';
@@ -6527,8 +6529,25 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     var zones = getZones();
     var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
-    var newVal = anyExpanded ? false : true; // if any open, collapse all; else expand all
+    // Also check if any shipment detail rows are open
+    var anyShipOpen = Object.keys(state.shipOpen||{}).some(function(k){ return state.shipOpen[k]; });
+    var anyOpen = anyExpanded || anyShipOpen;
+    var newVal = anyOpen ? false : true;
+    // Toggle zones
     zones.forEach(function(z){ state.zoneOpen[z] = newVal; });
+    // Toggle shipment detail rows for all entities (grand + zones + reps)
+    var allNames = ['Grand Total'].concat(zones).concat(repsRaw.map(function(r){ return r.name; }));
+    if (!newVal) {
+      // Collapse — set all to false
+      state.shipOpen = {};
+      state.gpOpen   = {};
+    } else {
+      // Expand — set all to true
+      var newShipOpen = {}, newGpOpen = {};
+      allNames.forEach(function(n){ newShipOpen[n] = true; newGpOpen[n] = true; });
+      state.shipOpen = newShipOpen;
+      state.gpOpen   = newGpOpen;
+    }
     render();
   }
   else if(act==='drill'){ ev.stopPropagation(); openDrill(el.getAttribute('data-entity'),el.getAttribute('data-metric'),el.getAttribute('data-col'),el.getAttribute('data-val')); }
