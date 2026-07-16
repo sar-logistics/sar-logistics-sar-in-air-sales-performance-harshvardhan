@@ -3501,6 +3501,17 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     var _tgCount = {};   // tg → total shipments
     var _tgMDCount = {}; // tg → { colKey → shipments }
     var _tgNoTgCount = 0; // rows with no _tg field (not yet computed — old cache)
+
+    // Patch _tg client-side on any rows still missing it
+    var _TL_MAP2 = {'US':'US','GB':'Europe','CA':'Canada','PR':'LATAM','BR':'LATAM','VN':'Asia','MX':'LATAM','FR':'Med','BE':'Europe','GE':'Europe','DE':'Europe','NL':'Europe','PY':'LATAM','TR':'Med','ES':'Med','ID':'Asia','SG':'Asia','OM':'Middle East','FI':'Europe','EG':'Med','MA':'Med','AE':'Middle East','TN':'Med','ZA':'Africa','GH':'Africa','CN':'Asia','HN':'LATAM','PE':'LATAM','DO':'Dominican Republic','PK':'Asia','AU':'Australia','NZ':'Australia','JP':'Asia','KR':'Asia','IN':'India','LK':'Asia','BD':'Asia','TH':'Asia','MY':'Asia','PH':'Asia','TW':'Asia','QA':'Middle East','SA':'Middle East','KW':'Middle East','BH':'Middle East','JO':'Middle East','LB':'Middle East','IL':'Middle East','IQ':'Middle East','IT':'Med','PT':'Med','GR':'Med','HR':'Med','MT':'Med','CY':'Med','SE':'Europe','NO':'Europe','DK':'Europe','PL':'Europe','CZ':'Europe','AT':'Europe','CH':'Europe','HU':'Europe','RO':'Europe','BG':'Europe','UA':'Europe','RU':'Europe','NI':'LATAM','SV':'LATAM','GT':'LATAM','CR':'LATAM','PA':'LATAM','CO':'LATAM','VE':'LATAM','EC':'LATAM','AR':'LATAM','CL':'LATAM','BO':'LATAM','UY':'LATAM','GY':'LATAM','NG':'Africa','KE':'Africa','ET':'Africa','TZ':'Africa','UG':'Africa','CI':'Africa','CM':'Africa','SN':'Africa'};
+    function _p2tg(s){ var m=String(s||'').trim().match(/^\(([A-Z]{2,5})\)/); return m?(_TL_MAP2[m[1].slice(0,2).toUpperCase()]||''):''; }
+    allDrillRows.forEach(function(r){
+      if (r._tg) return;
+      var lob = r.lob || '', tg = '';
+      if (lob==='AIR EXPORT'||lob==='SEA EXPORT') tg=_p2tg(r.dischargePort)||_p2tg(r.ataDischarge)||_p2tg(r.location);
+      else if (lob==='AIR IMPORT'||lob==='SEA IMPORT') tg=_p2tg(r.loadingPort)||_p2tg(r.atdLoading)||_p2tg(r.etdLoading)||_p2tg(r.location);
+      if (tg) r._tg = tg;
+    });
     allDrillRows.forEach(function(r){
       if (!r._tg) { _tgNoTgCount++; return; }
       if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
@@ -6149,11 +6160,20 @@ function dedupDrillRows(rows) {
   deduped.forEach(function(r){
     if (r._tg) return; // already set by server — use it
     var lob = r.lob || '';
+    var tg = '';
     if (lob === 'AIR EXPORT' || lob === 'SEA EXPORT') {
-      r._tg = _portToTG(r.dischargePort || '');
+      // Discharge port — try all field names that might have the port code
+      tg = _portToTG(r.dischargePort || '') ||
+           _portToTG(r.ataDischarge   || '') ||
+           _portToTG(r.location       || '');
     } else if (lob === 'AIR IMPORT' || lob === 'SEA IMPORT') {
-      r._tg = _portToTG(r.loadingPort || '');
+      // Loading port — try all field names
+      tg = _portToTG(r.loadingPort  || '') ||
+           _portToTG(r.atdLoading   || '') ||
+           _portToTG(r.etdLoading   || '') ||
+           _portToTG(r.location     || '');
     }
+    if (tg) r._tg = tg;
   });
 
   return deduped;
