@@ -2767,6 +2767,20 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
   };
   var allowedLobs = _CUST_LOB_LABELS[activeLob] || [];
   var frNorm = effectiveReps ? effectiveReps.map(function(r){ return normalizeName(r); }) : null;
+
+  // Build set of reps who have shipped in the active LOB — from repsRawOriginal.lobData
+  var _lobKeys = {
+    'Air':      ['AIR EXPORT','AIR IMPORT'],
+    'Ocean':    ['SEA EXPORT','SEA IMPORT'],
+    'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
+  };
+  var _activeLobKeys = _lobKeys[activeLob] || [];
+  var lobRepsNorm = {};
+  repsRawOriginal.forEach(function(r){
+    if (!r.lobData) return;
+    var hasLob = _activeLobKeys.some(function(lk){ return r.lobData[lk] && Object.keys(r.lobData[lk]).some(function(k){ return k !== '_week'; }); });
+    if (hasLob) lobRepsNorm[normalizeName(r.name)] = true;
+  });
   var rows = (lobData.allCustomers || []).slice();
   var sortCol = state.custSortCol || 'gp';
   var sortDir = (state.custSortDir === undefined) ? -1 : state.custSortDir;
@@ -2822,9 +2836,12 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     var lobsHtml = (c.lobs||[]).filter(function(l){ return allowedLobs.indexOf(l) > -1; }).map(function(l){
       return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:9.5px;font-weight:700;background:#EEF2FF;color:#4B5FCC;margin:1px;">'+esc(l)+'</span>';
     }).join('');
-    var filteredReps = frNorm
-      ? (c.salesReps||[]).filter(function(r){ return frNorm.indexOf(normalizeName(r||'')) > -1; })
-      : (c.salesReps||[]);
+    var filteredReps = (c.salesReps||[]).filter(function(r){
+      var n = normalizeName(r||'');
+      var lobOk = lobRepsNorm[n] === true;
+      var repOk = !frNorm || frNorm.indexOf(n) > -1;
+      return lobOk && repOk;
+    });
     var repsText = filteredReps.slice(0,3).join(', ') + (filteredReps.length > 3 ? ' +' + (filteredReps.length-3) : '');
     var bg = i%2===1 ? 'background:#FAFBFD;' : '';
 
@@ -3040,6 +3057,16 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
   };
   var allowedLobs = _AGENT_LOB_LABELS[activeLob] || [];
   var frNorm = effectiveReps ? effectiveReps.map(function(r){ return normalizeName(r); }) : null;
+
+  // Build set of reps active in the current LOB tab
+  var _aLobKeys = { 'Air':['AIR EXPORT','AIR IMPORT'], 'Ocean':['SEA EXPORT','SEA IMPORT'], 'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT'] };
+  var _aActiveLobKeys = _aLobKeys[activeLob] || [];
+  var aLobRepsNorm = {};
+  repsRawOriginal.forEach(function(r){
+    if (!r.lobData) return;
+    var hasLob = _aActiveLobKeys.some(function(lk){ return r.lobData[lk] && Object.keys(r.lobData[lk]).some(function(k){ return k !== '_week'; }); });
+    if (hasLob) aLobRepsNorm[normalizeName(r.name)] = true;
+  });
   var rows = (lobData.allAgents || []).slice();
   var sortCol = state.agentSortCol || 'gp';
   var sortDir = (state.agentSortDir === undefined) ? -1 : state.agentSortDir;
@@ -3073,9 +3100,12 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
     var lobsHtml   = (a.lobs||[]).filter(function(l){ return allowedLobs.indexOf(l) > -1; }).map(function(l){
       return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:9.5px;font-weight:700;background:#EEF2FF;color:#4B5FCC;margin:1px;">'+esc(l)+'</span>';
     }).join('');
-    var filteredRepsA = frNorm
-      ? (a.salesReps||[]).filter(function(r){ return frNorm.indexOf(normalizeName(r||'')) > -1; })
-      : (a.salesReps||[]);
+    var filteredRepsA = (a.salesReps||[]).filter(function(r){
+      var n = normalizeName(r||'');
+      var lobOk = aLobRepsNorm[n] === true;
+      var repOk = !frNorm || frNorm.indexOf(n) > -1;
+      return lobOk && repOk;
+    });
     var repsText = filteredRepsA.slice(0,3).join(', ') + (filteredRepsA.length > 3 ? ' +'+(filteredRepsA.length-3) : '');
     var bg = i%2===1 ? 'background:#FAFBFD;' : '';
     tbody += '<tr style="border-bottom:1px solid #F1F5F9;'+bg+'">'
