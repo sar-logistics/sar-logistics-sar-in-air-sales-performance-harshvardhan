@@ -2026,8 +2026,8 @@ function topbar(){
 
     // ── SINGLE ROW: View / Dates / Currency / Rate / Filters / Refresh → Feedback / Sign Out ──
     +'<div style="display:flex;align-items:center;gap:10px;padding:7px 16px 7px;overflow:visible;background:linear-gradient(180deg,#F9FBFE,#F2F6FB);">'
-      // Report View dropdown — pill with icon, dropdown uses fixed position to escape overflow:auto clipping
-      +'<div style="position:relative;display:inline-block;flex-shrink:0;">'
+      // Report View dropdown — hidden on non-data pages
+      +(['usage','teams','admin','org'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:inline-block;flex-shrink:0;">'
         +'<div data-act="toggleViewDrop" style="display:flex;align-items:center;gap:7px;background:#FFFFFF;border-radius:999px;padding:8px 14px;font-size:12px;font-weight:700;color:#0D2B5E;cursor:pointer;user-select:none;transition:box-shadow 0.15s;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';'+(state.viewDropOpen?'box-shadow:0 0 0 2px #1D5FCC40,'+pillShadow+';':'')+'">'
           +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="'+(state.viewDropOpen?'#1D5FCC':'#7C93B8')+'" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>'
           +state.reportView+' View'
@@ -2047,7 +2047,7 @@ function topbar(){
           : '')
       +'</div>'
       // ── View-specific date selector ──────────────────────────────────────
-      +(function(){
+      +(['usage','teams','admin','org'].indexOf(state.page) >= 0 ? '' : (function(){
         var v = state.reportView;
         var ps = pillShadow;
 
@@ -2227,15 +2227,15 @@ function topbar(){
         }
 
         return ''; // fallback
-      })()
-      // Currency toggle — sliding thumb, not an instant colour swap
-      +'<div style="position:relative;display:flex;align-items:center;background:#FFFFFF;border-radius:999px;padding:4px;flex-shrink:0;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';width:104px;">'
+      })())
+      // Currency toggle — hidden on non-data pages
+      +(['usage','teams','admin','org'].indexOf(state.page) >= 0 ? '' : '<div style="position:relative;display:flex;align-items:center;background:#FFFFFF;border-radius:999px;padding:4px;flex-shrink:0;white-space:nowrap;border:1.5px solid #D8E1F0;box-shadow:'+pillShadow+';width:104px;">'
         +'<div style="position:absolute;top:4px;left:'+(state.currency==='USD'?'50%':'4px')+';width:calc(50% - 4px);height:calc(100% - 8px);background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border-radius:999px;transition:left 0.28s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 2px 6px '+BRAND_A2+'45;"></div>'
         +'<button data-act="cur" data-cur="INR" style="position:relative;z-index:1;flex:1;border:none;background:transparent;cursor:pointer;font-size:11.5px;padding:6px 0;border-radius:999px;white-space:nowrap;font-weight:700;color:'+(state.currency==='INR'?'#FFFFFF':'#9AAFC8')+';transition:color 0.2s;">INR</button>'
         +'<button data-act="cur" data-cur="USD" style="position:relative;z-index:1;flex:1;border:none;background:transparent;cursor:pointer;font-size:11.5px;padding:6px 0;border-radius:999px;white-space:nowrap;font-weight:700;color:'+(state.currency==='USD'?'#FFFFFF':'#9AAFC8')+';transition:color 0.2s;">USD</button>'
-      +'</div>'
-      // Rate — small chip
-      +'<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#FFFFFF;border-radius:999px;padding:7px 13px;box-shadow:'+pillShadow+';">Rate '+rateEl+'</div>'
+      +(['usage','teams','admin','org'].indexOf(state.page) >= 0 ? '' : '</div>'))
+      // Rate — hidden on non-data pages
+      +(['usage','teams','admin','org'].indexOf(state.page) >= 0 ? '' : '<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#FFFFFF;border-radius:999px;padding:7px 13px;box-shadow:'+pillShadow+';">Rate '+rateEl+'</div>')
       // Filters — only on Sales Performance (sales page)
       +(['admin','usage','org','teams'].indexOf(state.page) >= 0 ? '' : (function(){
         var _isInsightPg = ['customers','agents','tradelane'].indexOf(state.page) >= 0;
@@ -4554,17 +4554,17 @@ function teamsPage(){
   // ── Support panel ─────────────────────────────────────────────────────────
   var supportPanel = '';
   if(support.length>0){
-    supportPanel = '<div style="flex-shrink:0;width:268px;border-left:1px solid #EEF2F8;background:#FAFBFD;padding:16px;overflow-y:auto;display:flex;flex-direction:column;">'
-      +'<div style="font-size:9px;font-weight:800;letter-spacing:0.1em;color:#94A3B8;text-transform:uppercase;margin-bottom:12px;">Support Roles</div>'
+    supportPanel = '<div style="flex-shrink:0;width:272px;border-left:1.5px solid #EEF2F8;background:#FAFBFD;padding:20px 16px;overflow-y:auto;display:flex;flex-direction:column;">'
+      +'<div style="font-size:9.5px;font-weight:800;letter-spacing:0.1em;color:#9AAFC8;text-transform:uppercase;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #EEF2F8;">Support Roles</div>'
       +support.map(function(u){ return supportCard(u); }).join('')
     +'</div>';
   }
 
   // ── Top bar ───────────────────────────────────────────────────────────────
-  var topBar = '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 12px;flex-shrink:0;border-bottom:1px solid #EEF2F8;background:#FFF;">'
+  var topBar = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 24px 14px;flex-shrink:0;border-bottom:1.5px solid #EEF2F8;background:#FFFFFF;">'
     +'<div>'
-      +'<div style="font-size:15px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Org Chart</div>'
-      +'<div style="font-size:11px;color:#9AAFC8;margin-top:1px;">'+allUsers.length+' users · '+hierarchy.length+' in hierarchy · '+support.length+' support</div>'
+      +'<div style="font-size:17px;font-weight:800;color:#0D2B5E;letter-spacing:-0.02em;">Org Chart</div>'
+      +'<div style="font-size:11.5px;color:#9AAFC8;margin-top:3px;font-weight:500;">'+allUsers.length+' users &nbsp;·&nbsp; '+hierarchy.length+' in hierarchy &nbsp;·&nbsp; '+support.length+' support roles</div>'
     +'</div>'
     +'<button data-act="refreshOrg" style="display:flex;align-items:center;gap:6px;background:none;border:1px solid #E2E8F0;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;color:#64748B;cursor:pointer;">'
       +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
@@ -4573,11 +4573,11 @@ function teamsPage(){
   +'</div>';
 
   // ── Full-viewport wrapper ─────────────────────────────────────────────────
-  return '<div style="display:flex;flex-direction:column;height:100%;min-height:0;margin:-4px -18px 0;background:#F8FAFC;">'
+  return '<div style="display:flex;flex-direction:column;height:100%;min-height:0;margin:-4px -18px -24px;background:#F8FAFC;">'
     +topBar
-    +'<div style="display:flex;flex:1;min-height:0;">'
+    +'<div style="display:flex;flex:1;min-height:0;overflow:hidden;">'
       // Main chart area — vertical scroll for the whole chart, h-scroll only in ZM strip
-      +'<div style="flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;padding:28px 24px 40px;">'
+      +'<div style="flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;padding:32px 32px 48px;">'
         +chartHtml
       +'</div>'
       +supportPanel
