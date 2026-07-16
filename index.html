@@ -2565,20 +2565,18 @@ function adminPage(){
     '</div>';
   }).join('');
 
-  return '<div style="padding:24px 28px 80px;">'
-  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">'
-    +'<div>'
-      +'<div style="font-size:20px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Admin Panel</div>'
-      +'<div style="font-size:12px;color:#9AAFC8;margin-top:3px;font-weight:500;">'+allUsers.length+' users · manage roles and access</div>'
-    +'</div>'
-  +'</div>'
-  + sections
-  +'</div>'
-  +(canEdit
-    ? '<button data-act="addUserOpen" data-role="" style="position:fixed;bottom:28px;right:28px;z-index:40;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:13px 22px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(29,95,204,0.4),0 1px 4px rgba(29,95,204,0.3);transition:transform 0.15s,box-shadow 0.15s;" onmouseenter="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 8px 24px rgba(29,95,204,0.45),0 2px 6px rgba(29,95,204,0.3)\'" onmouseleave="this.style.transform=\'\';this.style.boxShadow=\'0 4px 16px rgba(29,95,204,0.4),0 1px 4px rgba(29,95,204,0.3)\'">'
-      +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" pointer-events="none"><path d="M12 5v14M5 12h14"/></svg>Add User'
-    +'</button>'
-    : '');
+  return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
+    '<div>'+
+      '<div style="font-size:22px;font-weight:800;color:#0D2B5E;">Admin Panel</div>'+
+      '<div style="font-size:12px;color:#9AAFC8;margin-top:2px;">Manage users and access</div>'+
+    '</div>'+
+    (canEdit ?
+      '<button data-act="addUserOpen" data-role="" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:10px;padding:10px 20px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;gap:7px;">'+
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" pointer-events="none"><path d="M12 5v14M5 12h14"/></svg>Add User'+
+      '</button>'
+    :'')+
+  '</div>'+
+  sections;
 }
 
 
@@ -2852,7 +2850,7 @@ function customerPivotTable(lobData, activeLob, brandC) {
   tbody += '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 130px);overflow-y:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
     +'</div>'
   +'</div>';
@@ -3073,7 +3071,7 @@ function agentPivotTable(lobData, activeLob, brandC) {
   tbody += '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 130px);overflow-y:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
     +'</div>'
   +'</div>';
@@ -3585,7 +3583,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     + '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 130px);overflow-y:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
     +'</div></div>';
 }
@@ -4208,7 +4206,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       +'</div>'
       +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
     +'</div>'
-    +'<div style="overflow-x:auto;">'
+    +'<div style="overflow-x:auto;max-height:calc(100vh - 130px);overflow-y:auto;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:700px;">'
         +thead
         +'<tbody>'+grandRows+bodyRows+'</tbody>'
@@ -4315,7 +4313,7 @@ function usagePage(){
         +'<span style="font-family:\'DM Mono\',monospace;font-size:12.5px;font-weight:700;color:#15233B;width:24px;text-align:right;">'+u.totalLogins+'</span>'
       +'</div></td>'
       +'<td style="padding:11px 14px;font-size:11px;color:#64748B;font-family:\'DM Mono\',monospace;white-space:nowrap;">'+fmtLastLogin(u.lastLogin)+'</td>'
-      
+      +'<td style="padding:11px 14px;"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:'+(u.isActive?'#15875A':'#94A3B8')+';"><span style="width:6px;height:6px;border-radius:50%;background:'+(u.isActive?'#15875A':'#CBD5E1')+';display:inline-block;"></span>'+(u.isActive?'Active':'Inactive')+'</span></td>'
     +'</tr>';
   }).join('');
 
@@ -4326,7 +4324,7 @@ function usagePage(){
     + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
   +'</div>'
   +'<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 130px);">'
     +'<table style="width:100%;border-collapse:collapse;">'
       +'<thead style="position:sticky;top:0;z-index:4;"><tr style="background:#F8FAFC;border-bottom:2px solid #E2E8F0;">'
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">#</th>'
@@ -4335,7 +4333,7 @@ function usagePage(){
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Role</th>'
         +'<th style="text-align:right;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Total Logins</th>'
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Last Login</th>'
-        
+        +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Status</th>'
       +'</tr></thead>'
       +'<tbody>'+rows+'</tbody>'
     +'</table>'
@@ -4581,7 +4579,7 @@ function teamsPage(){
     +topBar
     +'<div style="display:flex;flex:1;min-height:0;overflow:hidden;">'
       // Main chart area — vertical scroll for the whole chart, h-scroll only in ZM strip
-      +'<div style="flex:1;min-width:0;overflow:auto;padding:32px 32px 48px;">'
+      +'<div style="flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;padding:32px 32px 48px;">'
         +chartHtml
       +'</div>'
       +supportPanel
@@ -5272,7 +5270,7 @@ function salesTable(M){
           : '<button data-act="page" data-val="leaderboard" class="btnq" style="display:flex;align-items:center;gap:6px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Leaderboard</button>')
       +'</div>'
     +'</div>'
-    +'<div style="overflow-x:auto;">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - '+(isWeekly2 ? '110' : (state.reportView==='Quarterly'||state.reportView==='Yearly') ? '130' : '200')+'px);">'
       +'<table style="width:100%;border-collapse:collapse;min-width:850px;font-variant-numeric:tabular-nums;">'
         +'<thead style="position:sticky;top:0;z-index:4;">'+head+'</thead>'
         +'<tbody>'+body+'</tbody>'
@@ -5749,7 +5747,7 @@ function leaderboard(){
       +'</div>'
     +'</div>'
     // table
-    +'<div style="overflow-x:auto;">'
+    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 130px);">'
       +'<table style="width:100%;border-collapse:collapse;">'
         +'<thead style="position:sticky;top:0;z-index:4;background:#F4F7FB;">'
           +'<tr>'
@@ -5917,7 +5915,7 @@ function render(){
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
-  if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; mainEl.style.height='100%'; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; mainEl.style.height=''; }
+  if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
   console.log('[PERF] mainEl.innerHTML took', (performance.now()-_tHtml).toFixed(1)+'ms');
   console.log('[PERF] render() total', (performance.now()-_tRender).toFixed(1)+'ms');
   requestAnimationFrame(function(){ console.log('[PERF] First RAF at', performance.now().toFixed(1)+'ms (page visible)'); });
