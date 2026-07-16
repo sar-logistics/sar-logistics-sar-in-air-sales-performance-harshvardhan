@@ -2740,7 +2740,7 @@ function customerPage(){
   +'</div>';
 
   if (activeView === 'table') {
-    return '<div style="padding:24px 28px 32px;">' + header + customerPivotTable(lobData, activeLob, brandC) + '</div>';
+    return '<div style="padding:24px 28px 32px;">' + header + customerPivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterReps) + '</div>';
   }
 
   var sc = ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
@@ -2758,7 +2758,15 @@ function customerPage(){
   return '<div style="padding:20px 24px 32px;overflow-y:auto;max-height:calc(100vh - 60px);">' + header + charts + '</div>';
 }
 
-function customerPivotTable(lobData, activeLob, brandC) {
+function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) {
+  // LOB labels that belong to this tab
+  var _CUST_LOB_LABELS = {
+    'Air':      ['Air Exp','Air Imp'],
+    'Ocean':    ['Sea Exp','Sea Imp'],
+    'ISO Tank': ['ISO Exp','ISO Imp']
+  };
+  var allowedLobs = _CUST_LOB_LABELS[activeLob] || [];
+  var frNorm = effectiveReps ? effectiveReps.map(function(r){ return normalizeName(r); }) : null;
   var rows = (lobData.allCustomers || []).slice();
   var sortCol = state.custSortCol || 'gp';
   var sortDir = (state.custSortDir === undefined) ? -1 : state.custSortDir;
@@ -2811,10 +2819,13 @@ function customerPivotTable(lobData, activeLob, brandC) {
   rows.forEach(function(c, i) {
     var gpColor  = c.gp >= 0 ? '#059669' : '#DC2626';
     var gpPctColor = c.gpPct >= 15 ? '#059669' : c.gpPct >= 5 ? '#D97706' : '#DC2626';
-    var lobsHtml = (c.lobs||[]).map(function(l){
+    var lobsHtml = (c.lobs||[]).filter(function(l){ return allowedLobs.indexOf(l) > -1; }).map(function(l){
       return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:9.5px;font-weight:700;background:#EEF2FF;color:#4B5FCC;margin:1px;">'+esc(l)+'</span>';
     }).join('');
-    var repsText = (c.salesReps||[]).slice(0,3).join(', ') + (c.salesReps && c.salesReps.length > 3 ? ' +' + (c.salesReps.length-3) : '');
+    var filteredReps = frNorm
+      ? (c.salesReps||[]).filter(function(r){ return frNorm.indexOf(normalizeName(r||'')) > -1; })
+      : (c.salesReps||[]);
+    var repsText = filteredReps.slice(0,3).join(', ') + (filteredReps.length > 3 ? ' +' + (filteredReps.length-3) : '');
     var bg = i%2===1 ? 'background:#FAFBFD;' : '';
 
     // Compute grouped column values
@@ -3003,7 +3014,7 @@ function agentPage(){
   +'</div>';
 
   if (activeView === 'table') {
-    return '<div style="padding:24px 28px 32px;">' + header + agentPivotTable(lobData, activeLob, brandC) + '</div>';
+    return '<div style="padding:24px 28px 32px;">' + header + agentPivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterRepsA) + '</div>';
   }
 
   var sc = ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
@@ -3021,7 +3032,14 @@ function agentPage(){
   return '<div style="padding:20px 24px 32px;overflow-y:auto;max-height:calc(100vh - 60px);">' + header + charts + '</div>';
 }
 
-function agentPivotTable(lobData, activeLob, brandC) {
+function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) {
+  var _AGENT_LOB_LABELS = {
+    'Air':      ['Air Exp','Air Imp'],
+    'Ocean':    ['Sea Exp','Sea Imp'],
+    'ISO Tank': ['ISO Exp','ISO Imp']
+  };
+  var allowedLobs = _AGENT_LOB_LABELS[activeLob] || [];
+  var frNorm = effectiveReps ? effectiveReps.map(function(r){ return normalizeName(r); }) : null;
   var rows = (lobData.allAgents || []).slice();
   var sortCol = state.agentSortCol || 'gp';
   var sortDir = (state.agentSortDir === undefined) ? -1 : state.agentSortDir;
@@ -3052,10 +3070,13 @@ function agentPivotTable(lobData, activeLob, brandC) {
   rows.forEach(function(a, i) {
     var gpColor    = a.gp >= 0 ? '#059669' : '#DC2626';
     var gpPctColor = a.gpPct >= 15 ? '#059669' : a.gpPct >= 5 ? '#D97706' : '#DC2626';
-    var lobsHtml   = (a.lobs||[]).map(function(l){
+    var lobsHtml   = (a.lobs||[]).filter(function(l){ return allowedLobs.indexOf(l) > -1; }).map(function(l){
       return '<span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:9.5px;font-weight:700;background:#EEF2FF;color:#4B5FCC;margin:1px;">'+esc(l)+'</span>';
     }).join('');
-    var repsText = (a.salesReps||[]).slice(0,3).join(', ') + (a.salesReps && a.salesReps.length>3 ? ' +'+(a.salesReps.length-3) : '');
+    var filteredRepsA = frNorm
+      ? (a.salesReps||[]).filter(function(r){ return frNorm.indexOf(normalizeName(r||'')) > -1; })
+      : (a.salesReps||[]);
+    var repsText = filteredRepsA.slice(0,3).join(', ') + (filteredRepsA.length > 3 ? ' +'+(filteredRepsA.length-3) : '');
     var bg = i%2===1 ? 'background:#FAFBFD;' : '';
     tbody += '<tr style="border-bottom:1px solid #F1F5F9;'+bg+'">'
       +'<td style="padding:7px 10px;font-size:11px;color:#9AAFC8;text-align:center;font-weight:600;">'+(i+1)+'</td>'
