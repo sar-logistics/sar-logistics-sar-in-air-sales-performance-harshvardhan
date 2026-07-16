@@ -3496,8 +3496,9 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     // Build per-tradelane group counts from allDrillRows
     var _tgCount = {};   // tg → total shipments
     var _tgMDCount = {}; // tg → { colKey → shipments }
+    var _tgNoTgCount = 0; // rows with no _tg field (not yet computed — old cache)
     allDrillRows.forEach(function(r){
-      if (!r._tg) return;
+      if (!r._tg) { _tgNoTgCount++; return; }
       if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
       if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
       var inActive = _fyGroups ? !!_tgFyMonsSet[r._ml] : !!_tgActiveMonsSet[r._ml];
@@ -3509,10 +3510,24 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       _tgMDCount[tg][colKey] = (_tgMDCount[tg][colKey] || 0) + 1;
     });
 
+    console.log('[TL DEBUG] allDrillRows total:', allDrillRows.length,
+      '| rows missing _tg:', _tgNoTgCount,
+      '| activeMons:', activeMons,
+      '| filterLobs:', filterLobs,
+      '| effectiveReps:', effectiveReps ? effectiveReps.length : 'none');
+    console.log('[TL DEBUG] _tgCount:', JSON.stringify(_tgCount));
+
     // Apply override to each country row
     rows.forEach(function(c){
+      var srrShipments = c.shipments; // original SRR count before override
       if (_tgCount[c.name] !== undefined) {
         c.shipments = _tgCount[c.name];
+        if (c.name === 'US') {
+          console.log('[TL DEBUG] US: SRR count =', srrShipments, '| allDrillRows count =', _tgCount['US'],
+            '| rows missing _tg =', _tgNoTgCount,
+            '| allDrillRows US LOB breakdown:',
+            JSON.stringify(allDrillRows.filter(function(r){ return r._tg==='US'; }).reduce(function(acc,r){ acc[r.lob]=(acc[r.lob]||0)+1; return acc; }, {})));
+        }
         // Also override monthData shipments
         if (c.monthData) {
           var tgMD = _tgMDCount[c.name] || {};
@@ -3522,8 +3537,14 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
             c.monthData[k].shipments = tgMD[k] || 0;
           });
         }
+      } else {
+        if (c.name === 'US') {
+          console.log('[TL DEBUG] US: no _tgCount entry — override NOT applied. SRR count stays:', srrShipments);
+        }
       }
     });
+  } else {
+    console.log('[TL DEBUG] allDrillRows not loaded — _tg override skipped');
   }
 
   function tlHue(n){ var h=0; for(var i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))&0xffff; return h%360; }
