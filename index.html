@@ -2565,7 +2565,7 @@ function adminPage(){
     '</div>';
   }).join('');
 
-  return '<div style="padding:20px 24px 80px;">'+
+  return '<div style="padding:20px 24px 80px;overflow-y:auto;max-height:calc(100vh - 60px);">'+
   '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
     '<div>'+
       '<div style="font-size:22px;font-weight:800;color:#0D2B5E;">Admin Panel</div>'+
@@ -2754,7 +2754,7 @@ function customerPage(){
     + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'customer')
   +'</div>';
 
-  return '<div style="padding:20px 24px 32px;">' + header + charts + '</div>';
+  return '<div style="padding:20px 24px 32px;overflow-y:auto;max-height:calc(100vh - 60px);">' + header + charts + '</div>';
 }
 
 function customerPivotTable(lobData, activeLob, brandC) {
@@ -3016,7 +3016,7 @@ function agentPage(){
     + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'agent')
   +'</div>';
 
-  return '<div style="padding:20px 24px 32px;">' + header + charts + '</div>';
+  return '<div style="padding:20px 24px 32px;overflow-y:auto;max-height:calc(100vh - 60px);">' + header + charts + '</div>';
 }
 
 function agentPivotTable(lobData, activeLob, brandC) {
@@ -3289,7 +3289,7 @@ function tradelanePage(){
 
   var sc = ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
 
-  return '<div style="padding:20px 24px 32px;">' + header + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
+  return '<div style="padding:20px 24px 32px;overflow-y:auto;max-height:calc(100vh - 60px);">' + header + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
     + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'tradelane')
     + (activeLob==='Air'
         ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'tradelane')
