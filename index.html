@@ -3210,6 +3210,10 @@ function tradelanePage(){
   if (_filterZonesTL.length > 0 && !allDrillRows) {
     loadDrillData(function(){ _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); });
   }
+  // Also load drill data for table view so _tg-based shipment count override can run
+  if (state.tradelaneView === 'table' && !allDrillRows) {
+    loadDrillData(function(){ _tradelanePivotCache={}; render(); });
+  }
 
   // Build effective SP list — prefer allDrillRows (authoritative), fallback to repsRawOriginal display names
   var _zoneRawSPsTL;
