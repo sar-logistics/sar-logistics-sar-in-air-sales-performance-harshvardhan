@@ -2611,7 +2611,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "srr") {
-      const { collectionName, records } = req.body || {};
+      const { collectionName, records, fy } = req.body || {};
       const ALLOWED_SRR = new Set(["srr_sea_export","srr_sea_import","srr_air_export","srr_air_import"]);
       if (!collectionName || !ALLOWED_SRR.has(collectionName)) {
         return res.status(400).json({ error: "collectionName must be one of: " + [...ALLOWED_SRR].join(", ") });
@@ -2629,7 +2629,12 @@ module.exports = async function handler(req, res) {
         }
         return out;
       }
-      const sanitizedRecords = records.map(sanitizeKeys);
+      // Stamp _fy if provided so we can do FY-scoped wipes (both FYs coexist in one collection)
+      const sanitizedRecords = records.map(rec => {
+        const s = sanitizeKeys(rec);
+        if (fy) s._fy = fy;
+        return s;
+      });
 
       // Upsert by shipment number so FY26 + FY27 can both push without wiping each other
       const KEY_CANDIDATES = ["Shipment No", "Shipment No\uFF0E", "Shipment No.", "Job No", "Job No.", "House No", "House No.", "Shipment Number", "Job Number"];
@@ -2647,7 +2652,7 @@ module.exports = async function handler(req, res) {
         if (keyField) {
           const ops = chunk.map(rec => ({
             updateOne: {
-              filter: { [keyField]: rec[keyField] },
+              filter: fy ? { [keyField]: rec[keyField], _fy: fy } : { [keyField]: rec[keyField] },
               update: { $set: rec },
               upsert: true,
             }
@@ -2662,6 +2667,16 @@ module.exports = async function handler(req, res) {
       }
       Object.keys(tradelaneCacheMap).forEach(k => delete tradelaneCacheMap[k]);
       return res.status(200).json({ success: true, collection: collectionName, inserted, updated, keyField });
+    }
+
+    if (action === "wipeSRRByFY") {
+      // Wipe only one FY's SRR data — safe to run before re-pushing a single year
+      const { collection: collName, fy } = req.body || {};
+      const ALLOWED_SRR = ["srr_sea_export","srr_sea_import","srr_air_export","srr_air_import"];
+      if (!collName || !ALLOWED_SRR.includes(collName)) return res.status(400).json({ error: "unknown collection" });
+      if (!fy || !["FY26","FY27","FY28"].includes(fy)) return res.status(400).json({ error: "fy must be FY26, FY27 or FY28" });
+      const result = await db.collection(collName).deleteMany({ _fy: fy });
+      return res.json({ success: true, deleted: result.deletedCount, collection: collName, fy });
     }
 
     if (action === "wipeCollection") {
