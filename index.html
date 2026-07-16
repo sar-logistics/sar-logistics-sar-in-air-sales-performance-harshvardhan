@@ -700,7 +700,7 @@ function fetchLiveData(callback, force){
           // Save with lobData included so next boot has correct numbers from first render
           setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
           if (data.allDrillRows && data.allDrillRows.length > 0 && !allDrillRows) {
-            allDrillRows = dedupDrillRows(data.allDrillRows);
+            allDrillRows = dedupDrillRows(data.allDrillRows); _patchTgOnDrillRows(allDrillRows);
             // drillrows kept in-memory only (too large for localStorage)
           }
           // If allDrillRows not in sales response, fetch it silently in background
@@ -3249,8 +3249,8 @@ function tradelanePage(){
     var _effSet = _effectiveFilterRepsTL ? {} : null;
     if (_effectiveFilterRepsTL) _effectiveFilterRepsTL.forEach(function(sp){ _effSet[sp]=true; });
 
-    // Aggregate per-tradelane from allDrillRows
-    var _tgMap = {}; // tg → { shipments, gp, revenue, tons, teu, lobs, salesReps }
+    // Aggregate per-tradelane from allDrillRows including monthData for pivot table
+    var _tgMap = {}; // tg → { shipments, gp, revenue, tons, teu, monthData:{} }
     var _activeMonsSet = {};
     var _idxs = filteredMonthIndices();
     _idxs.forEach(function(i){ _activeMonsSet[months26[i]] = true; });
@@ -3261,13 +3261,22 @@ function tradelanePage(){
       if (!_activeMonsSet[r._ml]) return;
       var tg = r._tg || '';
       if (!tg) return;
-      if (!_tgMap[tg]) _tgMap[tg] = { name:tg, shipments:0, gp:0, revenue:0, tons:0, teu:0, lobs:[], salesReps:[] };
+      if (!_tgMap[tg]) _tgMap[tg] = { name:tg, shipments:0, gp:0, revenue:0, tons:0, teu:0, lobs:[], salesReps:[], monthData:{} };
       var e = _tgMap[tg];
       e.shipments++;
-      e.gp += r.g || 0;
-      e.revenue += effectiveRevenueTL(r);
-      e.tons += r.tons || 0;
-      e.teu  += r.t   || 0;
+      var rev = effectiveRevenueTL(r);
+      e.gp      += r.g || 0;
+      e.revenue += rev;
+      e.tons    += r.tons || 0;
+      e.teu     += r.t   || 0;
+      // Build monthData for pivot table monthly columns
+      var ml = r._ml;
+      if (!e.monthData[ml]) e.monthData[ml] = { shipments:0, gp:0, revenue:0, tons:0, teu:0 };
+      e.monthData[ml].shipments++;
+      e.monthData[ml].gp      += r.g || 0;
+      e.monthData[ml].revenue += rev;
+      e.monthData[ml].tons    += r.tons || 0;
+      e.monthData[ml].teu     += r.t   || 0;
     });
 
     var _filtered = Object.values(_tgMap).map(function(e){
@@ -3507,18 +3516,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     // Build per-tradelane group counts from allDrillRows
     var _tgCount = {};   // tg → total shipments
     var _tgMDCount = {}; // tg → { colKey → shipments }
-    var _tgNoTgCount = 0; // rows with no _tg field (not yet computed — old cache)
-
-    // Patch _tg client-side on any rows still missing it
-    var _TL_MAP2 = {'US':'US','GB':'Europe','CA':'Canada','PR':'LATAM','BR':'LATAM','VN':'Asia','MX':'LATAM','FR':'Med','BE':'Europe','GE':'Europe','DE':'Europe','NL':'Europe','PY':'LATAM','TR':'Med','ES':'Med','ID':'Asia','SG':'Asia','OM':'Middle East','FI':'Europe','EG':'Med','MA':'Med','AE':'Middle East','TN':'Med','ZA':'Africa','GH':'Africa','CN':'Asia','HN':'LATAM','PE':'LATAM','DO':'Dominican Republic','PK':'Asia','AU':'Australia','NZ':'Australia','JP':'Asia','KR':'Asia','IN':'India','LK':'Asia','BD':'Asia','TH':'Asia','MY':'Asia','PH':'Asia','TW':'Asia','QA':'Middle East','SA':'Middle East','KW':'Middle East','BH':'Middle East','JO':'Middle East','LB':'Middle East','IL':'Middle East','IQ':'Middle East','IT':'Med','PT':'Med','GR':'Med','HR':'Med','MT':'Med','CY':'Med','SE':'Europe','NO':'Europe','DK':'Europe','PL':'Europe','CZ':'Europe','AT':'Europe','CH':'Europe','HU':'Europe','RO':'Europe','BG':'Europe','UA':'Europe','RU':'Europe','NI':'LATAM','SV':'LATAM','GT':'LATAM','CR':'LATAM','PA':'LATAM','CO':'LATAM','VE':'LATAM','EC':'LATAM','AR':'LATAM','CL':'LATAM','BO':'LATAM','UY':'LATAM','GY':'LATAM','NG':'Africa','KE':'Africa','ET':'Africa','TZ':'Africa','UG':'Africa','CI':'Africa','CM':'Africa','SN':'Africa'};
-    function _p2tg(s){ var m=String(s||'').trim().match(/^\(([A-Z]{2,5})\)/); return m?(_TL_MAP2[m[1].slice(0,2).toUpperCase()]||''):''; }
-    allDrillRows.forEach(function(r){
-      if (r._tg) return;
-      var lob = r.lob || '', tg = '';
-      if (lob==='AIR EXPORT'||lob==='SEA EXPORT') tg=_p2tg(r.dischargePort)||_p2tg(r.ataDischarge)||_p2tg(r.location);
-      else if (lob==='AIR IMPORT'||lob==='SEA IMPORT') tg=_p2tg(r.loadingPort)||_p2tg(r.atdLoading)||_p2tg(r.etdLoading)||_p2tg(r.location);
-      if (tg) r._tg = tg;
-    });
+    var _tgNoTgCount = 0; // rows with no _tg field
     allDrillRows.forEach(function(r){
       if (!r._tg) { _tgNoTgCount++; return; }
       if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
@@ -6126,7 +6124,22 @@ function renderKeepTopbar(){
 var allDrillRows = null;
 var _drillDataLoading = false;
 var _drillDataCallbacks = [];
-var _drillLoadAttempted = false; // set after first load attempt — prevents infinite spinner
+var _drillLoadAttempted = false;
+
+// Patch _tg (tradelane group) on drill rows that don't have it set by server
+// Uses dischargePort/loadingPort fields with fallbacks
+var _TL_MAP_CLIENT = {'US':'US','GB':'Europe','CA':'Canada','PR':'LATAM','BR':'LATAM','VN':'Asia','MX':'LATAM','FR':'Med','BE':'Europe','GE':'Europe','DE':'Europe','NL':'Europe','PY':'LATAM','TR':'Med','ES':'Med','ID':'Asia','SG':'Asia','OM':'Middle East','FI':'Europe','EG':'Med','MA':'Med','AE':'Middle East','TN':'Med','ZA':'Africa','GH':'Africa','CN':'Asia','HN':'LATAM','PE':'LATAM','DO':'Dominican Republic','PK':'Asia','AU':'Australia','NZ':'Australia','JP':'Asia','KR':'Asia','IN':'India','LK':'Asia','BD':'Asia','TH':'Asia','MY':'Asia','PH':'Asia','TW':'Asia','QA':'Middle East','SA':'Middle East','KW':'Middle East','BH':'Middle East','JO':'Middle East','LB':'Middle East','IL':'Middle East','IQ':'Middle East','IT':'Med','PT':'Med','GR':'Med','HR':'Med','MT':'Med','CY':'Med','SE':'Europe','NO':'Europe','DK':'Europe','PL':'Europe','CZ':'Europe','AT':'Europe','CH':'Europe','HU':'Europe','RO':'Europe','BG':'Europe','UA':'Europe','RU':'Europe','NI':'LATAM','SV':'LATAM','GT':'LATAM','CR':'LATAM','PA':'LATAM','CO':'LATAM','VE':'LATAM','EC':'LATAM','AR':'LATAM','CL':'LATAM','BO':'LATAM','UY':'LATAM','GY':'LATAM','NG':'Africa','KE':'Africa','ET':'Africa','TZ':'Africa','UG':'Africa','CI':'Africa','CM':'Africa','SN':'Africa'};
+function _portToTG2(s){ var m=String(s||'').trim().match(/^\(([A-Z]{2,5})\)/); return m?(_TL_MAP_CLIENT[m[1].slice(0,2).toUpperCase()]||''):''; }
+function _patchTgOnDrillRows(rows){
+  if (!rows) return;
+  rows.forEach(function(r){
+    if (r._tg) return;
+    var lob = r.lob || '', tg = '';
+    if (lob==='AIR EXPORT'||lob==='SEA EXPORT') tg=_portToTG2(r.dischargePort)||_portToTG2(r.ataDischarge)||_portToTG2(r.location);
+    else if (lob==='AIR IMPORT'||lob==='SEA IMPORT') tg=_portToTG2(r.loadingPort)||_portToTG2(r.atdLoading)||_portToTG2(r.etdLoading)||_portToTG2(r.location);
+    if (tg) r._tg = tg;
+  });
+}
 function dedupDrillRows(rows) {
   if (!rows || !rows.length) return rows;
   var seen = {};
@@ -6197,7 +6210,7 @@ function loadDrillData(callback){
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
-        allDrillRows = dedupDrillRows(data.sales.allDrillRows);
+        allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
         // Patch tradelane cache with correct _tg-based shipment counts
         // so next load shows correct numbers instantly from cache
         _patchTradelaneCacheWithDrillCounts();
@@ -7828,7 +7841,7 @@ window.addEventListener('load', function() {
             setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
             // Save drill rows separately
             if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0) {
-              allDrillRows = dedupDrillRows(d.sales.allDrillRows);
+              allDrillRows = dedupDrillRows(d.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
               // drillrows kept in-memory only (too large for localStorage)
             }
             // Check if lobData came bundled (Air keys always included in response)
@@ -7841,7 +7854,7 @@ window.addEventListener('load', function() {
               render();
             }
           } else if (d.sales.allDrillRows && d.sales.allDrillRows.length > 0 && !allDrillRows) {
-            allDrillRows = dedupDrillRows(d.sales.allDrillRows);
+            allDrillRows = dedupDrillRows(d.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
             // drillrows kept in-memory only (too large for localStorage)
           }
         }
