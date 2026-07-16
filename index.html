@@ -678,7 +678,7 @@ function fetchLiveData(callback, force){
         .forEach(function(k){ localStorage.removeItem(k); });
       localStorage.removeItem('sar_user_session');
       _weekDataFetched = false;
-      _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {};
+      _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _customerPivotCache = {}; _agentPivotCache = {};
       allDrillRows = null;
 
       try {
@@ -986,6 +986,8 @@ function makeFetcher(action, lsKey, setReady) {
 var _customerCache = {}; // key → data
 var _custLobRepMapCache = {}; // activeLob → custLobRepMap (rebuilt when allDrillRows changes)
 var _agentLobRepMapCache = {}; // activeLob → agentLobRepMap
+var _customerPivotCache = {}; // pivot table HTML cache keyed by state hash
+var _agentPivotCache = {};    // pivot table HTML cache keyed by state hash
 var _customerFetchTimer = null;
 
 // Debounced fetch — waits 300ms after last FROM/TO change before fetching
@@ -2762,7 +2764,11 @@ function customerPage(){
   +'</div>';
 
   if (activeView === 'table') {
-    return '<div style="padding:24px 28px 32px;">' + header + customerPivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterReps) + '</div>';
+    var _custPivotKey = activeLob+'|'+state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+state.currency+'|'+state.custSortCol+'|'+state.custSortDir+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+(allDrillRows?allDrillRows.length:0);
+    if (!_customerPivotCache[_custPivotKey]) {
+      _customerPivotCache[_custPivotKey] = customerPivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterReps);
+    }
+    return '<div style="padding:24px 28px 32px;">' + header + _customerPivotCache[_custPivotKey] + '</div>';
   }
 
   var sc = ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
@@ -3017,7 +3023,11 @@ function agentPage(){
   +'</div>';
 
   if (activeView === 'table') {
-    return '<div style="padding:24px 28px 32px;">' + header + agentPivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterRepsA) + '</div>';
+    var _agentPivotKey = activeLob+'|'+state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+state.currency+'|'+state.agentSortCol+'|'+state.agentSortDir+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+(allDrillRows?allDrillRows.length:0);
+    if (!_agentPivotCache[_agentPivotKey]) {
+      _agentPivotCache[_agentPivotKey] = agentPivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterRepsA);
+    }
+    return '<div style="padding:24px 28px 32px;">' + header + _agentPivotCache[_agentPivotKey] + '</div>';
   }
 
   var sc = ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
@@ -6528,7 +6538,7 @@ function computeDrillResult(entity, metric, month){
   };
 }
 
-var _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {};
+var _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _customerPivotCache = {}; _agentPivotCache = {};
 var _insightDrillCache = {}; // cache for customer/agent/tradelane drill results
 var _tradelanePivotCache = {}; _tlGrandDrillCache = {}; // cache rendered tradelane pivot HTML // in-memory: entity||metric||col → full result object
 var _tlGrandDrillCache = {}; // cache grand total drill row aggregates keyed by lob+months
@@ -7162,7 +7172,7 @@ document.addEventListener('click', function(ev){
         .forEach(function(k){ localStorage.removeItem(k); });
     } catch(e){}
     _weekDataFetched = false;
-    _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {};
+    _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _customerPivotCache = {}; _agentPivotCache = {};
     // Reset all secondary data ready flags so pages show fresh data
     customerDataReady = false; financeDataReady = false; financeDataLoading = false;
     opDataReady = false; opDataLoading = false; usageDataReady = false; orgDataReady = false;
@@ -7317,20 +7327,23 @@ document.addEventListener('click', function(ev){
   else if(act==='toggleToDrop'){ ev.stopPropagation(); state.toDropOpen=!state.toDropOpen; state.fromDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='setWeeklyMonth'){ ev.stopPropagation(); state.weeklyMonth=el.getAttribute('data-val'); state.weeklyDropOpen=false; if(state.page==='tradelane'){ _tradelanePivotCache={}; fetchTradelaneData(function(){render();},false); } else render(); }
   else if(act==='toggleWeeklyDrop'){ ev.stopPropagation(); state.weeklyDropOpen=!state.weeklyDropOpen; state.fromDropOpen=false; state.toDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='setCustomerLob'){ ev.stopPropagation(); state.customerLob=el.getAttribute('data-val'); render(); }
-  else if(act==='setCustView'){ ev.stopPropagation(); state.customerView=el.getAttribute('data-val'); render(); }
+  else if(act==='setCustomerLob'){ ev.stopPropagation(); state.customerLob=el.getAttribute('data-val'); _customerPivotCache={}; render(); }
+  else if(act==='setCustView'){ ev.stopPropagation(); state.customerView=el.getAttribute('data-val'); _customerPivotCache={}; render(); }
   else if(act==='custSort'){
     ev.stopPropagation();
     var col = el.getAttribute('data-col');
     if(state.custSortCol === col){ state.custSortDir = (state.custSortDir||(-1)) * -1; }
     else { state.custSortCol = col; state.custSortDir = -1; }
+    _customerPivotCache = {};
     render();
   }
-  else if(act==='setAgentLob'){ ev.stopPropagation(); state.agentLob=el.getAttribute('data-val'); render(); }
-  else if(act==='setAgentView'){ ev.stopPropagation(); state.agentView=el.getAttribute('data-val'); render(); }
+  else if(act==='setAgentLob'){ ev.stopPropagation(); state.agentLob=el.getAttribute('data-val'); _agentPivotCache={}; render(); }
+  else if(act==='setAgentView'){ ev.stopPropagation(); state.agentView=el.getAttribute('data-val'); _agentPivotCache={}; render(); }
   else if(act==='agentSort'){
     ev.stopPropagation(); var col=el.getAttribute('data-col');
-    if(state.agentSortCol===col){ state.agentSortDir=(state.agentSortDir||(-1))*-1; } else { state.agentSortCol=col; state.agentSortDir=-1; } render();
+    if(state.agentSortCol===col){ state.agentSortDir=(state.agentSortDir||(-1))*-1; } else { state.agentSortCol=col; state.agentSortDir=-1; }
+    _agentPivotCache = {};
+    render();
   }
   else if(act==='setTradelaneLob'){ ev.stopPropagation(); state.tradelaneLob=el.getAttribute('data-val'); _insightDrillCache={}; _tradelanePivotCache={}; render(); }
   else if(act==='setTradelaneView'){ ev.stopPropagation(); state.tradelaneView=el.getAttribute('data-val'); render(); }
@@ -7398,7 +7411,7 @@ document.addEventListener('click', function(ev){
   }
   else if(act==='toggleFilterLobDrop'){ ev.stopPropagation(); state.filterLobDropOpen=!state.filterLobDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterRepDrop'){ ev.stopPropagation(); state.filterRepDropOpen=!state.filterRepDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='filterLobAll'){ ev.stopPropagation(); _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterLobAll'){ ev.stopPropagation(); _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _customerPivotCache = {}; _agentPivotCache = {}; state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='filterRepAll'){ ev.stopPropagation(); state.filterReps=[]; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterLob'){
     ev.stopPropagation();
@@ -7408,7 +7421,7 @@ document.addEventListener('click', function(ev){
     } else {
       state.filterLobs = state.filterLobs.concat([lv]);
     }
-    _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _pendencyDrillCache = {};
+    _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _customerPivotCache = {}; _agentPivotCache = {}; _pendencyDrillCache = {};
     // If newly selected LOB isn't in lobData yet, fetch full lobData then re-render
     var _sampleRep = repsRawOriginal && repsRawOriginal[0];
     var _hasAllLobs = _sampleRep && _sampleRep.lobData &&
