@@ -3245,6 +3245,9 @@ function tradelanePage(){
 
   // When zone/rep filter active, rebuild lobData entirely from allDrillRows
   if (_needsDrill && allDrillRows && allDrillRows.length > 0) {
+    // Always ensure _tg is patched — allDrillRows may have been cached before _patchTgOnDrillRows existed
+    _patchTgOnDrillRows(allDrillRows);
+
     var _drillLobKeys = filterLobs;
     var _effSet = _effectiveFilterRepsTL ? {} : null;
     if (_effectiveFilterRepsTL) _effectiveFilterRepsTL.forEach(function(sp){ _effSet[sp]=true; });
