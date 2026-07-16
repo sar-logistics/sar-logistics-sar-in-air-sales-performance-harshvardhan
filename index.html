@@ -3252,24 +3252,6 @@ function tradelanePage(){
     var _effSet = _effectiveFilterRepsTL ? {} : null;
     if (_effectiveFilterRepsTL) _effectiveFilterRepsTL.forEach(function(sp){ _effSet[sp]=true; });
 
-    // DEBUG
-    var _dbgTotal = allDrillRows.length;
-    var _dbgLobMatch = allDrillRows.filter(function(r){ return _drillLobKeys.indexOf(r.lob)>-1; }).length;
-    var _dbgRepMatch = _effSet ? allDrillRows.filter(function(r){ return _effSet[r._sp]; }).length : 'no rep filter';
-    var _dbgTgEmpty  = allDrillRows.filter(function(r){ return _drillLobKeys.indexOf(r.lob)>-1 && !r._tg; }).length;
-    var _dbgBothMatch = allDrillRows.filter(function(r){ return _drillLobKeys.indexOf(r.lob)>-1 && (_effSet?_effSet[r._sp]:true) && r._tg; }).length;
-    console.log('[TL ZONE] filterLobs:', _drillLobKeys, '| effectiveReps:', _effectiveFilterRepsTL ? _effectiveFilterRepsTL.length+'reps' : 'none', '| effSet sample:', _effSet?Object.keys(_effSet).slice(0,3):[]);
-    console.log('[TL ZONE] allDrillRows:', _dbgTotal, '| lob match:', _dbgLobMatch, '| rep match:', _dbgRepMatch, '| _tg empty (lob-matched):', _dbgTgEmpty, '| all 3 match:', _dbgBothMatch);
-    if (_dbgTgEmpty > 0) {
-      var _sample = allDrillRows.find(function(r){ return _drillLobKeys.indexOf(r.lob)>-1 && !r._tg; });
-      console.log('[TL ZONE] Sample row missing _tg:', _sample ? {lob:_sample.lob,dischargePort:_sample.dischargePort,loadingPort:_sample.loadingPort,ataDischarge:_sample.ataDischarge,atdLoading:_sample.atdLoading,location:_sample.location} : 'none');
-    }
-    if (_effectiveFilterRepsTL && _effectiveFilterRepsTL.length === 0) {
-      console.log('[TL ZONE] ⚠️ effectiveFilterRepsTL is EMPTY — zone has no matching reps in allDrillRows');
-      var _zoneRows = allDrillRows.filter(function(r){ return r._zone && _filterZonesTL.indexOf(r._zone)>-1; });
-      console.log('[TL ZONE] Rows with matching _zone:', _zoneRows.length, '| zones searched:', _filterZonesTL, '| unique _zones in data:', [...new Set(allDrillRows.map(function(r){return r._zone;}).filter(Boolean))].slice(0,10));
-    }
-
     // Aggregate per-tradelane from allDrillRows including monthData for pivot table
     var _tgMap = {}; // tg → { shipments, gp, revenue, tons, teu, monthData:{} }
     var _activeMonsSet = {};
@@ -3396,10 +3378,7 @@ function tradelanePage(){
     var _openKeys = Object.keys(_tlOpen).filter(function(k){return _tlOpen[k];}).sort().join(',');
     var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(state.yearType||'Financial')+'|'+(state.selectedQuarter||'')+'|'+(state.weeklyMonth||'')+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+_openKeys+'|'+state.currency;
     if (!_tradelanePivotCache[_tlPivotKey]) {
-      // Build pivot table (expensive) — cache result
-      var _t0 = performance.now();
       _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterRepsTL);
-      console.log('[PERF] tradelanePivotTable built in', (performance.now()-_t0).toFixed(1)+'ms');
     }
     return '<div style="padding:24px 28px 32px;">' + header + _tradelanePivotCache[_tlPivotKey] + '</div>';
   }
@@ -3535,9 +3514,8 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     if (_fyGroups) { _fyGroups.forEach(function(g){ g.idxs.forEach(function(i){ _tgFyMonsSet[months26[i]] = g.key; }); }); }
 
     // Build per-tradelane group counts from allDrillRows
-    var _tgCount = {};   // tg → total shipments
-    var _tgMDCount = {}; // tg → { colKey → shipments }
-    var _tgNoTgCount = 0; // rows with no _tg field
+    var _tgCount = {};
+    var _tgMDCount = {};
     allDrillRows.forEach(function(r){
       if (!r._tg) { _tgNoTgCount++; return; }
       if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
@@ -3551,34 +3529,10 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       _tgMDCount[tg][colKey] = (_tgMDCount[tg][colKey] || 0) + 1;
     });
 
-    console.log('[TL DEBUG] allDrillRows total:', allDrillRows.length,
-      '| rows missing _tg:', _tgNoTgCount,
-      '| activeMons:', activeMons,
-      '| filterLobs:', filterLobs,
-      '| effectiveReps:', effectiveReps ? effectiveReps.length : 'none');
-    // Sample first row to see what fields exist
-    if (allDrillRows.length > 0) {
-      var _sample = allDrillRows[0];
-      console.log('[TL DEBUG] Sample row keys:', Object.keys(_sample).join(', '));
-      console.log('[TL DEBUG] Sample row _tg:', _sample._tg, '| lob:', _sample.lob, '| _ml:', _sample._ml);
-      // Count rows with _tg for Air lobs
-      var _airWithTg = allDrillRows.filter(function(r){ return (r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT') && r._tg; });
-      var _airTotal  = allDrillRows.filter(function(r){ return r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT'; });
-      console.log('[TL DEBUG] Air rows total:', _airTotal.length, '| Air rows with _tg:', _airWithTg.length);
-    }
-    console.log('[TL DEBUG] _tgCount:', JSON.stringify(_tgCount));
-
     // Apply override to each country row
     rows.forEach(function(c){
-      var srrShipments = c.shipments; // original SRR count before override
       if (_tgCount[c.name] !== undefined) {
         c.shipments = _tgCount[c.name];
-        if (c.name === 'US') {
-          console.log('[TL DEBUG] US: SRR count =', srrShipments, '| allDrillRows count =', _tgCount['US'],
-            '| rows missing _tg =', _tgNoTgCount,
-            '| allDrillRows US LOB breakdown:',
-            JSON.stringify(allDrillRows.filter(function(r){ return r._tg==='US'; }).reduce(function(acc,r){ acc[r.lob]=(acc[r.lob]||0)+1; return acc; }, {})));
-        }
         // Also override monthData shipments
         if (c.monthData) {
           var tgMD = _tgMDCount[c.name] || {};
@@ -3588,14 +3542,8 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
             c.monthData[k].shipments = tgMD[k] || 0;
           });
         }
-      } else {
-        if (c.name === 'US') {
-          console.log('[TL DEBUG] US: no _tgCount entry — override NOT applied. SRR count stays:', srrShipments);
-        }
       }
     });
-  } else {
-    console.log('[TL DEBUG] allDrillRows not loaded — _tg override skipped');
   }
 
   function tlHue(n){ var h=0; for(var i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))&0xffff; return h%360; }
