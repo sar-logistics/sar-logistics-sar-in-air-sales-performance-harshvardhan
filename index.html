@@ -984,6 +984,8 @@ function makeFetcher(action, lsKey, setReady) {
 
 // In-memory cache for customer data per date range key — instant switching
 var _customerCache = {}; // key → data
+var _custLobRepMapCache = {}; // activeLob → custLobRepMap (rebuilt when allDrillRows changes)
+var _agentLobRepMapCache = {}; // activeLob → agentLobRepMap
 var _customerFetchTimer = null;
 
 // Debounced fetch — waits 300ms after last FROM/TO change before fetching
@@ -2795,18 +2797,20 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
   };
   var _activeLobKeys = _lobKeys[activeLob] || [];
-  // Build per-customer map: customerNameLower → { repNorm: true } for the active LOB
-  var custLobRepMap = {};
-  if (allDrillRows && allDrillRows.length > 0) {
+  // Build per-customer LOB→rep map — cached by activeLob, only rebuilt when allDrillRows changes
+  if (!_custLobRepMapCache[activeLob] && allDrillRows && allDrillRows.length > 0) {
+    var _newCustMap = {};
     allDrillRows.forEach(function(r){
       if (_activeLobKeys.indexOf(r.lob) === -1) return;
       var cKey = (r.customer || '').toLowerCase().trim();
       if (!cKey) return;
-      if (!custLobRepMap[cKey]) custLobRepMap[cKey] = {};
-      if (r._sp) custLobRepMap[cKey][r._sp] = true;
-      if (r._dn) custLobRepMap[cKey][normalizeName(r._dn)] = true;
+      if (!_newCustMap[cKey]) _newCustMap[cKey] = {};
+      if (r._sp) _newCustMap[cKey][r._sp] = true;
+      if (r._dn) _newCustMap[cKey][normalizeName(r._dn)] = true;
     });
+    _custLobRepMapCache[activeLob] = _newCustMap;
   }
+  var custLobRepMap = _custLobRepMapCache[activeLob] || {};
   var _custLobRepMapLoaded = Object.keys(custLobRepMap).length > 0;
   var rows = (lobData.allCustomers || []).slice();
   var sortCol = state.custSortCol || 'gp';
@@ -3043,8 +3047,9 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
   // Source: allDrillRows which has r.lob, r.destAgent/r.originAgent, r._sp, r._dn
   var _aLobKeys = { 'Air':['AIR EXPORT','AIR IMPORT'], 'Ocean':['SEA EXPORT','SEA IMPORT'], 'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT'] };
   var _aActiveLobKeys = _aLobKeys[activeLob] || [];
-  var agentLobRepMap = {}; // agentNameLower → { repNorm: true }
-  if (allDrillRows && allDrillRows.length > 0) {
+  // Build per-agent LOB→rep map — cached by activeLob, only rebuilt when allDrillRows changes
+  if (!_agentLobRepMapCache[activeLob] && allDrillRows && allDrillRows.length > 0) {
+    var _newAgentMap = {};
     allDrillRows.forEach(function(r){
       if (_aActiveLobKeys.indexOf(r.lob) === -1) return;
       var agents = [];
@@ -3052,13 +3057,14 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
       if (r.originAgent) agents.push(r.originAgent.toLowerCase().trim());
       agents.forEach(function(agKey){
         if (!agKey) return;
-        if (!agentLobRepMap[agKey]) agentLobRepMap[agKey] = {};
-        if (r._sp) agentLobRepMap[agKey][r._sp] = true;
-        if (r._dn) agentLobRepMap[agKey][normalizeName(r._dn)] = true;
+        if (!_newAgentMap[agKey]) _newAgentMap[agKey] = {};
+        if (r._sp) _newAgentMap[agKey][r._sp] = true;
+        if (r._dn) _newAgentMap[agKey][normalizeName(r._dn)] = true;
       });
     });
+    _agentLobRepMapCache[activeLob] = _newAgentMap;
   }
-  var _agentLobRepMapLoaded = Object.keys(agentLobRepMap).length > 0;
+  var agentLobRepMap = _agentLobRepMapCache[activeLob] || {};
   var rows = (lobData.allAgents || []).slice();
   var sortCol = state.agentSortCol || 'gp';
   var sortDir = (state.agentSortDir === undefined) ? -1 : state.agentSortDir;
@@ -6270,6 +6276,7 @@ function loadDrillData(callback){
     .then(function(data){
       if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
         allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
+        _custLobRepMapCache = {}; _agentLobRepMapCache = {}; // clear cached maps — data changed
         // Patch tradelane cache with correct _tg-based shipment counts
         // so next load shows correct numbers instantly from cache
         _patchTradelaneCacheWithDrillCounts();
@@ -7539,14 +7546,21 @@ document.addEventListener('click', function(ev){
       syncDateRangeToData();
     }
 
-    // Customer page: check cache AFTER state is set (so getCustomerCacheKey uses new view/dates)
+    // Customer page: Yearly/Quarterly don't need a new fetch — same data, different aggregation
     if(state.page==='customers'){
+      if (v === 'Yearly' || v === 'Quarterly') {
+        // Use whatever data is already loaded — aggregation is client-side
+        render(); return;
+      }
       var _k=getCustomerCacheKey();
       if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); }
       else { customerDataReady=false; fetchCustomerData(function(){ render(); }); }
       return;
     }
     if(state.page==='agents'){
+      if (v === 'Yearly' || v === 'Quarterly') {
+        render(); return;
+      }
       var _ak=getAgentCacheKey();
       if(_agentCache[_ak]){ agentData=_agentCache[_ak]; agentDataReady=true; render(); }
       else { agentDataReady=false; fetchAgentData(function(){ render(); }); }
