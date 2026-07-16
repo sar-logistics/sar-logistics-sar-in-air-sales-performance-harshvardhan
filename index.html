@@ -3517,7 +3517,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     var _tgCount = {};
     var _tgMDCount = {};
     allDrillRows.forEach(function(r){
-      if (!r._tg) { _tgNoTgCount++; return; }
+      if (!r._tg) { return; }
       if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
       if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
       var inActive = _fyGroups ? !!_tgFyMonsSet[r._ml] : !!_tgActiveMonsSet[r._ml];
