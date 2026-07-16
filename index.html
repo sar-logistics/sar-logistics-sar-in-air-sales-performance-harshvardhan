@@ -5999,11 +5999,18 @@ function topbarHash(){
     state.selectedQuarter;
 }
 
+var _renderScheduled = false;
+function scheduleRender() {
+  if (_renderScheduled) return;
+  _renderScheduled = true;
+  requestAnimationFrame(function(){ _renderScheduled = false; render(); });
+}
+
 function render(){
   var _tRender = performance.now();
-  console.log('[PERF] render() start at', _tRender.toFixed(1)+'ms');
   computeFilteredRepsRaw();
-  var M=model();
+  // Skip model() on insight pages — they don't use it, saves CPU
+  var M = (state.page==='customers'||state.page==='agents'||state.page==='tradelane'||state.page==='usage'||state.page==='teams'||state.page==='admin'||state.page==='finance'||state.page==='op') ? null : model();
   var app=document.getElementById('app');
   if(!app.querySelector('aside')){
     app.innerHTML = sidebar()
@@ -6039,8 +6046,6 @@ function render(){
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
   console.log('[PERF] mainEl.innerHTML took', (performance.now()-_tHtml).toFixed(1)+'ms');
-  console.log('[PERF] render() total', (performance.now()-_tRender).toFixed(1)+'ms');
-  requestAnimationFrame(function(){ console.log('[PERF] First RAF at', performance.now().toFixed(1)+'ms (page visible)'); });
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
   if(scrollTop) mainEl.scrollTop=scrollTop;
   var _newInner=mainEl.querySelector('div[style*="overflow-y:auto"]');
