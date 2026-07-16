@@ -2775,22 +2775,24 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
   };
   var _activeLobKeys = _lobKeys[activeLob] || [];
-  // Build set of reps active in this LOB from allDrillRows (always populated, has r.lob + r._dn)
+  // Build set of reps active in this LOB from allDrillRows
+  // Collect both normalized _sp (Sales Person) and _dn (display name) so we match c.salesReps correctly
   var lobRepsNorm = {};
   var _lobDataSrc = allDrillRows && allDrillRows.length > 0 ? allDrillRows : null;
   if (_lobDataSrc) {
     _lobDataSrc.forEach(function(r){
-      if (_activeLobKeys.indexOf(r.lob) > -1 && r._dn) lobRepsNorm[normalizeName(r._dn)] = true;
+      if (_activeLobKeys.indexOf(r.lob) === -1) return;
+      if (r._sp)  lobRepsNorm[r._sp] = true;                        // already normalized
+      if (r._dn)  lobRepsNorm[normalizeName(r._dn)] = true;         // display name
     });
   } else {
-    // Fallback: use repsRawOriginal.lobData if allDrillRows not yet loaded
+    // Fallback: repsRawOriginal.lobData
     repsRawOriginal.forEach(function(r){
       if (!r.lobData) return;
       var hasLob = _activeLobKeys.some(function(lk){ return r.lobData[lk] && Object.keys(r.lobData[lk]).some(function(k){ return k !== '_week'; }); });
       if (hasLob) lobRepsNorm[normalizeName(r.name)] = true;
     });
   }
-  // If lobRepsNorm is still empty (data not loaded yet), skip LOB filtering to avoid blank column
   var _lobRepFilterActive = Object.keys(lobRepsNorm).length > 0;
   var rows = (lobData.allCustomers || []).slice();
   var sortCol = state.custSortCol || 'gp';
@@ -3076,7 +3078,9 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
   var _aLobDataSrc = allDrillRows && allDrillRows.length > 0 ? allDrillRows : null;
   if (_aLobDataSrc) {
     _aLobDataSrc.forEach(function(r){
-      if (_aActiveLobKeys.indexOf(r.lob) > -1 && r._dn) aLobRepsNorm[normalizeName(r._dn)] = true;
+      if (_aActiveLobKeys.indexOf(r.lob) === -1) return;
+      if (r._sp) aLobRepsNorm[r._sp] = true;
+      if (r._dn) aLobRepsNorm[normalizeName(r._dn)] = true;
     });
   } else {
     repsRawOriginal.forEach(function(r){
