@@ -3249,6 +3249,24 @@ function tradelanePage(){
     var _effSet = _effectiveFilterRepsTL ? {} : null;
     if (_effectiveFilterRepsTL) _effectiveFilterRepsTL.forEach(function(sp){ _effSet[sp]=true; });
 
+    // DEBUG
+    var _dbgTotal = allDrillRows.length;
+    var _dbgLobMatch = allDrillRows.filter(function(r){ return _drillLobKeys.indexOf(r.lob)>-1; }).length;
+    var _dbgRepMatch = _effSet ? allDrillRows.filter(function(r){ return _effSet[r._sp]; }).length : 'no rep filter';
+    var _dbgTgEmpty  = allDrillRows.filter(function(r){ return _drillLobKeys.indexOf(r.lob)>-1 && !r._tg; }).length;
+    var _dbgBothMatch = allDrillRows.filter(function(r){ return _drillLobKeys.indexOf(r.lob)>-1 && (_effSet?_effSet[r._sp]:true) && r._tg; }).length;
+    console.log('[TL ZONE] filterLobs:', _drillLobKeys, '| effectiveReps:', _effectiveFilterRepsTL ? _effectiveFilterRepsTL.length+'reps' : 'none', '| effSet sample:', _effSet?Object.keys(_effSet).slice(0,3):[]);
+    console.log('[TL ZONE] allDrillRows:', _dbgTotal, '| lob match:', _dbgLobMatch, '| rep match:', _dbgRepMatch, '| _tg empty (lob-matched):', _dbgTgEmpty, '| all 3 match:', _dbgBothMatch);
+    if (_dbgTgEmpty > 0) {
+      var _sample = allDrillRows.find(function(r){ return _drillLobKeys.indexOf(r.lob)>-1 && !r._tg; });
+      console.log('[TL ZONE] Sample row missing _tg:', _sample ? {lob:_sample.lob,dischargePort:_sample.dischargePort,loadingPort:_sample.loadingPort,ataDischarge:_sample.ataDischarge,atdLoading:_sample.atdLoading,location:_sample.location} : 'none');
+    }
+    if (_effectiveFilterRepsTL && _effectiveFilterRepsTL.length === 0) {
+      console.log('[TL ZONE] ⚠️ effectiveFilterRepsTL is EMPTY — zone has no matching reps in allDrillRows');
+      var _zoneRows = allDrillRows.filter(function(r){ return r._zone && _filterZonesTL.indexOf(r._zone)>-1; });
+      console.log('[TL ZONE] Rows with matching _zone:', _zoneRows.length, '| zones searched:', _filterZonesTL, '| unique _zones in data:', [...new Set(allDrillRows.map(function(r){return r._zone;}).filter(Boolean))].slice(0,10));
+    }
+
     // Aggregate per-tradelane from allDrillRows including monthData for pivot table
     var _tgMap = {}; // tg → { shipments, gp, revenue, tons, teu, monthData:{} }
     var _activeMonsSet = {};
