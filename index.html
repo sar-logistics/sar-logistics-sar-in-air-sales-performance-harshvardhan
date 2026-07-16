@@ -2775,12 +2775,23 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
   };
   var _activeLobKeys = _lobKeys[activeLob] || [];
+  // Build set of reps active in this LOB from allDrillRows (always populated, has r.lob + r._dn)
   var lobRepsNorm = {};
-  repsRawOriginal.forEach(function(r){
-    if (!r.lobData) return;
-    var hasLob = _activeLobKeys.some(function(lk){ return r.lobData[lk] && Object.keys(r.lobData[lk]).some(function(k){ return k !== '_week'; }); });
-    if (hasLob) lobRepsNorm[normalizeName(r.name)] = true;
-  });
+  var _lobDataSrc = allDrillRows && allDrillRows.length > 0 ? allDrillRows : null;
+  if (_lobDataSrc) {
+    _lobDataSrc.forEach(function(r){
+      if (_activeLobKeys.indexOf(r.lob) > -1 && r._dn) lobRepsNorm[normalizeName(r._dn)] = true;
+    });
+  } else {
+    // Fallback: use repsRawOriginal.lobData if allDrillRows not yet loaded
+    repsRawOriginal.forEach(function(r){
+      if (!r.lobData) return;
+      var hasLob = _activeLobKeys.some(function(lk){ return r.lobData[lk] && Object.keys(r.lobData[lk]).some(function(k){ return k !== '_week'; }); });
+      if (hasLob) lobRepsNorm[normalizeName(r.name)] = true;
+    });
+  }
+  // If lobRepsNorm is still empty (data not loaded yet), skip LOB filtering to avoid blank column
+  var _lobRepFilterActive = Object.keys(lobRepsNorm).length > 0;
   var rows = (lobData.allCustomers || []).slice();
   var sortCol = state.custSortCol || 'gp';
   var sortDir = (state.custSortDir === undefined) ? -1 : state.custSortDir;
@@ -2838,7 +2849,7 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     }).join('');
     var filteredReps = (c.salesReps||[]).filter(function(r){
       var n = normalizeName(r||'');
-      var lobOk = lobRepsNorm[n] === true;
+      var lobOk = !_lobRepFilterActive || lobRepsNorm[n] === true;
       var repOk = !frNorm || frNorm.indexOf(n) > -1;
       return lobOk && repOk;
     });
@@ -3062,11 +3073,19 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
   var _aLobKeys = { 'Air':['AIR EXPORT','AIR IMPORT'], 'Ocean':['SEA EXPORT','SEA IMPORT'], 'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT'] };
   var _aActiveLobKeys = _aLobKeys[activeLob] || [];
   var aLobRepsNorm = {};
-  repsRawOriginal.forEach(function(r){
-    if (!r.lobData) return;
-    var hasLob = _aActiveLobKeys.some(function(lk){ return r.lobData[lk] && Object.keys(r.lobData[lk]).some(function(k){ return k !== '_week'; }); });
-    if (hasLob) aLobRepsNorm[normalizeName(r.name)] = true;
-  });
+  var _aLobDataSrc = allDrillRows && allDrillRows.length > 0 ? allDrillRows : null;
+  if (_aLobDataSrc) {
+    _aLobDataSrc.forEach(function(r){
+      if (_aActiveLobKeys.indexOf(r.lob) > -1 && r._dn) aLobRepsNorm[normalizeName(r._dn)] = true;
+    });
+  } else {
+    repsRawOriginal.forEach(function(r){
+      if (!r.lobData) return;
+      var hasLob = _aActiveLobKeys.some(function(lk){ return r.lobData[lk] && Object.keys(r.lobData[lk]).some(function(k){ return k !== '_week'; }); });
+      if (hasLob) aLobRepsNorm[normalizeName(r.name)] = true;
+    });
+  }
+  var _aLobRepFilterActive = Object.keys(aLobRepsNorm).length > 0;
   var rows = (lobData.allAgents || []).slice();
   var sortCol = state.agentSortCol || 'gp';
   var sortDir = (state.agentSortDir === undefined) ? -1 : state.agentSortDir;
@@ -3102,7 +3121,7 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
     }).join('');
     var filteredRepsA = (a.salesReps||[]).filter(function(r){
       var n = normalizeName(r||'');
-      var lobOk = aLobRepsNorm[n] === true;
+      var lobOk = !_aLobRepFilterActive || aLobRepsNorm[n] === true;
       var repOk = !frNorm || frNorm.indexOf(n) > -1;
       return lobOk && repOk;
     });
