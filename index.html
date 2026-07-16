@@ -6150,7 +6150,88 @@ var _drillLoadAttempted = false;
 // Patch _tg (tradelane group) on drill rows that don't have it set by server
 // Uses dischargePort/loadingPort fields with fallbacks
 var _TL_MAP_CLIENT = {'US':'US','GB':'Europe','CA':'Canada','PR':'LATAM','BR':'LATAM','VN':'Asia','MX':'LATAM','FR':'Med','BE':'Europe','GE':'Europe','DE':'Europe','NL':'Europe','PY':'LATAM','TR':'Med','ES':'Med','ID':'Asia','SG':'Asia','OM':'Middle East','FI':'Europe','EG':'Med','MA':'Med','AE':'Middle East','TN':'Med','ZA':'Africa','GH':'Africa','CN':'Asia','HN':'LATAM','PE':'LATAM','DO':'Dominican Republic','PK':'Asia','AU':'Australia','NZ':'Australia','JP':'Asia','KR':'Asia','IN':'India','LK':'Asia','BD':'Asia','TH':'Asia','MY':'Asia','PH':'Asia','TW':'Asia','QA':'Middle East','SA':'Middle East','KW':'Middle East','BH':'Middle East','JO':'Middle East','LB':'Middle East','IL':'Middle East','IQ':'Middle East','IT':'Med','PT':'Med','GR':'Med','HR':'Med','MT':'Med','CY':'Med','SE':'Europe','NO':'Europe','DK':'Europe','PL':'Europe','CZ':'Europe','AT':'Europe','CH':'Europe','HU':'Europe','RO':'Europe','BG':'Europe','UA':'Europe','RU':'Europe','NI':'LATAM','SV':'LATAM','GT':'LATAM','CR':'LATAM','PA':'LATAM','CO':'LATAM','VE':'LATAM','EC':'LATAM','AR':'LATAM','CL':'LATAM','BO':'LATAM','UY':'LATAM','GY':'LATAM','NG':'Africa','KE':'Africa','ET':'Africa','TZ':'Africa','UG':'Africa','CI':'Africa','CM':'Africa','SN':'Africa'};
-function _portToTG2(s){ var m=String(s||'').trim().match(/^\(([A-Z]{2,5})\)/); return m?(_TL_MAP_CLIENT[m[1].slice(0,2).toUpperCase()]||''):''; }
+
+// City/airport name → tradelane (for allDrillRows which stores plain names, not port codes)
+var _CITY_TL_MAP = {
+  // US
+  'dallas-fort worth int apt':'US','dulles int apt/washington':'US','indianapolis':'US',
+  'john f. kennedy apt/new york':'US','jfk':'US','phoenix':'US','newark':'US','atlanta':'US',
+  "o'hare apt/chicago":'US','chicago':'US','los angeles':'US','new york':'US',
+  'miami':'US','houston':'US','san francisco':'US','boston':'US','seattle':'US',
+  'minneapolis':'US','detroit':'US','denver':'US','charlotte':'US','las vegas':'US',
+  'dallas':'US','washington':'US','baltimore':'US','orlando':'US','tampa':'US',
+  'san jose':'US','portland':'US','pittsburgh':'US','memphis':'US','salt lake city':'US',
+  'st. louis':'US','kansas city':'US','nashville':'US','austin':'US','raleigh':'US',
+  // Canada
+  'pearson international apt/toronto':'Canada','toronto':'Canada',
+  'vancouver':'Canada','montreal':'Canada','calgary':'Canada','edmonton':'Canada',
+  // LATAM
+  'lima':'LATAM','punta cana apt':'LATAM','bogota':'LATAM','mexico city':'LATAM',
+  'sao paulo':'LATAM','buenos aires':'LATAM','santiago':'LATAM','quito':'LATAM',
+  'caracas':'LATAM','montevideo':'LATAM','la paz':'LATAM','asuncion':'LATAM',
+  'guayaquil':'LATAM','medellin':'LATAM','guadalajara':'LATAM','monterrey':'LATAM',
+  'santo domingo':'LATAM','san jose':'LATAM','panama city':'LATAM','managua':'LATAM',
+  'tegucigalpa':'LATAM','san salvador':'LATAM','guatemala city':'LATAM',
+  // Europe
+  'belfast':'Europe','geneva':'Europe','zurich':'Europe','malpensa apt/milano':'Europe',
+  'milano':'Europe','milan':'Europe','heathrow apt/london':'Europe','london':'Europe',
+  'munchen':'Europe','munich':'Europe','frankfurt':'Europe','amsterdam':'Europe',
+  'paris':'Europe','madrid':'Europe','barcelona':'Europe','rome':'Europe',
+  'brussels':'Europe','vienna':'Europe','warsaw':'Europe','prague':'Europe',
+  'budapest':'Europe','stockholm':'Europe','oslo':'Europe','copenhagen':'Europe',
+  'helsinki':'Europe','dublin':'Europe','lisbon':'Europe','athens':'Europe',
+  'domodedovo apt/moscow':'Europe','moscow':'Europe','kiev':'Europe','bucharest':'Europe',
+  'sofia':'Europe','zagreb':'Europe','belgrade':'Europe','riga':'Europe','tallinn':'Europe',
+  'vilnius':'Europe','bratislava':'Europe','ljubljana':'Europe','luxembourg':'Europe',
+  'glasgow':'Europe','birmingham':'Europe','manchester':'Europe',
+  // Middle East
+  'amman':'Middle East','dubai':'Middle East','abu dhabi':'Middle East',
+  'doha':'Middle East','riyadh':'Middle East','jeddah':'Middle East',
+  'muscat':'Middle East','kuwait city':'Middle East','kuwait':'Middle East',
+  'beirut':'Middle East','tehran':'Middle East','baghdad':'Middle East',
+  'tel aviv':'Middle East','sharjah':'Middle East','bahrain':'Middle East',
+  'oman':'Middle East','manama':'Middle East',
+  // Asia
+  'singapore':'Asia','hong kong':'Asia','tokyo':'Asia','osaka':'Asia',
+  'shanghai':'Asia','beijing':'Asia','guangzhou':'Asia','seoul':'Asia',
+  'taipei':'Asia','kuala lumpur':'Asia','jakarta':'Asia','bangkok':'Asia',
+  'don muang airport/bangkok':'Asia','suvarnabhumi':'Asia','manila':'Asia',
+  'ho chi minh city':'Asia','hanoi':'Asia','dhaka':'Asia','karachi':'Asia',
+  'colombo':'Asia','yangon':'Asia','phnom penh':'Asia','vientiane':'Asia',
+  'ulaanbaatar':'Asia','baku':'Asia','tashkent':'Asia','almaty':'Asia',
+  'kathmandu':'Asia','islamabad':'Asia','lahore':'Asia',
+  // Africa
+  'lagos':'Africa','maputo':'Africa','addis ababa':'Africa','nairobi':'Africa',
+  'accra':'Africa','cairo':'Africa','el qahira (cairo)':'Africa','el qahira':'Africa',
+  'johannesburg':'Africa','dar es salaam':'Africa','kampala':'Africa',
+  'kigali':'Africa','lusaka':'Africa','harare':'Africa','abidjan':'Africa',
+  'dakar':'Africa','douala':'Africa','libreville':'Africa','luanda':'Africa',
+  'kinshasa':'Africa','addis abeba':'Africa','antananarivo':'Africa',
+  // Med
+  'casablanca':'Med','tunis':'Med','algiers':'Med','tripoli':'Med',
+  'rabat':'Med','alexandria':'Med','beirut':'Med','izmir':'Med','ankara':'Med',
+  // Australia
+  'sydney':'Australia','melbourne':'Australia','brisbane':'Australia',
+  'perth':'Australia','adelaide':'Australia','auckland':'Australia',
+  // Dominican Republic
+  'santo domingo':'Dominican Republic','punta cana':'Dominican Republic',
+};
+
+function _portToTG2(s){
+  if (!s) return '';
+  var sl = String(s).toLowerCase().trim();
+  // Try exact city name match first
+  if (_CITY_TL_MAP[sl]) return _CITY_TL_MAP[sl];
+  // Try port code format (JOAMM) style
+  var m = String(s).trim().match(/^\(([A-Z]{2,5})\)/);
+  if (m) return _TL_MAP_CLIENT[m[1].slice(0,2).toUpperCase()] || '';
+  // Try partial match — check if any known city name is contained in the port string
+  var keys = Object.keys(_CITY_TL_MAP);
+  for (var i=0; i<keys.length; i++) {
+    if (sl.indexOf(keys[i]) > -1) return _CITY_TL_MAP[keys[i]];
+  }
+  return '';
+}
 function _patchTgOnDrillRows(rows){
   if (!rows) return;
   rows.forEach(function(r){
