@@ -4376,80 +4376,216 @@ function teamsPage(){
   }
 
   var allUsers = (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]);
-  var AVATAR_COLORS = ['#15875A','#2563EB','#7C3AED','#D97706','#0891B2','#DC2626','#059669','#EA580C','#9333EA','#0284C7'];
-  function avColor(name){ var h=0; for(var i=0;i<(name||'').length;i++) h=(h*31+name.charCodeAt(i))&0xffff; return AVATAR_COLORS[h%AVATAR_COLORS.length]; }
-  var ROLE_COLORS = {'regional manager':'#D97706','zonal manager':'#7C3AED','sales rep':'#2563EB','admin':'#15875A','hr':'#DC2626'};
+  var hierarchy = orgData.hierarchy||[];
+  var directReports = orgData.directReports||[];
+  var support = orgData.support||[];
 
-  function memberCard(u, isZM){
+  // Build email → person lookup
+  var byEmail = {};
+  allUsers.forEach(function(u){ if(u.email) byEmail[u.email.toLowerCase().trim()] = u; });
+
+  // Build reportsTo tree: manager email → list of direct report people
+  var childrenOf = {};
+  allUsers.forEach(function(u){
+    var mEmail = (u.reportsTo||'').toLowerCase().trim();
+    if(!mEmail) return;
+    if(!childrenOf[mEmail]) childrenOf[mEmail]=[];
+    childrenOf[mEmail].push(u);
+  });
+
+  // Find root nodes — hierarchy people who don't report to anyone in this org
+  var roots = hierarchy.filter(function(u){
+    var mEmail = (u.reportsTo||'').toLowerCase().trim();
+    return !mEmail || !byEmail[mEmail];
+  });
+
+  // Sort hierarchy by role weight: regional manager → zonal manager → manager
+  function roleWeight(role){
+    var r=(role||'').toLowerCase();
+    if(r==='regional manager') return 0;
+    if(r==='zonal manager') return 1;
+    return 2;
+  }
+  roots.sort(function(a,b){ return roleWeight(a.role)-roleWeight(b.role); });
+
+  var isYouEmail = currentUser && currentUser.email ? currentUser.email.toLowerCase().trim() : '';
+
+  function avColor(name){
+    var h = avatarHueFor(name);
+    return 'oklch(0.55 0.13 '+h+')';
+  }
+
+  // --- Org card for the chart (left side) ---
+  function chartCard(u){
     var ini=(u.name||'?').split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
-    var rc=ROLE_COLORS[(u.role||'').toLowerCase()]||'#6B7280';
-    var ac=avColor(u.name);
-    return '<div style="display:flex;align-items:center;gap:10px;padding:'+(isZM?'12px 14px':'8px 12px')+';background:'+(isZM?'#EEF3FF':'#FFFFFF')+';border-radius:10px;border:1px solid '+(isZM?'#C7D7F9':'#EEF2F8')+';">'
-      +'<div style="width:'+(isZM?'42px':'34px')+';height:'+(isZM?'42px':'34px')+';border-radius:50%;background:'+ac+';display:flex;align-items:center;justify-content:center;font-size:'+(isZM?'13px':'11px')+';font-weight:700;color:#fff;flex-shrink:0;">'+esc(ini)+'</div>'
-      +'<div style="min-width:0;flex:1;">'
-        +'<div style="font-size:'+(isZM?'13px':'12px')+';font-weight:'+(isZM?'700':'600')+';color:#0D2B5E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(u.name||'—')+'</div>'
-        +'<div style="font-size:10px;color:#9AAFC8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(u.email||'—')+'</div>'
-        +'<span style="font-size:9px;font-weight:700;color:'+rc+';background:'+rc+'18;border-radius:4px;padding:1px 6px;display:inline-block;margin-top:2px;text-transform:capitalize;">'+esc(u.role||'')+'</span>'
+    var isYou = isYouEmail && u.email && u.email.toLowerCase().trim()===isYouEmail;
+    var nameShort = (u.name||'').length>18 ? (u.name||'').slice(0,16)+'…' : (u.name||'');
+    var reportLine = u.reportCount>0 ? '<div style="font-size:10px;color:#94A3B8;font-weight:500;margin-top:3px;">'+u.reportCount+' report'+(u.reportCount===1?'':'s')+'</div>' : '';
+    return '<div style="background:#FFFFFF;border:' +(isYou?'2px solid #2563EB':'1px solid #E7ECF3')+ ';border-radius:10px;padding:12px 14px;display:flex;align-items:flex-start;gap:10px;min-width:200px;max-width:240px;position:relative;">'
+      +'<div style="width:38px;height:38px;border-radius:50%;background:'+avColor(u.name)+';color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+esc(ini)+'</div>'
+      +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:12.5px;font-weight:700;color:#15233B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.name||'')+'">'+esc(nameShort)+'</div>'
+        +'<div style="margin-top:4px;">'+roleBadge(u.role)+'</div>'
+        +reportLine
+      +'</div>'
+      +'<button data-act="orgEditOpen" data-email="'+esc(u.email)+'" style="border:1px solid #E2E8F0;background:#FFFFFF;width:22px;height:22px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#64748B;flex-shrink:0;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
+    +'</div>';
+  }
+
+  // --- Rep card for the bottom row ---
+  function repCard(u){
+    var ini=(u.name||'?').split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+    var isYou = isYouEmail && u.email && u.email.toLowerCase().trim()===isYouEmail;
+    var nameShort = (u.name||'').length>18 ? (u.name||'').slice(0,16)+'…' : (u.name||'');
+    return '<div style="background:#FFFFFF;border:'+(isYou?'2px solid #2563EB':'1px solid #E7ECF3')+';border-radius:10px;padding:11px 13px;display:flex;align-items:flex-start;gap:9px;min-width:170px;max-width:220px;position:relative;">'
+      +'<div style="width:34px;height:34px;border-radius:50%;background:'+avColor(u.name)+';color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+esc(ini)+'</div>'
+      +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:12px;font-weight:700;color:#15233B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.name||'')+'">'+esc(nameShort)+'</div>'
+        +'<div style="margin-top:4px;">'+roleBadge(u.role)+'</div>'
+      +'</div>'
+      +'<button data-act="orgEditOpen" data-email="'+esc(u.email)+'" style="border:1px solid #E2E8F0;background:#FFFFFF;width:22px;height:22px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#64748B;flex-shrink:0;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
+    +'</div>';
+  }
+
+  // --- Support card (right panel) ---
+  function supportCard(u){
+    var ini=(u.name||'?').split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase();
+    var isYou = isYouEmail && u.email && u.email.toLowerCase().trim()===isYouEmail;
+    var nameShort = (u.name||'').length>16 ? (u.name||'').slice(0,14)+'…' : (u.name||'');
+    return '<div style="background:#FFFFFF;border:'+(isYou?'2px solid #2563EB':'1px solid #E7ECF3')+';border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;position:relative;">'
+      +'<div style="width:36px;height:36px;border-radius:50%;background:'+avColor(u.name)+';color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+esc(ini)+'</div>'
+      +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:12px;font-weight:700;color:#15233B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.name||'')+'">'+esc(nameShort)+'</div>'
+        +'<div style="margin-top:3px;">'+roleBadge(u.role)+'</div>'
+      +'</div>'
+      +'<button data-act="orgEditOpen" data-email="'+esc(u.email)+'" style="border:1px solid #E2E8F0;background:#FFFFFF;width:22px;height:22px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#64748B;flex-shrink:0;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>'
+    +'</div>';
+  }
+
+  // Build the vertical chain HTML — recursively walks hierarchy
+  var CONNECTOR_COLOR = '#CBD5E1';
+  var CONNECTOR_W = 2;
+
+  // Walk the hierarchy chain downward from roots, collecting levels
+  // Each level is an array of hierarchy persons
+  function buildChainLevels(){
+    var levels = [];
+    var currentLevel = roots.slice();
+    var visited = {};
+    while(currentLevel.length>0){
+      levels.push(currentLevel);
+      currentLevel.forEach(function(u){ visited[u.email.toLowerCase()]=true; });
+      var nextLevel = [];
+      currentLevel.forEach(function(u){
+        var ch = (childrenOf[u.email.toLowerCase().trim()]||[]).filter(function(c){
+          var cr=(c.role||'').toLowerCase();
+          return cr==='regional manager'||cr==='zonal manager'||cr==='manager';
+        });
+        ch.forEach(function(c){ if(!visited[c.email.toLowerCase()]) nextLevel.push(c); });
+      });
+      currentLevel = nextLevel;
+    }
+    return levels;
+  }
+
+  var chainLevels = buildChainLevels();
+
+  // Collect all direct reports (sales reps, etc.) who report to any hierarchy person
+  // Group them by their manager's email for the bottom row
+  var repsByManager = {};
+  directReports.forEach(function(u){
+    var mEmail = (u.reportsTo||'').toLowerCase().trim();
+    if(!repsByManager[mEmail]) repsByManager[mEmail]=[];
+    repsByManager[mEmail].push(u);
+  });
+
+  // Find the leaf (last) hierarchy person for bottom-row attachment
+  var lastChainPerson = null;
+  if(chainLevels.length>0){
+    var lastLevel = chainLevels[chainLevels.length-1];
+    lastChainPerson = lastLevel[0]||null;
+  }
+
+  // All direct reports that are visible (report to someone in chain or unattached)
+  var allReps = directReports.slice();
+
+  // --- Build chain HTML ---
+  var chainHtml = '';
+  chainLevels.forEach(function(level, li){
+    // Connector line coming down from above (not for first level)
+    if(li>0){
+      chainHtml += '<div style="display:flex;justify-content:center;"><div style="width:'+CONNECTOR_W+'px;height:32px;background:'+CONNECTOR_COLOR+';"></div></div>';
+    }
+    // If multiple people at same level, show side by side
+    if(level.length===1){
+      chainHtml += '<div style="display:flex;justify-content:center;">'+chartCard(level[0])+'</div>';
+    } else {
+      chainHtml += '<div style="display:flex;justify-content:center;gap:16px;">'
+        +level.map(function(u){ return chartCard(u); }).join('')
+        +'</div>';
+    }
+  });
+
+  // Bottom row: all reps
+  var repRowHtml = '';
+  if(allReps.length>0){
+    // connector line down to rep row
+    repRowHtml += '<div style="display:flex;justify-content:center;"><div style="width:'+CONNECTOR_W+'px;height:32px;background:'+CONNECTOR_COLOR+';"></div></div>';
+    // horizontal bar across
+    if(allReps.length>1){
+      repRowHtml += '<div style="display:flex;justify-content:center;">'
+        +'<div style="height:'+CONNECTOR_W+'px;background:'+CONNECTOR_COLOR+';flex:1;max-width:'+(Math.min(allReps.length,4)*236)+'px;"></div>'
+        +'</div>';
+      // small connectors down to each card
+      repRowHtml += '<div style="display:flex;justify-content:center;gap:0;">';
+      allReps.forEach(function(){
+        repRowHtml += '<div style="flex:1;max-width:236px;display:flex;justify-content:center;"><div style="width:'+CONNECTOR_W+'px;height:20px;background:'+CONNECTOR_COLOR+';"></div></div>';
+      });
+      repRowHtml += '</div>';
+    }
+    repRowHtml += '<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:12px;">'
+      +allReps.map(function(u){ return repCard(u); }).join('')
+      +'</div>';
+  }
+
+  // --- Support panel ---
+  var supportHtml = '';
+  if(support.length>0){
+    var supportLabel = '<div style="font-size:9px;font-weight:800;letter-spacing:0.1em;color:#94A3B8;text-transform:uppercase;margin-bottom:10px;">Support Roles</div>';
+    supportHtml = '<div style="width:260px;flex-shrink:0;">'
+      +supportLabel
+      +'<div style="display:flex;flex-direction:column;gap:8px;">'
+      +support.map(function(u){ return supportCard(u); }).join('')
       +'</div>'
     +'</div>';
   }
 
-  // Group by zone
-  var zoneMap = {}, noZone = [];
-  allUsers.forEach(function(u){
-    var role=(u.role||'').toLowerCase();
-    if(role==='admin'||role==='hr') return;
-    var z=u.zone||'';
-    if(!z){ noZone.push(u); return; }
-    if(!zoneMap[z]) zoneMap[z]=[];
-    zoneMap[z].push(u);
-  });
+  // Counts
+  var hierarchyCount = hierarchy.length;
+  var supportCount = support.length;
 
-  var zones = sortZones(Object.keys(zoneMap));
-  var regionalManagers = allUsers.filter(function(u){ return (u.role||'').toLowerCase()==='regional manager'; });
-  var admins = allUsers.filter(function(u){ var r=(u.role||'').toLowerCase(); return r==='admin'||r==='hr'; });
-
-  var html = '<div style="margin-bottom:20px;">'
-    +'<div style="font-size:22px;font-weight:800;color:#0D2B5E;">Teams</div>'
-    +'<div style="font-size:12px;color:#9AAFC8;margin-top:2px;">'+allUsers.length+' members across '+zones.length+' zones</div>'
+  // Top bar
+  var topBar = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'
+    +'<div>'
+      +'<div style="font-size:18px;font-weight:800;color:#0D2B5E;">Org Chart</div>'
+      +'<div style="font-size:12px;color:#9AAFC8;margin-top:2px;">'+allUsers.length+' users · '+hierarchyCount+' in hierarchy · '+supportCount+' support</div>'
+    +'</div>'
+    +'<button data-act="refreshOrg" style="display:flex;align-items:center;gap:6px;background:none;border:1px solid #E2E8F0;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;color:#64748B;cursor:pointer;">'
+      +'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
+      +'Refresh'
+    +'</button>'
   +'</div>';
 
-  if(regionalManagers.length>0){
-    html+='<div style="margin-bottom:24px;">'
-      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#D97706;text-transform:uppercase;margin-bottom:10px;">Regional Management</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">'
-      +regionalManagers.map(function(u){return memberCard(u,false);}).join('')
-      +'</div></div>';
-  }
+  // Main layout: chart on left, support on right
+  var mainLayout = '<div style="display:flex;gap:24px;align-items:flex-start;">'
+    +'<div style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E8EDF6;border-radius:14px;padding:28px 20px;overflow-x:auto;">'
+      +chainHtml
+      +repRowHtml
+    +'</div>'
+    +(supportHtml ? supportHtml : '')
+  +'</div>';
 
-  zones.forEach(function(zone){
-    var members=zoneMap[zone]||[];
-    var zm=members.filter(function(u){return (u.role||'').toLowerCase()==='zonal manager';});
-    var reps=members.filter(function(u){return (u.role||'').toLowerCase()!=='zonal manager';});
-    html+='<div style="margin-bottom:20px;background:#FAFBFD;border:1px solid #E8EDF6;border-radius:14px;overflow:hidden;">'
-      +'<div style="padding:10px 16px;background:#F0F4FA;border-bottom:1px solid #E8EDF6;display:flex;align-items:center;gap:8px;">'
-        +'<span style="font-size:11px;font-weight:700;color:#1E3A66;">'+esc(zone)+'</span>'
-        +'<span style="font-size:10px;color:#9AAFC8;">'+members.length+' member'+(members.length!==1?'s':'')+'</span>'
-      +'</div>'
-      +'<div style="padding:12px 16px;display:flex;flex-direction:column;gap:8px;">';
-    zm.forEach(function(u){html+=memberCard(u,true);});
-    if(reps.length>0){
-      html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;'+(zm.length?'margin-top:4px;':'')+'"">';
-      reps.forEach(function(u){html+=memberCard(u,false);});
-      html+='</div>';
-    }
-    html+='</div></div>';
-  });
-
-  if(admins.length>0){
-    html+='<div style="margin-bottom:24px;">'
-      +'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#15875A;text-transform:uppercase;margin-bottom:10px;">Admin & HR</div>'
-      +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">'
-      +admins.map(function(u){return memberCard(u,false);}).join('')
-      +'</div></div>';
-  }
-
-  return html;
+  return topBar + mainLayout;
 }
 function orgEditModal(){
   if (!orgEditTarget || !orgDataReady) return '';
@@ -6756,6 +6892,11 @@ document.addEventListener('click', function(ev){
       render();
     })
     .catch(function(e){ state.addUserError = e.message; render(); });
+  }
+  else if(act==='refreshOrg'){
+    ev.stopPropagation();
+    orgDataReady = false;
+    fetchOrgData(function(){ render(); }, true);
   }
   else if(act==='orgEditOpen'){
     ev.stopPropagation();
