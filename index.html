@@ -2737,7 +2737,7 @@ function customerPage(){
   +'</div>';
 
   if (activeView === 'table') {
-    return header + customerPivotTable(lobData, activeLob, brandC);
+    return '<div style="padding:24px 28px 32px;">' + header + customerPivotTable(lobData, activeLob, brandC) + '</div>';
   }
 
   var sc = ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
@@ -2999,7 +2999,7 @@ function agentPage(){
   +'</div>';
 
   if (activeView === 'table') {
-    return header + agentPivotTable(lobData, activeLob, brandC);
+    return '<div style="padding:24px 28px 32px;">' + header + agentPivotTable(lobData, activeLob, brandC) + '</div>';
   }
 
   var sc = ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
@@ -3282,7 +3282,7 @@ function tradelanePage(){
       _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterRepsTL);
       console.log('[PERF] tradelanePivotTable built in', (performance.now()-_t0).toFixed(1)+'ms');
     }
-    return header + _tradelanePivotCache[_tlPivotKey];
+    return '<div style="padding:24px 28px 32px;">' + header + _tradelanePivotCache[_tlPivotKey] + '</div>';
   }
 
   var sc = ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
@@ -4215,7 +4215,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   +'</div>';
 
   var _showKpi = !isYearly && !isQuarterly && (state.reportView === 'Monthly' || state.reportView === 'Custom');
-  return (_showKpi ? kpis : '') + table;
+  return '<div style="padding:24px 28px 32px;">'+(_showKpi ? kpis : '') + table+'</div>';
 }
 
 function financePage(){
@@ -4317,7 +4317,8 @@ function usagePage(){
     +'</tr>';
   }).join('');
 
-  return '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:16px;">'
+  return '<div style="padding:24px 28px 32px;">'
+  +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;">'
     + usageKpiCard(d.totalUsers, 'Total Users', '#2563EB')
     + usageKpiCard(d.activeUsers, 'Active Users', '#15875A')
     + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
@@ -4336,6 +4337,7 @@ function usagePage(){
       +'</tr></thead>'
       +'<tbody>'+rows+'</tbody>'
     +'</table>'
+  +'</div>'
   +'</div>';
 }
 
@@ -5912,7 +5914,7 @@ function render(){
     : state.page==='admin' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1) ? adminPage() : (function(){ state.page='sales'; return salesPage(); })())
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
-    : ((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
+    : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
   console.log('[PERF] mainEl.innerHTML took', (performance.now()-_tHtml).toFixed(1)+'ms');
   console.log('[PERF] render() total', (performance.now()-_tRender).toFixed(1)+'ms');
@@ -5939,7 +5941,7 @@ function renderKeepTopbar(){
     : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
-    : ((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M))+(state.page==='leaderboard'?leaderboard():salesTable(M));
+    : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
   var drawerEl=document.getElementById('drawer-slot');
   if(drawerEl) drawerEl.innerHTML=drawer()+feedbackModal()+orgEditModal();
   if(scrollTop) mainEl.scrollTop=scrollTop;
