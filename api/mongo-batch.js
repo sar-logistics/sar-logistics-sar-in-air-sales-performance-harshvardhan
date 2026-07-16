@@ -2653,13 +2653,16 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "wipeCollection") {
-      // Wipe an entire job collection so Apps Script can re-push clean data
+      // Wipe an entire job or SRR collection so Apps Script can re-push clean data
       const collName = (req.body && req.body.collection) || req.query.collection;
       if (!collName) return res.status(400).json({ error: "collection required" });
-      const JOB_COLLS = ["jobs_air_export","jobs_air_import","jobs_sea_export","jobs_sea_import",
+      const WIPEABLE_COLLS = [
+        "jobs_air_export","jobs_air_import","jobs_sea_export","jobs_sea_import",
         "jobs_isotank_export","jobs_isotank_import","jobs_general","jobs_road",
-        "jobs_clearance_export","jobs_clearance_import"];
-      if (!JOB_COLLS.includes(collName)) return res.status(400).json({ error: "unknown collection" });
+        "jobs_clearance_export","jobs_clearance_import",
+        "srr_air_export","srr_air_import","srr_sea_export","srr_sea_import",
+      ];
+      if (!WIPEABLE_COLLS.includes(collName)) return res.status(400).json({ error: "unknown collection" });
       const result = await db.collection(collName).deleteMany({});
       return res.json({ success: true, deleted: result.deletedCount, collection: collName });
     }
