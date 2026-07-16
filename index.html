@@ -7031,8 +7031,11 @@ document.addEventListener('click', function(ev){
       // Zone filter: clear pivot cache so it rebuilds with current filterZones
       if(_hasZoneFilter){ _tradelanePivotCache={}; _tlGrandDrillCache={}; }
       var _tk=getTradelaneCacheKey();
-      if(_tradelaneCache[_tk]){ tradelaneData=_tradelaneCache[_tk]; tradelaneDataReady=true; render(); }
+      if(_tradelaneCache[_tk]){ tradelaneData=_tradelaneCache[_tk]; tradelaneDataReady=true; }
       else { tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); }
+      // Zone filter needs allDrillRows for zoneToRawSPs — load if not ready
+      if(_hasZoneFilter && !allDrillRows) loadDrillData(function(){ _tradelanePivotCache={}; render(); });
+      render();
     }
     if(state.page==='usage'){
       // Serve cached data instantly, refresh in background
