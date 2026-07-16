@@ -1085,39 +1085,26 @@ function prefetchCustomerRanges() {
   var allM = months26;
   if (!allM || allM.length === 0) return;
 
-  // Build a queue of ranges to prefetch: every individual month + 3/6/12-month windows ending at latest month
+  // Only prefetch common windows — NOT every individual month (too large for localStorage)
   var queue = [];
-  // Individual months
-  for (var i = 0; i < allM.length; i++) {
-    queue.push({ dateFrom: allM[i], dateTo: allM[i] });
-  }
-  // Common windows: last 3, 6, 9, 12 months
   [3, 6, 9, 12].forEach(function(n) {
-    if (allM.length >= n) {
-      queue.push({ dateFrom: allM[allM.length - n], dateTo: allM[allM.length - 1] });
-    }
+    if (allM.length >= n) queue.push({ dateFrom: allM[allM.length - n], dateTo: allM[allM.length - 1] });
   });
 
-  // Fetch sequentially with a small delay so we don't hammer the server
   var idx = 0;
   function next() {
     if (idx >= queue.length) return;
     var r = queue[idx++];
-    var key   = r.dateFrom + '_' + r.dateTo;
-    var lsKey = 'customers_' + key;
-    // Skip if already cached in memory or localStorage
+    var key = r.dateFrom + '_' + r.dateTo;
     if (_customerCache[key]) { setTimeout(next, 10); return; }
-    var lsCached = lsGet(lsKey);
-    if (lsCached && lsCached.success) { _customerCache[key] = lsCached; setTimeout(next, 10); return; }
-    // Fetch silently
-    var qs = '/api/mongo-batch?action=customers&dateFrom=' + encodeURIComponent(r.dateFrom) + '&dateTo=' + encodeURIComponent(r.dateTo);
-    fetch(qs).then(function(res){ return res.json(); }).then(function(data) {
-      if (data.success) { _customerCache[key] = data; lsSet(lsKey, data); }
-      setTimeout(next, 150); // 150ms gap between requests
-    }).catch(function(){ setTimeout(next, 300); });
+    fetch('/api/mongo-batch?action=customers&dateFrom=' + encodeURIComponent(r.dateFrom) + '&dateTo=' + encodeURIComponent(r.dateTo))
+      .then(function(res){ return res.json(); })
+      .then(function(data) {
+        if (data.success) { _customerCache[key] = data; } // memory only — no localStorage
+        setTimeout(next, 300);
+      }).catch(function(){ setTimeout(next, 500); });
   }
-  // Start after a short delay so the initial page load isn't affected
-  setTimeout(next, 2000);
+  setTimeout(next, 3000);
 }
 var fetchFinanceData  = makeFetcher('finance',   'finance',   function(d){ financeData  = d; financeDataReady  = true; });
 var fetchOpData = makeFetcher('op', 'op', function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows; // pendencyDrillRows in-memory only (30MB, too large for localStorage)
@@ -1183,7 +1170,6 @@ function prefetchAgentRanges() {
   var allM = months26;
   if (!allM || allM.length === 0) return;
   var queue = [];
-  for (var i = 0; i < allM.length; i++) queue.push({ dateFrom: allM[i], dateTo: allM[i] });
   [3, 6, 9, 12].forEach(function(n) {
     if (allM.length >= n) queue.push({ dateFrom: allM[allM.length-n], dateTo: allM[allM.length-1] });
   });
@@ -1191,17 +1177,16 @@ function prefetchAgentRanges() {
   function next() {
     if (idx >= queue.length) return;
     var r = queue[idx++];
-    var key = r.dateFrom+'_'+r.dateTo, lsKey = 'agents_'+key;
+    var key = r.dateFrom+'_'+r.dateTo;
     if (_agentCache[key]) { setTimeout(next, 10); return; }
-    var lsCached = lsGet(lsKey);
-    if (lsCached && lsCached.success) { _agentCache[key] = lsCached; setTimeout(next, 10); return; }
-    var qs = '/api/mongo-batch?action=agents&dateFrom='+encodeURIComponent(r.dateFrom)+'&dateTo='+encodeURIComponent(r.dateTo);
-    fetch(qs).then(function(res){ return res.json(); }).then(function(data) {
-      if (data.success) { _agentCache[key]=data; lsSet(lsKey,data); }
-      setTimeout(next, 150);
-    }).catch(function(){ setTimeout(next, 300); });
+    fetch('/api/mongo-batch?action=agents&dateFrom='+encodeURIComponent(r.dateFrom)+'&dateTo='+encodeURIComponent(r.dateTo))
+      .then(function(res){ return res.json(); })
+      .then(function(data) {
+        if (data.success) { _agentCache[key]=data; } // memory only — no localStorage
+        setTimeout(next, 300);
+      }).catch(function(){ setTimeout(next, 500); });
   }
-  setTimeout(next, 4000); // start 4s after page load (after customer prefetch)
+  setTimeout(next, 4000);
 }
 
 // ── Tradelane Insights fetch ──────────────────────────────────────────────────
