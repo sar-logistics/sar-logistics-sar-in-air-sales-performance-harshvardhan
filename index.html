@@ -5988,7 +5988,7 @@ function feedbackModal(){
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:18px 24px;border-bottom:1px solid #F1F5F9;">'
         +'<div>'
           +'<div style="font-size:15px;font-weight:700;color:#15233B;">Send Feedback</div>'
-          +'<div style="font-size:11.5px;color:#94A3B8;font-weight:500;margin-top:2px;">SAR Thailand Sales Performance Dashboard</div>'
+          +'<div style="font-size:11.5px;color:#94A3B8;font-weight:500;margin-top:2px;">SAR IN Air Sales Performance Dashboard</div>'
         +'</div>'
         +'<button data-act="feedbackClose" style="border:none;background:transparent;width:26px;height:26px;border-radius:6px;cursor:pointer;color:#94A3B8;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✕</button>'
       +'</div>'
@@ -7323,13 +7323,33 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation();
     var ta=document.getElementById('feedback-text');
     var sel=document.getElementById('feedback-report');
+    var nameEl=document.getElementById('feedback-name');
+    var emailEl=document.getElementById('feedback-email');
     var txt = ta ? ta.value.trim() : '';
     var report = sel ? sel.value : '';
+    var name  = nameEl  ? nameEl.value.trim()  : (currentUser&&currentUser.name||'');
+    var email = emailEl ? emailEl.value.trim() : (currentUser&&currentUser.email||'');
     if(!report){ state.feedbackError='Please select a report.'; render(); return; }
     if(!txt){ state.feedbackError='Please describe your feedback.'; render(); return; }
     state.feedbackText=txt;
     state.feedbackReport=report;
     state.feedbackError='';
+
+    // Submit to Google Forms (no-cors — response is opaque but data lands in the sheet)
+    var FORM_ID = '1FAIpQLSdWTDpxAI0OVMsdE53Hve_fkqGfeqmNnFjCWXVdLBRR3gzXpA';
+    var formUrl = 'https://docs.google.com/forms/d/e/' + FORM_ID + '/formResponse';
+    var body = new URLSearchParams();
+    body.append('entry.357814648', name);
+    body.append('entry.105745188', email);
+    body.append('entry.1662956587', report);
+    body.append('entry.640898391', txt);
+    fetch(formUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }).catch(function(){});  // no-cors always resolves — errors are silent
+
     state.feedbackSent=true;
     render();
   }
