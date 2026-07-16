@@ -3277,7 +3277,7 @@ function tradelanePage(){
     var _tlDR = getTradelaneDateRange();
     var _tlOpen = state.tradelaneShipOpen||{};
     var _openKeys = Object.keys(_tlOpen).filter(function(k){return _tlOpen[k];}).sort().join(',');
-    var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(state.yearType||'Financial')+'|'+(state.selectedQuarter||'')+'|'+(state.weeklyMonth||'')+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+_openKeys;
+    var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(state.yearType||'Financial')+'|'+(state.selectedQuarter||'')+'|'+(state.weeklyMonth||'')+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+_openKeys+'|'+state.currency;
     if (!_tradelanePivotCache[_tlPivotKey]) {
       // Build pivot table (expensive) — cache result
       var _t0 = performance.now();
