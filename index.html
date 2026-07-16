@@ -6111,12 +6111,52 @@ var _drillDataCallbacks = [];
 function dedupDrillRows(rows) {
   if (!rows || !rows.length) return rows;
   var seen = {};
-  return rows.filter(function(r){
+  var deduped = rows.filter(function(r){
     var key = r.shipmentNo + '|' + (r._cl||'') + '|' + (r._sp||'');
     if (seen[key]) return false;
     seen[key] = true;
     return true;
   });
+
+  // Compute _tg (tradelane group) client-side from port strings if not already set by server
+  // Mirrors the server-side portToInfo + TRADELANE_MAP logic
+  var _TL_MAP = {
+    'US':'US','GB':'Europe','CA':'Canada','PR':'LATAM','BR':'LATAM','VN':'Asia',
+    'MX':'LATAM','FR':'Med','BE':'Europe','GE':'Europe','DE':'Europe','NL':'Europe',
+    'PY':'LATAM','TR':'Med','ES':'Med','ID':'Asia','SG':'Asia','OM':'Middle East',
+    'FI':'Europe','EG':'Med','MA':'Med','AE':'Middle East','TN':'Med','ZA':'Africa',
+    'GH':'Africa','CN':'Asia','HN':'LATAM','PE':'LATAM','DO':'Dominican Republic',
+    'PK':'Asia','AU':'Australia','NZ':'Australia','JP':'Asia','KR':'Asia','IN':'India',
+    'LK':'Asia','BD':'Asia','TH':'Asia','MY':'Asia','PH':'Asia','TW':'Asia',
+    'QA':'Middle East','SA':'Middle East','KW':'Middle East','BH':'Middle East',
+    'JO':'Middle East','LB':'Middle East','IL':'Middle East','IQ':'Middle East',
+    'IT':'Med','PT':'Med','GR':'Med','HR':'Med','MT':'Med','CY':'Med',
+    'SE':'Europe','NO':'Europe','DK':'Europe','PL':'Europe','CZ':'Europe',
+    'AT':'Europe','CH':'Europe','HU':'Europe','RO':'Europe','BG':'Europe',
+    'UA':'Europe','RU':'Europe','NI':'LATAM','SV':'LATAM','GT':'LATAM',
+    'CR':'LATAM','PA':'LATAM','CO':'LATAM','VE':'LATAM','EC':'LATAM',
+    'AR':'LATAM','CL':'LATAM','BO':'LATAM','UY':'LATAM','GY':'LATAM',
+    'NG':'Africa','KE':'Africa','ET':'Africa','TZ':'Africa','UG':'Africa',
+    'CI':'Africa','CM':'Africa','SN':'Africa'
+  };
+  function _portToTG(portStr) {
+    if (!portStr) return '';
+    var m = String(portStr).trim().match(/^\(([A-Z]{2,5})\)/);
+    if (!m) return '';
+    return _TL_MAP[m[1].slice(0,2).toUpperCase()] || '';
+  }
+
+  deduped.forEach(function(r){
+    if (r._tg) return; // already set by server — use it
+    var lob = r.lob || '';
+    if (lob === 'AIR EXPORT' || lob === 'SEA EXPORT') {
+      r._tg = _portToTG(r.dischargePort || '');
+    } else if (lob === 'AIR IMPORT' || lob === 'SEA IMPORT') {
+      r._tg = _portToTG(r.loadingPort || '');
+    }
+  });
+
+  return deduped;
 }
 
 function loadDrillData(callback){
