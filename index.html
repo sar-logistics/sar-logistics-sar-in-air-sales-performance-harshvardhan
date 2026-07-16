@@ -2812,6 +2812,7 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
   }
   var custLobRepMap = _custLobRepMapCache[activeLob] || {};
   var _custLobRepMapLoaded = Object.keys(custLobRepMap).length > 0;
+  var _custLobRepMapLoaded = Object.keys(custLobRepMap).length > 0;
   var rows = (lobData.allCustomers || []).slice();
   var sortCol = state.custSortCol || 'gp';
   var sortDir = (state.custSortDir === undefined) ? -1 : state.custSortDir;
@@ -3065,6 +3066,7 @@ function agentPivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) 
     _agentLobRepMapCache[activeLob] = _newAgentMap;
   }
   var agentLobRepMap = _agentLobRepMapCache[activeLob] || {};
+  var _agentLobRepMapLoaded = Object.keys(agentLobRepMap).length > 0;
   var rows = (lobData.allAgents || []).slice();
   var sortCol = state.agentSortCol || 'gp';
   var sortDir = (state.agentSortDir === undefined) ? -1 : state.agentSortDir;
