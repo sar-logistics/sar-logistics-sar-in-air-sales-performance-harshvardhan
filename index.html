@@ -1205,17 +1205,14 @@ function fetchTradelaneData(callback, force) {
     + (force ? '&force=1' : '')
     + (dateFrom ? '&dateFrom=' + encodeURIComponent(dateFrom) : '')
     + (dateTo   ? '&dateTo='   + encodeURIComponent(dateTo)   : '');
-  console.log('[TL CACHE] fetchTradelaneData key='+key+' force='+force+' inMemory='+!!_tradelaneCache[key]+' shipments='+(_tradelaneCache[key]&&_tradelaneCache[key].allCountries?_tradelaneCache[key].allCountries.reduce(function(s,c){return s+(c.shipments||0);},0):'n/a'));
   if (!force) {
     if (_tradelaneCache[key]) { tradelaneData = _tradelaneCache[key]; tradelaneDataReady = true; if (callback) callback(); return; }
-    // Skip localStorage — tradelane data may be stale from before ocean/isotank fix
+    var lst = lsGet(lsKey);
+    if (lst && lst.success) { _tradelaneCache[key]=lst; tradelaneData=lst; tradelaneDataReady=true; if(callback) callback(); return; }
   }
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){
-      if(data.success){
-        console.log('[TL CACHE] fetchTradelaneData FRESH key='+key+' shipments='+(data.allCountries?data.allCountries.reduce(function(s,c){return s+(c.shipments||0);},0):'n/a'));
-        data._cacheKey=key;_tradelaneCache[key]=data;tradelaneData=data;tradelaneDataReady=true;
-      }
+      if(data.success){ data._cacheKey=key; _tradelaneCache[key]=data; tradelaneData=data; tradelaneDataReady=true; lsSet(lsKey,data); }
       if(callback) callback();
     })
     .catch(function(e){ console.warn('Tradelane failed:',e.message); if(callback) callback(); });
@@ -3221,14 +3218,10 @@ function tradelanePage(){
   if (_filterZonesTL.length > 0 && !allDrillRows) {
     loadDrillData(function(){ _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); });
   }
-  // Table view requires allDrillRows for accurate shipment counts (_tg override)
-  // Trigger load and show spinner — don't render stale SRR counts
+  // Table view: trigger allDrillRows load in background for _tg shipment correction
+  // Render immediately — _tg client-side patch runs on whatever is available
   if (state.tradelaneView === 'table' && !allDrillRows && !_drillLoadAttempted) {
     loadDrillData(function(){ _tradelanePivotCache={}; render(); });
-    return '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#64748B;font-size:13px;gap:10px;">'
-      +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 0.8s linear infinite;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>'
-      +'Loading shipment data…'
-      +'</div>';
   }
 
   // Build effective SP list — prefer allDrillRows (authoritative), fallback to repsRawOriginal display names
@@ -3489,7 +3482,6 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     });
     // Override shipments, tons, gp, revenue from allDrillRows (accurate, lock-based)
     grand.shipments = _gtGrand.shipments;
-    console.log('[TL GT] Grand total from allDrillRows:', _gtGrand.shipments, '| from SRR rows:', rows.reduce(function(s,r){return s+(r.shipments||0);},0), '| activeMons:', activeMons);
     grand.tons      = _gtGrand.tons;
     grand.gp        = _gtGrand.gp;
     grand.revenue   = _gtGrand.revenue;
