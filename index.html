@@ -4375,39 +4375,49 @@ function teamsPage(){
     return '<div style="display:flex;align-items:center;justify-content:center;height:100%;"><div style="display:flex;flex-direction:column;align-items:center;gap:14px;"><div class="login-spinner" style="width:24px;height:24px;border-width:3px;"></div><div style="font-size:12px;color:#64748B;font-weight:600;">Loading team…</div></div></div>';
   }
 
-  var allUsers = (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]);
+  var allUsers  = (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]);
   var hierarchy = orgData.hierarchy||[];
   var directReports = orgData.directReports||[];
-  var support = orgData.support||[];
-
-  var byEmail = {};
-  allUsers.forEach(function(u){ if(u.email) byEmail[u.email.toLowerCase().trim()] = u; });
+  var support   = orgData.support||[];
 
   var isYouEmail = currentUser && currentUser.email ? currentUser.email.toLowerCase().trim() : '';
-  var CC = '#CBD5E1'; // connector colour
+  var CC = '#CBD5E1';
 
   function avBg(name){ return 'oklch(0.55 0.13 '+avatarHueFor(name)+')'; }
-  function ini(name){ return (name||'?').split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase(); }
+  function initials(name){ return (name||'?').split(' ').map(function(w){return w[0];}).join('').slice(0,2).toUpperCase(); }
+
   function editBtn(email){
     return '<button data-act="orgEditOpen" data-email="'+esc(email)+'" style="border:1px solid #E2E8F0;background:#FFF;width:22px;height:22px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#64748B;flex-shrink:0;">'
       +'<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
     +'</button>';
   }
 
-  // Universal card — size: 'lg' | 'md' | 'sm'
-  function card(u, size){
+  // ── Cards ────────────────────────────────────────────────────────────────
+  var CARD_W = 210; // fixed width for all cards (px)
+
+  function rmCard(u){
     var isYou = isYouEmail && u.email && u.email.toLowerCase().trim()===isYouEmail;
-    var border = isYou ? '2px solid #2563EB' : '1px solid #E7ECF3';
-    var avSz = size==='lg' ? 40 : size==='md' ? 36 : 32;
-    var fs   = size==='lg' ? '13px' : size==='md' ? '12.5px' : '12px';
-    var pad  = size==='lg' ? '13px 15px' : size==='md' ? '11px 13px' : '9px 11px';
-    var maxW = size==='lg' ? '230px' : size==='md' ? '215px' : '200px';
-    var nameShort = (u.name||'').length>17 ? (u.name||'').slice(0,15)+'…' : (u.name||'');
-    var reportLine = (u.reportCount>0 && size!=='sm') ? '<div style="font-size:10px;color:#94A3B8;margin-top:2px;">'+u.reportCount+' report'+(u.reportCount===1?'':'s')+'</div>' : '';
-    return '<div style="background:#FFF;border:'+border+';border-radius:10px;padding:'+pad+';display:flex;align-items:flex-start;gap:9px;width:'+maxW+';flex-shrink:0;box-sizing:border-box;">'
-      +'<div style="width:'+avSz+'px;height:'+avSz+'px;border-radius:50%;background:'+avBg(u.name)+';color:#fff;font-size:'+(size==='lg'?'13px':'11px')+';font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini(u.name)+'</div>'
+    var nameShort = (u.name||'').length>18 ? (u.name||'').slice(0,16)+'…' : (u.name||'');
+    var reportLine = u.reportCount>0 ? '<div style="font-size:10px;color:#94A3B8;margin-top:2px;">'+u.reportCount+' report'+(u.reportCount===1?'':'s')+'</div>' : '';
+    return '<div style="background:#FFF;border:'+(isYou?'2px solid #2563EB':'1px solid #E7ECF3')+';border-radius:12px;padding:14px 15px;display:flex;align-items:flex-start;gap:10px;width:'+CARD_W+'px;box-sizing:border-box;flex-shrink:0;">'
+      +'<div style="width:42px;height:42px;border-radius:50%;background:'+avBg(u.name)+';color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+initials(u.name)+'</div>'
       +'<div style="flex:1;min-width:0;">'
-        +'<div style="font-size:'+fs+';font-weight:700;color:#15233B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.name||'')+'">'+esc(nameShort)+'</div>'
+        +'<div style="font-size:13px;font-weight:700;color:#15233B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.name||'')+'">'+esc(nameShort)+'</div>'
+        +'<div style="margin-top:4px;">'+roleBadge(u.role)+'</div>'
+        +reportLine
+      +'</div>'
+      +editBtn(u.email)
+    +'</div>';
+  }
+
+  function zmCard(u){
+    var isYou = isYouEmail && u.email && u.email.toLowerCase().trim()===isYouEmail;
+    var nameShort = (u.name||'').length>18 ? (u.name||'').slice(0,16)+'…' : (u.name||'');
+    var reportLine = u.reportCount>0 ? '<div style="font-size:10px;color:#94A3B8;margin-top:2px;">'+u.reportCount+' report'+(u.reportCount===1?'':'s')+'</div>' : '';
+    return '<div style="background:#FFF;border:'+(isYou?'2px solid #2563EB':'1px solid #E7ECF3')+';border-radius:10px;padding:12px 13px;display:flex;align-items:flex-start;gap:9px;width:'+CARD_W+'px;box-sizing:border-box;flex-shrink:0;">'
+      +'<div style="width:38px;height:38px;border-radius:50%;background:'+avBg(u.name)+';color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+initials(u.name)+'</div>'
+      +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:12.5px;font-weight:700;color:#15233B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.name||'')+'">'+esc(nameShort)+'</div>'
         +'<div style="margin-top:3px;">'+roleBadge(u.role)+'</div>'
         +reportLine
       +'</div>'
@@ -4415,12 +4425,11 @@ function teamsPage(){
     +'</div>';
   }
 
-  function supportCard(u){
+  function repCard(u){
     var isYou = isYouEmail && u.email && u.email.toLowerCase().trim()===isYouEmail;
-    var border = isYou ? '2px solid #2563EB' : '1px solid #E7ECF3';
-    var nameShort = (u.name||'').length>16 ? (u.name||'').slice(0,14)+'…' : (u.name||'');
-    return '<div style="background:#FFF;border:'+border+';border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;">'
-      +'<div style="width:36px;height:36px;border-radius:50%;background:'+avBg(u.name)+';color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini(u.name)+'</div>'
+    var nameShort = (u.name||'').length>18 ? (u.name||'').slice(0,16)+'…' : (u.name||'');
+    return '<div style="background:#FFF;border:'+(isYou?'2px solid #2563EB':'1px solid #E7ECF3')+';border-radius:9px;padding:10px 12px;display:flex;align-items:center;gap:8px;width:'+CARD_W+'px;box-sizing:border-box;flex-shrink:0;">'
+      +'<div style="width:32px;height:32px;border-radius:50%;background:'+avBg(u.name)+';color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+initials(u.name)+'</div>'
       +'<div style="flex:1;min-width:0;">'
         +'<div style="font-size:12px;font-weight:700;color:#15233B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.name||'')+'">'+esc(nameShort)+'</div>'
         +'<div style="margin-top:3px;">'+roleBadge(u.role)+'</div>'
@@ -4429,132 +4438,130 @@ function teamsPage(){
     +'</div>';
   }
 
-  // ── Classify people ──────────────────────────────────────────────────────
-  var regManagers = hierarchy.filter(function(u){ return (u.role||'').toLowerCase()==='regional manager'; });
+  function supportCard(u){
+    var isYou = isYouEmail && u.email && u.email.toLowerCase().trim()===isYouEmail;
+    var nameShort = (u.name||'').length>16 ? (u.name||'').slice(0,14)+'…' : (u.name||'');
+    return '<div style="background:#FFF;border:'+(isYou?'2px solid #2563EB':'1px solid #E7ECF3')+';border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+      +'<div style="width:36px;height:36px;border-radius:50%;background:'+avBg(u.name)+';color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+initials(u.name)+'</div>'
+      +'<div style="flex:1;min-width:0;">'
+        +'<div style="font-size:12px;font-weight:700;color:#15233B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(u.name||'')+'">'+esc(nameShort)+'</div>'
+        +'<div style="margin-top:3px;">'+roleBadge(u.role)+'</div>'
+      +'</div>'
+      +editBtn(u.email)
+    +'</div>';
+  }
+
+  // ── Data ─────────────────────────────────────────────────────────────────
+  var regManagers   = hierarchy.filter(function(u){ return (u.role||'').toLowerCase()==='regional manager'; });
   var zonalManagers = hierarchy.filter(function(u){ var r=(u.role||'').toLowerCase(); return r==='zonal manager'||r==='manager'; });
 
-  // Map ZM email → reps who report to them
+  // ZM email → their reps
   var repsByZM = {};
+  var zmEmailSet = {};
+  zonalManagers.forEach(function(z){ zmEmailSet[z.email.toLowerCase().trim()]=true; });
+
   directReports.forEach(function(u){
-    var mKey = (u.reportsTo||'').toLowerCase().trim();
+    var mKey=(u.reportsTo||'').toLowerCase().trim();
     if(!repsByZM[mKey]) repsByZM[mKey]=[];
     repsByZM[mKey].push(u);
   });
 
-  // Reps who don't report to any ZM (orphans)
-  var zmEmails = {};
-  zonalManagers.forEach(function(z){ zmEmails[z.email.toLowerCase().trim()]=true; });
   var orphanReps = directReports.filter(function(u){
-    var mKey=(u.reportsTo||'').toLowerCase().trim();
-    return !zmEmails[mKey];
+    return !zmEmailSet[(u.reportsTo||'').toLowerCase().trim()];
   });
 
-  // ── Connector helpers ────────────────────────────────────────────────────
-  function vLine(h){ return '<div style="width:2px;height:'+h+'px;background:'+CC+';flex-shrink:0;"></div>'; }
-  function hLine(w){ return '<div style="height:2px;width:'+w+';background:'+CC+';"></div>'; }
-  function centered(content){ return '<div style="display:flex;justify-content:center;">'+content+'</div>'; }
+  // ── Build ZM columns (each is a vertical strip: ZM card → connector → reps) ──
+  // Each column is exactly CARD_W wide, so the scroll row width is predictable.
+  var COL_GAP = 20; // px gap between ZM columns
 
-  // ── Build each ZM block: ZM card + its reps below ───────────────────────
-  function zmBlock(zm){
+  function zmColumn(zm){
     var reps = repsByZM[zm.email.toLowerCase().trim()]||[];
-    var zmCardHtml = centered(card(zm,'md'));
+    var colHtml = '';
 
-    if(reps.length===0) return zmCardHtml;
+    // ZM card
+    colHtml += zmCard(zm);
 
-    // vertical stem from ZM down
-    var stem = centered(vLine(24));
-
-    var repCardsHtml;
-    if(reps.length===1){
-      repCardsHtml = centered(card(reps[0],'sm'));
-    } else {
-      // horizontal branch bar + drops
-      var repW = 200; // card width px
-      var gap  = 12;
-      var totalW = reps.length * repW + (reps.length-1)*gap;
-      // top half of T: horizontal bar
-      var branchBar = '<div style="display:flex;justify-content:center;">'
-        +'<div style="width:'+totalW+'px;position:relative;height:2px;">'
-          // bar covers from centre of first card to centre of last card
-          +'<div style="position:absolute;top:0;left:'+(repW/2)+'px;right:'+(repW/2)+'px;height:2px;background:'+CC+';"></div>'
-        +'</div>'
-      +'</div>';
-      // short drops from bar into each card
-      var drops = '<div style="display:flex;justify-content:center;gap:'+gap+'px;">'
-        +reps.map(function(){ return '<div style="width:'+repW+'px;display:flex;justify-content:center;">'+vLine(14)+'</div>'; }).join('')
-      +'</div>';
-      var repRow = '<div style="display:flex;justify-content:center;gap:'+gap+'px;">'
-        +reps.map(function(r){ return card(r,'sm'); }).join('')
-      +'</div>';
-      repCardsHtml = branchBar + drops + repRow;
+    if(reps.length>0){
+      // vertical stem
+      colHtml += '<div style="display:flex;justify-content:center;"><div style="width:2px;height:20px;background:'+CC+';"></div></div>';
+      // reps stacked vertically
+      reps.forEach(function(r, ri){
+        colHtml += repCard(r);
+        // small gap between rep cards
+        if(ri < reps.length-1) colHtml += '<div style="height:8px;"></div>';
+      });
     }
 
-    return zmCardHtml + stem + repCardsHtml;
+    return '<div style="display:flex;flex-direction:column;align-items:stretch;width:'+CARD_W+'px;flex-shrink:0;">'+colHtml+'</div>';
   }
 
-  // ── Assemble chart body ──────────────────────────────────────────────────
-  var chartBody = '';
+  // ── Assemble ─────────────────────────────────────────────────────────────
+  var chartHtml = '';
 
-  // 1. Regional Managers row
+  // 1. Regional Managers — centred, not scrollable
   if(regManagers.length>0){
-    if(regManagers.length===1){
-      chartBody += centered(card(regManagers[0],'lg'));
-    } else {
-      var rmW = 230; var rmGap = 16;
-      var rmTotal = regManagers.length*rmW+(regManagers.length-1)*rmGap;
-      chartBody += '<div style="display:flex;justify-content:center;gap:'+rmGap+'px;">'
-        +regManagers.map(function(r){ return card(r,'lg'); }).join('')
-      +'</div>';
-    }
-  }
-
-  // 2. Connector from RM row down to ZM row
-  if(regManagers.length>0 && zonalManagers.length>0){
-    chartBody += centered(vLine(32));
-  }
-
-  // 3. Zonal Managers row + their reps below
-  if(zonalManagers.length>0){
-    if(zonalManagers.length===1){
-      chartBody += zmBlock(zonalManagers[0]);
-    } else {
-      // Each ZM is a column; columns sit side by side separated by a gap
-      var colGap = 28;
-      // ZM cards row with horizontal bar between them
-      var zmCardRow = '<div style="display:flex;justify-content:center;gap:'+colGap+'px;">'
-        +zonalManagers.map(function(z){ return centered(card(z,'md')).replace('display:flex;justify-content:center;','display:flex;justify-content:center;flex-direction:column;align-items:center;'); }).join('')
-      +'</div>';
-
-      // Actually render each ZM+reps as a column in a flex row
-      chartBody += '<div style="display:flex;justify-content:center;align-items:flex-start;gap:'+colGap+'px;flex-wrap:wrap;">'
-        +zonalManagers.map(function(z){
-          return '<div style="display:flex;flex-direction:column;align-items:center;">'+zmBlock(z)+'</div>';
-        }).join('')
-      +'</div>';
-    }
-  }
-
-  // 4. Orphan reps (not assigned to any ZM)
-  if(orphanReps.length>0){
-    chartBody += centered(vLine(28));
-    chartBody += '<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:10px;">'
-      +orphanReps.map(function(r){ return card(r,'sm'); }).join('')
+    chartHtml += '<div style="display:flex;justify-content:center;gap:16px;flex-wrap:wrap;padding-bottom:4px;">'
+      +regManagers.map(function(r){ return rmCard(r); }).join('')
     +'</div>';
   }
 
-  // ── Support panel ────────────────────────────────────────────────────────
-  var supportPanel = '';
-  if(support.length>0){
-    supportPanel = '<div style="width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:0;">'
-      +'<div style="font-size:9px;font-weight:800;letter-spacing:0.1em;color:#94A3B8;text-transform:uppercase;margin-bottom:10px;padding-top:2px;">Support Roles</div>'
-      +'<div style="display:flex;flex-direction:column;gap:8px;overflow-y:auto;">'
-        +support.map(function(u){ return supportCard(u); }).join('')
+  // 2. Vertical connector RM → ZM section
+  if(regManagers.length>0 && zonalManagers.length>0){
+    chartHtml += '<div style="display:flex;justify-content:center;">'
+      +'<div style="width:2px;height:32px;background:'+CC+';"></div>'
+    +'</div>';
+  }
+
+  // 3. ZM row header + scrollable ZM columns
+  if(zonalManagers.length>0){
+    // Horizontal line spanning all ZM columns (top of T)
+    var rowW = zonalManagers.length * CARD_W + (zonalManagers.length-1) * COL_GAP;
+
+    // The horizontal bar at the top of the ZM row spans col-centre to col-centre
+    // We draw it inside the scroll container so it lines up with cards
+    var hBar = zonalManagers.length > 1
+      ? '<div style="position:relative;height:2px;width:'+rowW+'px;flex-shrink:0;margin-bottom:0;">'
+          +'<div style="position:absolute;top:0;left:'+(CARD_W/2)+'px;right:'+(CARD_W/2)+'px;height:2px;background:'+CC+';"></div>'
+        +'</div>'
+        // drop lines from hBar into each column
+        +'<div style="display:flex;gap:'+COL_GAP+'px;width:'+rowW+'px;flex-shrink:0;">'
+          +zonalManagers.map(function(){ return '<div style="width:'+CARD_W+'px;flex-shrink:0;display:flex;justify-content:center;"><div style="width:2px;height:16px;background:'+CC+';"></div></div>'; }).join('')
+        +'</div>'
+      : '<div style="height:0;"></div>';
+
+    // Scrollable strip of ZM columns
+    chartHtml += '<div style="overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;padding-bottom:12px;">'
+      // inner flex — natural width, scrolls horizontally
+      +'<div style="display:inline-flex;flex-direction:column;align-items:flex-start;min-width:min-content;">'
+        +hBar
+        +'<div style="display:flex;gap:'+COL_GAP+'px;align-items:flex-start;">'
+          +zonalManagers.map(function(z){ return zmColumn(z); }).join('')
+        +'</div>'
       +'</div>'
     +'</div>';
   }
 
-  // ── Counts & top bar ─────────────────────────────────────────────────────
-  var topBar = '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px 12px;flex-shrink:0;border-bottom:1px solid #EEF2F8;">'
+  // 4. Orphan reps (no ZM)
+  if(orphanReps.length>0){
+    chartHtml += '<div style="margin-top:20px;">'
+      +'<div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:#94A3B8;text-transform:uppercase;margin-bottom:10px;">Unassigned Reps</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:10px;">'
+        +orphanReps.map(function(r){ return repCard(r); }).join('')
+      +'</div>'
+    +'</div>';
+  }
+
+  // ── Support panel ─────────────────────────────────────────────────────────
+  var supportPanel = '';
+  if(support.length>0){
+    supportPanel = '<div style="flex-shrink:0;width:268px;border-left:1px solid #EEF2F8;background:#FAFBFD;padding:16px;overflow-y:auto;display:flex;flex-direction:column;">'
+      +'<div style="font-size:9px;font-weight:800;letter-spacing:0.1em;color:#94A3B8;text-transform:uppercase;margin-bottom:12px;">Support Roles</div>'
+      +support.map(function(u){ return supportCard(u); }).join('')
+    +'</div>';
+  }
+
+  // ── Top bar ───────────────────────────────────────────────────────────────
+  var topBar = '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px 12px;flex-shrink:0;border-bottom:1px solid #EEF2F8;background:#FFF;">'
     +'<div>'
       +'<div style="font-size:15px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Org Chart</div>'
       +'<div style="font-size:11px;color:#9AAFC8;margin-top:1px;">'+allUsers.length+' users · '+hierarchy.length+' in hierarchy · '+support.length+' support</div>'
@@ -4565,19 +4572,15 @@ function teamsPage(){
     +'</button>'
   +'</div>';
 
-  // ── Full-height wrapper ───────────────────────────────────────────────────
-  // main-slot is flex:1 overflow-y:auto — make our content fill it completely
+  // ── Full-viewport wrapper ─────────────────────────────────────────────────
   return '<div style="display:flex;flex-direction:column;height:100%;min-height:0;margin:-4px -18px 0;background:#F8FAFC;">'
-    + topBar
-    +'<div style="display:flex;flex:1;min-height:0;gap:0;">'
-      // Left: scrollable chart area
-      +'<div style="flex:1;min-width:0;overflow:auto;padding:28px 24px 32px;">'
-        +chartBody
+    +topBar
+    +'<div style="display:flex;flex:1;min-height:0;">'
+      // Main chart area — vertical scroll for the whole chart, h-scroll only in ZM strip
+      +'<div style="flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;padding:28px 24px 40px;">'
+        +chartHtml
       +'</div>'
-      // Right: support panel (fixed width, scrollable)
-      +(supportPanel
-        ? '<div style="width:280px;flex-shrink:0;border-left:1px solid #EEF2F8;background:#FAFBFD;padding:16px 16px;overflow-y:auto;display:flex;flex-direction:column;">'+supportPanel+'</div>'
-        : '')
+      +supportPanel
     +'</div>'
   +'</div>';
 }
