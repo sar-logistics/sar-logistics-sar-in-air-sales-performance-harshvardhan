@@ -552,6 +552,26 @@ var months26 = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','
 var repsRawOriginal = []; // unfiltered data straight from backend
 var repsRaw  = [];         // filtered view — recomputed every render() based on active filters
 
+// ── RLS helper: returns the effective rep name list for the current user ──────
+// Sales Rep    → [their own name]
+// Zonal Manager → all reps in their zone (currentUser.zone must match r.zone)
+// Regional Manager / Admin / HR / null → [] (no restriction)
+function _getRLSReps() {
+  if (!currentUser) return [];
+  var role = (currentUser.role || '').toLowerCase().trim();
+  if (role === 'sales rep') {
+    return [currentUser.name];
+  }
+  if (role === 'zonal manager') {
+    var userZone = (currentUser.zone || '').trim();
+    if (!userZone) return [];
+    return repsRawOriginal
+      .filter(function(r){ return !r.isBranch && r.zone === userZone; })
+      .map(function(r){ return r.name; });
+  }
+  return []; // RM / admin / hr — unrestricted
+}
+
 // Recompute the working `repsRaw` from `repsRawOriginal` based on active
 // Rep and LOB filters. Called at the top of every render() so all downstream
 // code (grandEntity, zoneEntity, repEntity, kpiRow, model, etc.) automatically
@@ -572,7 +592,7 @@ function computeFilteredRepsRaw(){
         return r.name && currentUser.name && r.name.toLowerCase() === currentUser.name.toLowerCase();
       });
     } else if (role === 'zonal manager') {
-      var userZone = currentUser.zone || '';
+      var userZone = (currentUser.zone || '').trim();
       if (userZone) {
         base = base.filter(function(r){ return r.zone === userZone; });
       }
@@ -2619,15 +2639,7 @@ function customerPage(){
 
   // Apply filterReps / filterLobs to customer data
   // RLS: auto-restrict reps based on user role
-  var _rlsReps = [];
-  if (currentUser) {
-    var _iRole = (currentUser.role || '').toLowerCase().trim();
-    if (_iRole === 'sales rep') {
-      _rlsReps = [currentUser.name];
-    } else if (_iRole === 'zonal manager') {
-      _rlsReps = repsRaw.filter(function(r){ return !r.isBranch; }).map(function(r){ return r.name; });
-    }
-  }
+  var _rlsReps = _getRLSReps();
   var filterReps = _rlsReps.length > 0 ? _rlsReps : (state.filterReps || []);
   // Derive LOB filter from the active tab — independent of state.filterLobs (Sales Performance)
   var _INSIGHT_LOB_MAP = {
@@ -2935,15 +2947,7 @@ function agentPage(){
 
   // Apply filterReps / filterLobs
   // RLS: auto-restrict reps based on user role
-  var _rlsReps = [];
-  if (currentUser) {
-    var _iRole = (currentUser.role || '').toLowerCase().trim();
-    if (_iRole === 'sales rep') {
-      _rlsReps = [currentUser.name];
-    } else if (_iRole === 'zonal manager') {
-      _rlsReps = repsRaw.filter(function(r){ return !r.isBranch; }).map(function(r){ return r.name; });
-    }
-  }
+  var _rlsReps = _getRLSReps();
   var filterReps = _rlsReps.length > 0 ? _rlsReps : (state.filterReps || []);
   // Derive LOB filter from the active tab — independent of state.filterLobs (Sales Performance)
   var _INSIGHT_LOB_MAP = {
@@ -3204,9 +3208,10 @@ function tradelanePage(){
   var filterLobs = _INSIGHT_LOB_MAP[activeLob] || [];
   var _filterZonesTL = state.filterZones || [];
   var _filterRepsTL  = state.filterReps  || [];
+  var _rlsRepsTL     = _getRLSReps(); // RLS: non-empty for sales rep / zonal manager
 
-  // If zone/rep filter active and allDrillRows not loaded — trigger load and show spinner
-  var _needsDrill = (_filterZonesTL.length > 0 || _filterRepsTL.length > 0);
+  // If zone/rep/RLS filter active and allDrillRows not loaded — trigger load and show spinner
+  var _needsDrill = (_filterZonesTL.length > 0 || _filterRepsTL.length > 0 || _rlsRepsTL.length > 0);
   if (_needsDrill && !allDrillRows) {
     if (!_drillDataLoading) loadDrillData(function(){ _tradelanePivotCache={}; render(); });
     return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'
@@ -3232,15 +3237,30 @@ function tradelanePage(){
       });
     }
     var _selRepsNorm = _filterRepsTL.map(function(x){ return normalizeName(x); });
-    if (_filterZonesTL.length > 0 && _filterRepsTL.length > 0) {
+    var _rlsNorm     = _rlsRepsTL.map(function(x){ return normalizeName(x); });
+
+    if (_rlsNorm.length > 0) {
+      // RLS takes priority — intersect with zone/rep filters if set
+      var _rlsSet = {};
+      _rlsNorm.forEach(function(sp){ _rlsSet[sp] = true; });
+      if (_filterZonesTL.length > 0) {
+        _effectiveFilterRepsTL = Object.keys(_zoneSpSet).filter(function(sp){ return _rlsSet[sp]; });
+      } else if (_selRepsNorm.length > 0) {
+        _effectiveFilterRepsTL = _selRepsNorm.filter(function(sp){ return _rlsSet[sp]; });
+      } else {
+        _effectiveFilterRepsTL = _rlsNorm;
+      }
+    } else if (_filterZonesTL.length > 0 && _selRepsNorm.length > 0) {
       _effectiveFilterRepsTL = Object.keys(_zoneSpSet).filter(function(sp){ return _selRepsNorm.indexOf(sp) > -1; });
     } else if (_filterZonesTL.length > 0) {
       _effectiveFilterRepsTL = Object.keys(_zoneSpSet);
-    } else if (_filterRepsTL.length > 0) {
+    } else if (_selRepsNorm.length > 0) {
       _effectiveFilterRepsTL = _selRepsNorm;
     }
   } else if (!allDrillRows && _filterRepsTL.length > 0) {
     _effectiveFilterRepsTL = _filterRepsTL.map(function(x){ return normalizeName(x); });
+  } else if (!allDrillRows && _rlsRepsTL.length > 0) {
+    _effectiveFilterRepsTL = _rlsRepsTL.map(function(x){ return normalizeName(x); });
   }
 
   // When zone/rep filter active, rebuild lobData entirely from allDrillRows
@@ -6653,20 +6673,7 @@ function openInsightDrill(drillType, name, drillMonth) {
   var _iToIdx   = _iTo   ? FY_ALL.indexOf(_iTo)   : FY_ALL.length - 1;
 
   // RLS rep filter — compute ONCE outside loop
-  var _rlsRepsNorm = [];
-  if (currentUser) {
-    var _iRole = (currentUser.role||'').toLowerCase().trim();
-    if (_iRole === 'sales rep') _rlsRepsNorm = [normalizeName(currentUser.name)];
-    else if (_iRole === 'zonal manager') {
-      _rlsRepsNorm = [];
-      repsRaw.filter(function(r){return !r.isBranch;}).forEach(function(r){
-        _rlsRepsNorm.push(normalizeName(r.name));
-        // Also add first-segment norm in case raw name differs from display name
-        var seg = r.name.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
-        if(_rlsRepsNorm.indexOf(seg)<0) _rlsRepsNorm.push(seg);
-      });
-    }
-  }
+  var _rlsRepsNorm = _getRLSReps().map(function(n){ return normalizeName(n); });
 
   var matched = [];
   for (var i = 0; i < allDrillRows.length; i++) {
