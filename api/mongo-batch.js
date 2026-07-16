@@ -341,7 +341,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-14T-tradelane-country-fix"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-16T-tradelane-tg-field"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -459,6 +459,26 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         const chargeableWeightUnit = String(job["Chargeable Weight Unit"] || "").trim();
         const calculatedTons = calculateAirTons(job, cls);
 
+        // Compute tradelane group (_tg) from port field — mirrors SRR tradelane logic
+        // Air Export: Discharge Port; Air Import: Loading Port; Sea Export: Discharge Country; Sea Import: Loading Port; ISO Tank: Consignee/Shipper Country
+        let _tg = "";
+        if (cls.kind === "AIR") {
+          const _portField = cls.direction === "EXPORT" ? "Discharge Port" : "Loading Port";
+          _tg = portToInfo(job[_portField] || "").tradelane;
+        } else if (cls.kind === "SEA") {
+          if (cls.direction === "EXPORT") {
+            // Discharge Country is plain text
+            _tg = countryNameToTradelane(job["Discharge Country"] || "") || (job["Discharge Country"] || "");
+          } else {
+            _tg = portToInfo(job["Loading Port"] || "").tradelane;
+          }
+        } else if (cls.kind === "ISOTANK") {
+          const _raw = cls.direction === "EXPORT"
+            ? (String(job["Consignee Country"] || job["Destination Country"] || "").trim())
+            : (String(job["Shipper Country"]   || job["Origin Port Country"] || "").trim());
+          _tg = countryNameToTradelane(_raw) || _raw;
+        }
+
         allRows.push({
           _sp: salesPerson,  // normalized
           _ml: monthLabel,
@@ -510,6 +530,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           customer: String(job["Customer"] || "").trim(),
           _zone, // zone from mapping — null if unmapped
           _dn,   // display name from mapping — null if unmapped
+          _tg,   // tradelane group (US, LATAM, Asia, Europe etc) — for per-country count accuracy
         });
       }
     }

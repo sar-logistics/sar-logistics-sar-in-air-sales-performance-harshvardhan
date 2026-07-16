@@ -3485,6 +3485,47 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     });
   }
 
+  // Override per-country shipment counts from allDrillRows using _tg (tradelane group)
+  // This ensures country rows match the drill (deduped) rather than SRR aggregate (raw)
+  if (allDrillRows && allDrillRows.length > 0) {
+    var _tgActiveMonsSet = {};
+    activeMons.forEach(function(m){ _tgActiveMonsSet[m] = true; });
+    var _tgFyMonsSet = {};
+    if (_fyGroups) { _fyGroups.forEach(function(g){ g.idxs.forEach(function(i){ _tgFyMonsSet[months26[i]] = g.key; }); }); }
+
+    // Build per-tradelane group counts from allDrillRows
+    var _tgCount = {};   // tg → total shipments
+    var _tgMDCount = {}; // tg → { colKey → shipments }
+    allDrillRows.forEach(function(r){
+      if (!r._tg) return;
+      if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
+      if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
+      var inActive = _fyGroups ? !!_tgFyMonsSet[r._ml] : !!_tgActiveMonsSet[r._ml];
+      if (!inActive) return;
+      var tg = r._tg;
+      _tgCount[tg] = (_tgCount[tg] || 0) + 1;
+      var colKey = _fyGroups ? _tgFyMonsSet[r._ml] : r._ml;
+      if (!_tgMDCount[tg]) _tgMDCount[tg] = {};
+      _tgMDCount[tg][colKey] = (_tgMDCount[tg][colKey] || 0) + 1;
+    });
+
+    // Apply override to each country row
+    rows.forEach(function(c){
+      if (_tgCount[c.name] !== undefined) {
+        c.shipments = _tgCount[c.name];
+        // Also override monthData shipments
+        if (c.monthData) {
+          var tgMD = _tgMDCount[c.name] || {};
+          var _allColKeys = _fyGroups ? _fyGroups.map(function(g){ return g.key; }) : activeMons;
+          _allColKeys.forEach(function(k){
+            if (!c.monthData[k]) c.monthData[k] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
+            c.monthData[k].shipments = tgMD[k] || 0;
+          });
+        }
+      }
+    });
+  }
+
   function tlHue(n){ var h=0; for(var i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))&0xffff; return h%360; }
   function tlIni(n){ return n.split(/[\s\-]+/).map(function(w){return w[0]||'';}).join('').slice(0,2).toUpperCase(); }
   function fmtV(v){ return fmtCur(v); }
