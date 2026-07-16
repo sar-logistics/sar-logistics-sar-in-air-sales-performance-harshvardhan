@@ -6215,6 +6215,32 @@ var _CITY_TL_MAP = {
   'perth':'Australia','adelaide':'Australia','auckland':'Australia',
   // Dominican Republic
   'santo domingo':'Dominican Republic','punta cana':'Dominican Republic',
+  // Ocean / ISO Tank ports
+  // US ports
+  'savannah':'US','norfolk':'US','port everglades':'US','baltimore':'US',
+  'charleston':'US','long beach':'US','los angeles':'US','oakland':'US',
+  'seattle':'US','new orleans':'US','kansas city':'US','chicago':'US',
+  // Canada
+  'saint-john':'Canada','vancouver':'Canada',
+  // LATAM
+  'caucedo':'LATAM','santos':'LATAM','buenaventura':'LATAM','paranagua':'LATAM',
+  // Europe
+  'london gateway port':'Europe','koper':'Europe','valencia':'Europe',
+  'antwerp':'Europe','hamburg':'Europe','le havre':'Europe','rotterdam':'Europe',
+  'barcelona':'Europe','genoa':'Europe','piraeus':'Europe','gdansk':'Europe',
+  // Middle East
+  'jebel ali':'Middle East','ad dammam':'Middle East','jeddah':'Middle East',
+  'ashdod':'Middle East',
+  // Asia
+  'busan':'Asia','colombo':'Asia','ho chi minh city':'Asia','shanghai':'Asia',
+  'qingdao':'Asia','tianjinxingang':'Asia','lianyungang':'Asia','shekou':'Asia',
+  'ningbo':'Asia','shanghai pt':'Asia','laem chabang':'Asia','surabaya':'Asia',
+  'nanjing':'Asia','dalian':'Asia','taichung':'Asia','keelung (chilung)':'Asia',
+  'wuhan':'Asia','moji/kitakyushu':'Asia','chittagong':'Asia',
+  'pasir gudang, johor':'Asia','port klang (pelabuhan klang)':'Asia',
+  'ho chi minh':'Asia','china':'Asia',
+  // Africa
+  'beira':'Africa','tangier':'Africa',
 };
 
 function _portToTG2(s){
@@ -6237,8 +6263,11 @@ function _patchTgOnDrillRows(rows){
   rows.forEach(function(r){
     if (r._tg) return;
     var lob = r.lob || '', tg = '';
-    if (lob==='AIR EXPORT'||lob==='SEA EXPORT') tg=_portToTG2(r.dischargePort)||_portToTG2(r.ataDischarge)||_portToTG2(r.location);
-    else if (lob==='AIR IMPORT'||lob==='SEA IMPORT') tg=_portToTG2(r.loadingPort)||_portToTG2(r.atdLoading)||_portToTG2(r.etdLoading)||_portToTG2(r.location);
+    if (lob==='AIR EXPORT'||lob==='SEA EXPORT'||lob==='ISOTANK EXPORT') {
+      tg = _portToTG2(r.dischargePort) || _portToTG2(r.ataDischarge) || _portToTG2(r.location);
+    } else if (lob==='AIR IMPORT'||lob==='SEA IMPORT'||lob==='ISOTANK IMPORT') {
+      tg = _portToTG2(r.loadingPort) || _portToTG2(r.atdLoading) || _portToTG2(r.etdLoading) || _portToTG2(r.location);
+    }
     if (tg) r._tg = tg;
   });
 }
