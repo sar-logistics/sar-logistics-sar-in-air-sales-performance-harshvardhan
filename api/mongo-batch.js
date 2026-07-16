@@ -2619,19 +2619,31 @@ module.exports = async function handler(req, res) {
       if (!records || !Array.isArray(records)) return res.status(400).json({ error: "records array required" });
       const col = db.collection(collectionName);
 
+      // Sanitize field names: MongoDB forbids dots in field names used in update paths.
+      // Replace dots with a visually identical Unicode middle dot (U+FF0E fullwidth) so
+      // the original column name is preserved for display but won't break $set paths.
+      function sanitizeKeys(rec) {
+        const out = {};
+        for (const [k, v] of Object.entries(rec)) {
+          out[k.replace(/\./g, '\uFF0E')] = v;
+        }
+        return out;
+      }
+      const sanitizedRecords = records.map(sanitizeKeys);
+
       // Upsert by shipment number so FY26 + FY27 can both push without wiping each other
-      const KEY_CANDIDATES = ["Shipment No", "Shipment No.", "Job No", "Job No.", "House No", "House No.", "Shipment Number", "Job Number"];
+      const KEY_CANDIDATES = ["Shipment No", "Shipment No\uFF0E", "Shipment No.", "Job No", "Job No.", "House No", "House No.", "Shipment Number", "Job Number"];
       let keyField = null;
-      if (records[0]) {
+      if (sanitizedRecords[0]) {
         for (const k of KEY_CANDIDATES) {
-          if (records[0][k] !== undefined) { keyField = k; break; }
+          if (sanitizedRecords[0][k] !== undefined) { keyField = k; break; }
         }
       }
 
       let inserted = 0, updated = 0;
       const CHUNK = 200;
-      for (let i = 0; i < records.length; i += CHUNK) {
-        const chunk = records.slice(i, i + CHUNK);
+      for (let i = 0; i < sanitizedRecords.length; i += CHUNK) {
+        const chunk = sanitizedRecords.slice(i, i + CHUNK);
         if (keyField) {
           const ops = chunk.map(rec => ({
             updateOne: {
