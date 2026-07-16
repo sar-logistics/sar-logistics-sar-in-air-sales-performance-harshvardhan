@@ -7335,20 +7335,47 @@ document.addEventListener('click', function(ev){
     state.feedbackReport=report;
     state.feedbackError='';
 
-    // Submit to Google Forms (no-cors — response is opaque but data lands in the sheet)
-    var FORM_ID = '1FAIpQLSdWTDpxAI0OVMsdE53Hve_fkqGfeqmNnFjCWXVdLBRR3gzXpA';
-    var formUrl = 'https://docs.google.com/forms/d/e/' + FORM_ID + '/formResponse';
-    var body = new URLSearchParams();
-    body.append('entry.357814648', name);
-    body.append('entry.105745188', email);
-    body.append('entry.1662956587', report);
-    body.append('entry.640898391', txt);
-    fetch(formUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
-    }).catch(function(){});  // no-cors always resolves — errors are silent
+    // Submit to Google Forms via hidden iframe (avoids CORS — guaranteed delivery)
+    var FORM_ACTION = 'https://docs.google.com/forms/d/e/1FAIpQLSdWTDpxAI0OVMsdE53Hve_fkqGfeqmNnFjCWXVdLBRR3gzXpA/formResponse';
+    try {
+      // Create hidden iframe as target so page doesn't navigate
+      var iframeId = '_gf_submit_' + Date.now();
+      var iframe = document.createElement('iframe');
+      iframe.name = iframeId;
+      iframe.id   = iframeId;
+      iframe.style.cssText = 'display:none;width:0;height:0;border:none;position:absolute;left:-9999px;';
+      document.body.appendChild(iframe);
+
+      // Build and submit a real HTML form targeting the iframe
+      var f = document.createElement('form');
+      f.method  = 'POST';
+      f.action  = FORM_ACTION;
+      f.target  = iframeId;
+      f.style.display = 'none';
+
+      var fields = {
+        'entry.357814648': name,
+        'entry.105745188': email,
+        'entry.1662956587': report,
+        'entry.640898391': txt
+      };
+      Object.keys(fields).forEach(function(k){
+        var inp = document.createElement('input');
+        inp.type  = 'hidden';
+        inp.name  = k;
+        inp.value = fields[k];
+        f.appendChild(inp);
+      });
+
+      document.body.appendChild(f);
+      f.submit();
+
+      // Clean up after a short delay
+      setTimeout(function(){
+        if (f.parentNode)      f.parentNode.removeChild(f);
+        if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+      }, 3000);
+    } catch(e) { /* silent fail */ }
 
     state.feedbackSent=true;
     render();
