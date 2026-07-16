@@ -6200,13 +6200,15 @@ function loadDrillData(callback){
     .then(function(data){
       if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
         allDrillRows = dedupDrillRows(data.sales.allDrillRows);
-        // drillrows kept in-memory only (too large for localStorage)
+        // Patch tradelane cache with correct _tg-based shipment counts
+        // so next load shows correct numbers instantly from cache
+        _patchTradelaneCacheWithDrillCounts();
       }
       _drillDataLoading = false;
       _drillLoadAttempted = true;
       _drillDataCallbacks.forEach(function(cb){ cb(); });
       _drillDataCallbacks = [];
-      if (state.page === 'customers') render(); // refresh customer stats with drill data
+      if (state.page === 'customers') render();
     })
     .catch(function(){
       _drillDataLoading = false;
@@ -6214,6 +6216,54 @@ function loadDrillData(callback){
       _drillDataCallbacks.forEach(function(cb){ cb(); });
       _drillDataCallbacks = [];
     });
+}
+
+// Patch all tradelane cache entries with correct shipment counts from allDrillRows
+// so cached data already has 2191 (correct) instead of 2204 (SRR aggregate)
+function _patchTradelaneCacheWithDrillCounts() {
+  if (!allDrillRows || !allDrillRows.length) return;
+  var _TL_LOBS_AIR = ['AIR EXPORT','AIR IMPORT'];
+  var _TL_LOBS_OCN = ['SEA EXPORT','SEA IMPORT'];
+  var _TL_LOBS_ISO = ['ISOTANK EXPORT','ISOTANK IMPORT'];
+
+  Object.keys(_tradelaneCache).forEach(function(cacheKey) {
+    var cached = _tradelaneCache[cacheKey];
+    if (!cached || !cached.allCountries) return;
+
+    // Determine active lob filter from cached data (use Air as default)
+    // Build _tg counts per lob from allDrillRows
+    var _tgCounts = {}; // lob → { tg → count }
+    allDrillRows.forEach(function(r) {
+      if (!r._tg || !r._ml) return;
+      var lob = r.lob || '';
+      if (!_tgCounts[lob]) _tgCounts[lob] = {};
+      _tgCounts[lob][r._tg] = (_tgCounts[lob][r._tg] || 0) + 1;
+    });
+
+    // Merge counts across all lobs into per-tg totals
+    var _tgTotal = {};
+    Object.keys(_tgCounts).forEach(function(lob) {
+      Object.keys(_tgCounts[lob]).forEach(function(tg) {
+        _tgTotal[tg] = (_tgTotal[tg] || 0) + _tgCounts[lob][tg];
+      });
+    });
+
+    if (!Object.keys(_tgTotal).length) return;
+
+    // Patch each country row's shipment count
+    var patched = false;
+    cached.allCountries.forEach(function(c) {
+      if (_tgTotal[c.name] !== undefined && _tgTotal[c.name] !== c.shipments) {
+        c.shipments = _tgTotal[c.name];
+        patched = true;
+      }
+    });
+
+    // Re-save to localStorage with corrected counts
+    if (patched) {
+      try { lsSet('tradelane_' + cacheKey, cached); } catch(e) {}
+    }
+  });
 }
 
 // Mapping lookup built once from repsRaw — used for entity filtering
