@@ -2565,13 +2565,15 @@ function adminPage(){
     '</div>';
   }).join('');
 
-  return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
+  return '<div style="padding:20px 24px 80px;">'+
+  '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
     '<div>'+
       '<div style="font-size:22px;font-weight:800;color:#0D2B5E;">Admin Panel</div>'+
       '<div style="font-size:12px;color:#9AAFC8;margin-top:2px;">Manage users and access</div>'+
     '</div>'+
   '</div>'+
   sections+
+  '</div>'+
   (canEdit ?
     '<button data-act="addUserOpen" data-role="" style="position:fixed;bottom:28px;right:28px;z-index:100;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:13px 22px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(29,95,204,0.4),0 1px 4px rgba(29,95,204,0.25);">'+
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" pointer-events="none"><path d="M12 5v14M5 12h14"/></svg>Add User'+
@@ -2752,7 +2754,7 @@ function customerPage(){
     + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'customer')
   +'</div>';
 
-  return header + charts;
+  return '<div style="padding:20px 24px 32px;">' + header + charts + '</div>';
 }
 
 function customerPivotTable(lobData, activeLob, brandC) {
@@ -3014,7 +3016,7 @@ function agentPage(){
     + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'agent')
   +'</div>';
 
-  return header + charts;
+  return '<div style="padding:20px 24px 32px;">' + header + charts + '</div>';
 }
 
 function agentPivotTable(lobData, activeLob, brandC) {
@@ -3287,7 +3289,7 @@ function tradelanePage(){
 
   var sc = ['#1D5FCC','#2E7CF6','#1A4FA0','#0D2B5E','#4B8CF5'];
 
-  return header + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'  
+  return '<div style="padding:20px 24px 32px;">' + header + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">'
     + horizontalBarPanel('Top 10 by Shipments', lobData.topByShipments||[], 'shipments', fmtInt, sc[0], 'tradelane')
     + (activeLob==='Air'
         ? horizontalBarPanel('Top 10 by Volume (Tons)', lobData.topByTons||[], 'tons', fmtTons, sc[1], 'tradelane')
@@ -3295,7 +3297,7 @@ function tradelanePage(){
     + horizontalBarPanel('Top 10 by Revenue', lobData.topByRevenue||[], 'revenue', fmtCur, sc[2], 'tradelane')
     + horizontalBarPanel('Top 10 by GP',      lobData.topByGP||[],     'gp',      fmtCur, sc[3], 'tradelane')
     + horizontalBarPanel('Top 10 by GP%',     lobData.topByGPPct||[],  'gpPct',   fmtPct, sc[4], 'tradelane')
-  +'</div>';
+  +'</div></div>';
 }
 
 function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) {
