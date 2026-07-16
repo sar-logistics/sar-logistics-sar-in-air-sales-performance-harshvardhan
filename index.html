@@ -6948,17 +6948,26 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation(); ev.preventDefault();
     state.page=el.getAttribute('data-val');
     render();
+
+    var _hasZoneFilter = (state.filterZones||[]).length > 0;
+
     if(state.page==='customers'){
       var _k=getCustomerCacheKey();
       if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); }
       else { customerDataReady=false; fetchCustomerData(function(){ render(); }); }
+      // Zone filter needs allDrillRows for zoneToRawSPs — load if not ready
+      if(_hasZoneFilter && !allDrillRows) loadDrillData(function(){ render(); });
     }
     if(state.page==='agents'){
       var _ak=getAgentCacheKey();
       if(_agentCache[_ak]){ agentData=_agentCache[_ak]; agentDataReady=true; render(); }
       else { agentDataReady=false; fetchAgentData(function(){ render(); }); }
+      // Zone filter needs allDrillRows for zoneToRawSPs — load if not ready
+      if(_hasZoneFilter && !allDrillRows) loadDrillData(function(){ render(); });
     }
     if(state.page==='tradelane'){
+      // Zone filter: clear pivot cache so it rebuilds with current filterZones
+      if(_hasZoneFilter){ _tradelanePivotCache={}; _tlGrandDrillCache={}; }
       var _tk=getTradelaneCacheKey();
       if(_tradelaneCache[_tk]){ tradelaneData=_tradelaneCache[_tk]; tradelaneDataReady=true; render(); }
       else { tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); }
