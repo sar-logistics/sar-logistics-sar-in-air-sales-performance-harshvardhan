@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v77'; // v77: auto-bust secondary caches on deploy via _deployTs
+var CACHE_VERSION = 'v78'; // bump on every deploy to wipe stale localStorage
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -397,28 +397,25 @@ function _showDashboardBody() {
       setTimeout(function(){
         if (!_customerCache[key]) {
           var lsc = lsGet('customers_'+key);
-          var _sDtsC = ''; try { _sDtsC = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
-          if (lsc && lsc.success && (!lsc._deployTs || lsc._deployTs === _sDtsC)) { _customerCache[key]=lsc; customerData=lsc; customerDataReady=true; return; }
+          if (lsc && lsc.success) { _customerCache[key]=lsc; customerData=lsc; customerDataReady=true; return; }
           fetch('/api/mongo-batch?action=customers&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-            .then(function(r){return r.json();}).then(function(d){ if(d.success){d._deployTs=_sDtsC;_customerCache[key]=d;customerData=d;customerDataReady=true;lsSet('customers_'+key,d);} }).catch(function(){});
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){_customerCache[key]=d;customerData=d;customerDataReady=true;lsSet('customers_'+key,d);} }).catch(function(){});
         }
       }, 300);
       setTimeout(function(){
         if (!_agentCache[key]) {
           var lsa = lsGet('agents_'+key);
-          var _sDtsA = ''; try { _sDtsA = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
-          if (lsa && lsa.success && (!lsa._deployTs || lsa._deployTs === _sDtsA)) { _agentCache[key]=lsa; agentData=lsa; agentDataReady=true; return; }
+          if (lsa && lsa.success) { _agentCache[key]=lsa; agentData=lsa; agentDataReady=true; return; }
           fetch('/api/mongo-batch?action=agents&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-            .then(function(r){return r.json();}).then(function(d){ if(d.success){d._deployTs=_sDtsA;_agentCache[key]=d;agentData=d;agentDataReady=true;lsSet('agents_'+key,d);} }).catch(function(){});
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){_agentCache[key]=d;agentData=d;agentDataReady=true;lsSet('agents_'+key,d);} }).catch(function(){});
         }
       }, 700);
       setTimeout(function(){
         if (!_tradelaneCache[key]) {
           var lst = lsGet('tradelane_'+key);
-          var _sDts = ''; try { _sDts = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
-          if (lst && lst.success && (!lst._deployTs || lst._deployTs === _sDts)) { _tradelaneCache[key]=lst; tradelaneData=lst; tradelaneDataReady=true; return; }
+          if (lst && lst.success) { _tradelaneCache[key]=lst; tradelaneData=lst; tradelaneDataReady=true; return; }
           fetch('/api/mongo-batch?action=tradelane&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-            .then(function(r){return r.json();}).then(function(d){ if(d.success){d._deployTs=_sDts;_tradelaneCache[key]=d;tradelaneData=d;tradelaneDataReady=true;lsSet('tradelane_'+key,d);} }).catch(function(){});
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){_tradelaneCache[key]=d;tradelaneData=d;tradelaneDataReady=true;lsSet('tradelane_'+key,d);} }).catch(function(){});
         }
       }, 1100);
       setTimeout(function(){ fetchFinanceData(null);  }, 1500);
@@ -687,24 +684,6 @@ function fetchLiveData(callback, force){
           _liveDataRetryCount = 0;
           repsRawOriginal = data.repsRaw;
           zonesRaw  = data.zones  || [];
-
-          // Auto-bust secondary caches (tradelane/customers/agents) on new deploy
-          var _serverDeployTs = data._deployTs || '';
-          var _storedDeployTs = '';
-          try { _storedDeployTs = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
-          if (_serverDeployTs && _serverDeployTs !== _storedDeployTs) {
-            console.log('[CACHE] New deploy detected:', _serverDeployTs, '— clearing secondary caches');
-            try {
-              Object.keys(localStorage).filter(function(k){
-                return k.startsWith('sar_') &&
-                  (k.includes('tradelane_') || k.includes('customers_') || k.includes('agents_'));
-              }).forEach(function(k){ localStorage.removeItem(k); });
-              localStorage.setItem('sar_deploy_ts', _serverDeployTs);
-            } catch(e){}
-            _tradelanePivotCache = {}; _tlGrandDrillCache = {};
-            _tradelaneCache = {}; _customerCache = {}; _agentCache = {};
-            tradelaneDataReady = false; customerDataReady = false; agentDataReady = false;
-          }
           // Keep months in FY order, only include months with actual data
           var ALL_FY2 = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25',
             'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
@@ -939,9 +918,6 @@ function makeFetcher(action, lsKey, setReady) {
     // 1. localStorage hit — instant, no network
     if (!force) {
       var cached = lsGet(lsKey);
-      // Reject cached data if it was saved before the current deploy
-      var _curDts = ''; try { _curDts = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
-      if (cached && cached._deployTs && _curDts && cached._deployTs !== _curDts) cached = null;
       if (cached && cached.success) {
         setReady(cached);
         if (callback) callback();
@@ -971,8 +947,6 @@ function makeFetcher(action, lsKey, setReady) {
       .then(function(r){ return r.json(); })
       .then(function(data){
         if (data.success) {
-          var _dts = ''; try { _dts = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
-          data._deployTs = _dts;
           setReady(data); lsSet(lsKey, data);
         }
         _inFlight = false;
