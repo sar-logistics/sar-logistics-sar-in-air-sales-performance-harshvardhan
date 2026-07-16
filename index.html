@@ -3196,127 +3196,125 @@ function tradelanePage(){
   var d = tradelaneData || {};
   var lobData = (d.lobs && d.lobs[activeLob]) ? d.lobs[activeLob] : d;
 
-  // Apply filterReps / filterLobs
-  // RLS: auto-restrict reps based on user role
-  var filterReps = state.filterReps || [];
-  // Derive LOB filter from the active tab — independent of state.filterLobs (Sales Performance)
   var _INSIGHT_LOB_MAP = {
     'Air':      ['AIR EXPORT','AIR IMPORT'],
     'Ocean':    ['SEA EXPORT','SEA IMPORT'],
     'ISO Tank': ['ISOTANK EXPORT','ISOTANK IMPORT']
   };
   var filterLobs = _INSIGHT_LOB_MAP[activeLob] || [];
-  var LOB_KEY_TO_LABEL = {
-    'AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp',
-    'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
-    'ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp'
-  };
-  // Zone + Rep filter — use allDrillRows._zone for authoritative zone→rawSP mapping
   var _filterZonesTL = state.filterZones || [];
+  var _filterRepsTL  = state.filterReps  || [];
 
-  // If zone filter active but allDrillRows not yet loaded, trigger load
-  if (_filterZonesTL.length > 0 && !allDrillRows) {
-    loadDrillData(function(){ _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); });
+  // If zone/rep filter active and allDrillRows not loaded — trigger load and show spinner
+  var _needsDrill = (_filterZonesTL.length > 0 || _filterRepsTL.length > 0);
+  if (_needsDrill && !allDrillRows) {
+    if (!_drillDataLoading) loadDrillData(function(){ _tradelanePivotCache={}; render(); });
+    return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'
+      +'<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">'
+        +'<div class="login-spinner" style="width:24px;height:24px;border-width:3px;"></div>'
+        +'<div style="font-size:12px;color:#64748B;font-weight:600;">Applying filters\u2026</div>'
+      +'</div>'
+    +'</div>';
   }
-  // Table view: trigger allDrillRows load in background for _tg shipment correction
-  // Render immediately — _tg client-side patch runs on whatever is available
-  if (state.tradelaneView === 'table' && !allDrillRows && !_drillLoadAttempted) {
+
+  // Table view: load allDrillRows in background for _tg shipment correction
+  if (activeView === 'table' && !allDrillRows && !_drillLoadAttempted) {
     loadDrillData(function(){ _tradelanePivotCache={}; render(); });
   }
 
-  // Build effective SP list — prefer allDrillRows (authoritative), fallback to repsRawOriginal display names
-  var _zoneRawSPsTL;
-  if (_filterZonesTL.length > 0) {
-    if (allDrillRows) {
-      _zoneRawSPsTL = zoneToRawSPs(_filterZonesTL);
-    } else {
-      // Fallback: use display names from repsRawOriginal — normalized to match c.salesReps via normalizeName
-      var _fbSet = {};
-      repsRawOriginal.forEach(function(r){
-        if (_filterZonesTL.indexOf(r.zone) > -1) _fbSet[normalizeName(r.name)] = true;
-      });
-      _zoneRawSPsTL = Object.keys(_fbSet);
-    }
-  } else {
-    _zoneRawSPsTL = null;
-  }
-
-  var _selRepsTL = (state.filterReps||[]).length > 0
-    ? (state.filterReps||[]).map(function(x){ return normalizeName(x); })
-    : null;
-  // _effectiveFilterRepsTL: raw _sp values (lowercase) for matching against c.salesReps
-  var _effectiveFilterRepsTL;
-  if (_zoneRawSPsTL && _selRepsTL) {
-    _effectiveFilterRepsTL = _zoneRawSPsTL.filter(function(sp){ return _selRepsTL.indexOf(sp) > -1; });
-  } else if (_zoneRawSPsTL && _zoneRawSPsTL.length > 0) {
-    _effectiveFilterRepsTL = _zoneRawSPsTL;
-  } else if (_zoneRawSPsTL && _zoneRawSPsTL.length === 0 && _filterZonesTL.length > 0) {
-    _effectiveFilterRepsTL = []; // zone selected but no matching SPs — show nothing
-  } else if (_selRepsTL) {
-    _effectiveFilterRepsTL = _selRepsTL;
-  } else {
-    _effectiveFilterRepsTL = null;
-  }
-
-  var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZonesTL.length > 0;
-  if (hasFilters && lobData.allCountries) {
-    var _frNormT = _effectiveFilterRepsTL || [];
-
-    // Build a drill row index keyed by shipmentNo for fast lookup when rep filter active
-    var _drillBySnо = null;
-    if (_effectiveFilterRepsTL && allDrillRows && allDrillRows.length > 0) {
-      _drillBySnо = {};
+  // Build effective rep set from zone + rep filters using allDrillRows
+  var _effectiveFilterRepsTL = null;
+  if (allDrillRows && _needsDrill) {
+    var _zoneSpSet = {};
+    if (_filterZonesTL.length > 0) {
       allDrillRows.forEach(function(r){
-        if (_frNormT.indexOf(r._sp) > -1) {
-          if (!_drillBySnо[r.shipmentNo]) _drillBySnо[r.shipmentNo] = r;
-        }
+        if (r._zone && _filterZonesTL.indexOf(r._zone) > -1 && r._sp) _zoneSpSet[r._sp] = true;
       });
     }
-
-    function reaggregateTL(c) {
-      // Re-aggregate metrics using only shipmentNos belonging to filtered reps
-      // r.g=GP, r.r=billedRevenue, r.tons=air tons (calculatedTons), r.t=TEU
-      if (!_drillBySnо || !c.shipmentNos) return c;
-      var ship=0, gp=0, rev=0, tons=0, teu=0;
-      c.shipmentNos.forEach(function(sno){
-        var r = _drillBySnо[sno];
-        if (!r) return;
-        ship++; gp += r.g||0; rev += effectiveRevenue(r);
-        tons += r.tons||0;   // calculatedTons (air weight tons)
-        teu  += r.t||0;      // Container TEU
-      });
-      if (ship === 0) return null; // no contribution from filtered reps
-      return Object.assign({}, c, {
-        shipments: ship,
-        gp: Math.round(gp),
-        revenue: Math.round(rev),
-        tons: Math.round(tons*100)/100,
-        teu: Math.round(teu*100)/100,
-        gpPct: rev > 0 ? Math.round((gp/rev)*1000)/10 : 0
-      });
+    var _selRepsNorm = _filterRepsTL.map(function(x){ return normalizeName(x); });
+    if (_filterZonesTL.length > 0 && _filterRepsTL.length > 0) {
+      _effectiveFilterRepsTL = Object.keys(_zoneSpSet).filter(function(sp){ return _selRepsNorm.indexOf(sp) > -1; });
+    } else if (_filterZonesTL.length > 0) {
+      _effectiveFilterRepsTL = Object.keys(_zoneSpSet);
+    } else if (_filterRepsTL.length > 0) {
+      _effectiveFilterRepsTL = _selRepsNorm;
     }
+  } else if (!allDrillRows && _filterRepsTL.length > 0) {
+    _effectiveFilterRepsTL = _filterRepsTL.map(function(x){ return normalizeName(x); });
+  }
 
-    var filtered = lobData.allCountries.map(function(c) {
-      var repOk = !_effectiveFilterRepsTL || (c.salesReps||[]).some(function(r){ return _frNormT.indexOf(normalizeName(r||''))>-1; });
-      var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
-        var needle = LOB_KEY_TO_LABEL[fk]||'';
-        return needle && (c.lobs||[]).indexOf(needle)>-1;
-      });
-      if (!repOk || !lobOk) return null;
-      return _drillBySnо ? reaggregateTL(c) : c;
-    }).filter(Boolean);
+  // When zone/rep filter active, rebuild lobData entirely from allDrillRows
+  if (_needsDrill && allDrillRows && allDrillRows.length > 0) {
+    var _drillLobKeys = filterLobs;
+    var _effSet = _effectiveFilterRepsTL ? {} : null;
+    if (_effectiveFilterRepsTL) _effectiveFilterRepsTL.forEach(function(sp){ _effSet[sp]=true; });
+
+    // Aggregate per-tradelane from allDrillRows
+    var _tgMap = {}; // tg → { shipments, gp, revenue, tons, teu, lobs, salesReps }
+    var _activeMonsSet = {};
+    var _idxs = filteredMonthIndices();
+    _idxs.forEach(function(i){ _activeMonsSet[months26[i]] = true; });
+
+    allDrillRows.forEach(function(r){
+      if (_drillLobKeys.indexOf(r.lob) === -1) return;
+      if (_effSet && !_effSet[r._sp]) return;
+      if (!_activeMonsSet[r._ml]) return;
+      var tg = r._tg || '';
+      if (!tg) return;
+      if (!_tgMap[tg]) _tgMap[tg] = { name:tg, shipments:0, gp:0, revenue:0, tons:0, teu:0, lobs:[], salesReps:[] };
+      var e = _tgMap[tg];
+      e.shipments++;
+      e.gp += r.g || 0;
+      e.revenue += effectiveRevenueTL(r);
+      e.tons += r.tons || 0;
+      e.teu  += r.t   || 0;
+    });
+
+    var _filtered = Object.values(_tgMap).map(function(e){
+      e.gpPct = e.revenue > 0 ? Math.round((e.gp/e.revenue)*1000)/10 : 0;
+      return e;
+    });
 
     function top10tl(arr,key){ return arr.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,10); }
     lobData = {
-      allCountries:   filtered,
-      totalCountries: filtered.length,
-      topByShipments: top10tl(filtered,'shipments'),
-      topByRevenue:   top10tl(filtered,'revenue'),
-      topByGP:        top10tl(filtered,'gp'),
-      topByTons:      top10tl(filtered.filter(function(c){return (c.tons||0)>0;}),'tons'),
-      topByTEU:       top10tl(filtered.filter(function(c){return (c.teu||0)>0;}),'teu'),
-      topByGPPct:     top10tl(filtered.filter(function(c){return c.shipments>=2;}),'gpPct'),
+      allCountries:   _filtered,
+      totalCountries: _filtered.length,
+      topByShipments: top10tl(_filtered,'shipments'),
+      topByRevenue:   top10tl(_filtered,'revenue'),
+      topByGP:        top10tl(_filtered,'gp'),
+      topByTons:      top10tl(_filtered.filter(function(c){return (c.tons||0)>0;}),'tons'),
+      topByTEU:       top10tl(_filtered.filter(function(c){return (c.teu||0)>0;}),'teu'),
+      topByGPPct:     top10tl(_filtered.filter(function(c){return c.shipments>=2;}),'gpPct'),
     };
+  } else if (!_needsDrill) {
+    // No filter — apply LOB filter only from cached data
+    var LOB_KEY_TO_LABEL = {
+      'AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp',
+      'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
+      'ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp'
+    };
+    if (lobData.allCountries && filterLobs.length > 0) {
+      var _lfFiltered = lobData.allCountries.filter(function(c){
+        return filterLobs.some(function(fk){ var n=LOB_KEY_TO_LABEL[fk]||''; return n && (c.lobs||[]).indexOf(n)>-1; });
+      });
+      function top10tl2(arr,key){ return arr.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,10); }
+      lobData = Object.assign({}, lobData, {
+        allCountries:   _lfFiltered,
+        totalCountries: _lfFiltered.length,
+        topByShipments: top10tl2(_lfFiltered,'shipments'),
+        topByRevenue:   top10tl2(_lfFiltered,'revenue'),
+        topByGP:        top10tl2(_lfFiltered,'gp'),
+        topByTons:      top10tl2(_lfFiltered.filter(function(c){return (c.tons||0)>0;}),'tons'),
+        topByTEU:       top10tl2(_lfFiltered.filter(function(c){return (c.teu||0)>0;}),'teu'),
+        topByGPPct:     top10tl2(_lfFiltered.filter(function(c){return c.shipments>=2;}),'gpPct'),
+      });
+    }
+  }
+
+  function effectiveRevenueTL(r) {
+    var isAir = r.lob === 'AIR EXPORT' || r.lob === 'AIR IMPORT';
+    var locked = isAir ? !!r.financialLock : !!r.operationLock;
+    return locked ? (r.billedRevenue || r.r || 0) : (r.provRevenue || r.r || 0);
   }
 
   var periodLabel = (function(){
