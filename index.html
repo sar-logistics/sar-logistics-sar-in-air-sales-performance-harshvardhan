@@ -2812,15 +2812,6 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
   var sortCol = state.custSortCol || 'gp';
   var sortDir = (state.custSortDir === undefined) ? -1 : state.custSortDir;
   var isAir = activeLob === 'Air';
-  var isQuarterly = state.reportView === 'Quarterly';
-  var isYearly = state.reportView === 'Yearly';
-  var isGrouped = isQuarterly || isYearly;
-
-  // Build column groups for quarterly/yearly
-  var colGroups = null;
-  if (isGrouped) {
-    colGroups = isQuarterly ? quarterGroups() : yearGroups();
-  }
 
   rows.sort(function(a,b){ return sortDir * (b[sortCol] - a[sortCol]); });
 
@@ -2841,21 +2832,8 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     +sortBtn('gpPct','GP%',true)
     +(isGrouped?'':'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;">LOB(s)</th>')
     +(isGrouped?'':'<th style="padding:8px 10px;font-size:10px;font-weight:700;letter-spacing:0.06em;color:#9AAFC8;text-transform:uppercase;text-align:left;min-width:140px;">Sales</th>')
-    +(isGrouped ? groupHeaderCells : '')+'</tr></thead>';
+    +'</tr></thead>';
 
-  // Build grouped column headers if quarterly/yearly
-  var groupHeaderCells = '';
-  if (isGrouped && colGroups) {
-    colGroups.forEach(function(g){
-      var bgStyle = "background:#FEF9EC;border-bottom:2px solid #D9B45C;";
-      var label = g.label || '';
-      var range = g.range || '';
-      groupHeaderCells += '<th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:700;color:#A8720E;text-transform:uppercase;border-left:2px solid #D9B45C;min-width:140px;'+bgStyle+'">'
-        + label
-        + (range ? '<div style="font-size:9px;font-weight:500;color:#B08830;margin-top:1px;">'+range+'</div>' : '')
-        + '</th>';
-    });
-  }
   var tbody = '<tbody>';
   rows.forEach(function(c, i) {
     var gpColor  = c.gp >= 0 ? '#059669' : '#DC2626';
@@ -2874,24 +2852,6 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
     var repsText = filteredReps.slice(0,3).join(', ') + (filteredReps.length > 3 ? ' +' + (filteredReps.length-3) : '');
     var bg = i%2===1 ? 'background:#FAFBFD;' : '';
 
-    // Compute grouped column values
-    var groupCells = '';
-    if (isGrouped && colGroups) {
-      groupCells = colGroups.map(function(g){
-        var gShip=0, gGP=0, gRev=0, gTons=0, gTeu=0;
-        g.idxs.forEach(function(mi){
-          var md=(c.monthData||{})[months26[mi]];
-          if(md){gShip+=md.shipments||0;gGP+=md.gp||0;gRev+=md.revenue||0;gTons+=md.tons||0;gTeu+=md.teu||0;}
-        });
-        var gpC=gGP>=0?'#059669':'#DC2626';
-        return '<td style="padding:8px 12px;text-align:right;border-left:2px solid #D9B45C;background:#FFFDF5;vertical-align:middle;">'
-          +'<div style="font-size:12px;font-weight:700;color:#15233B;">'+(gShip>0?gShip.toLocaleString():'--')+'</div>'
-          +'<div style="font-size:10.5px;color:'+gpC+';font-weight:600;">'+fmtCur(gGP)+'</div>'
-          +'<div style="font-size:9.5px;color:#64748B;">'+fmtCur(gRev)+' rev</div>'
-          +'</td>';
-      }).join('');
-    }
-
     tbody += '<tr style="border-bottom:1px solid #F1F5F9;'+bg+'">'
       +'<td style="padding:7px 10px;font-size:11px;color:#9AAFC8;text-align:center;font-weight:600;">'+(i+1)+'</td>'
       +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:#15233B;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+esc(c.name)+'">'+esc(c.name)+'</td>'
@@ -2903,9 +2863,9 @@ function customerPivotTable(lobData, activeLob, brandC, filterLobs, effectiveRep
       +'<td data-act="insightDrill" data-drill-type="customer" data-drill-name="'+esc(c.name)+'" style="padding:7px 10px;font-size:11.5px;color:#1D5FCC;text-align:right;font-family:\'DM Mono\',monospace;cursor:pointer;text-decoration:underline dotted;">'+fmtCur(c.revenue)+'</td>'
       +'<td data-act="insightDrill" data-drill-type="customer" data-drill-name="'+esc(c.name)+'" style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpColor+';text-align:right;font-family:\'DM Mono\',monospace;cursor:pointer;text-decoration:underline dotted;">'+fmtCur(c.gp)+'</td>'
       +'<td style="padding:7px 10px;font-size:11.5px;font-weight:700;color:'+gpPctColor+';text-align:right;font-family:\'DM Mono\',monospace;">'+c.gpPct+'%</td>'
-      +(isGrouped?'':'<td style="padding:7px 10px;">'+lobsHtml+'</td>')
+      +'<td style="padding:7px 10px;">'+lobsHtml+'</td>'
       +'<td style="padding:7px 10px;font-size:10.5px;color:#64748B;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+filteredReps.join(', ')+'">'+repsText+'</td>'
-      +(isGrouped?groupCells:'')+'</tr>';
+      +'</tr>';
   });
   tbody += '</tbody>';
 
