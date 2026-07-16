@@ -2565,18 +2565,20 @@ function adminPage(){
     '</div>';
   }).join('');
 
-  return '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'+
-    '<div>'+
-      '<div style="font-size:22px;font-weight:800;color:#0D2B5E;">Admin Panel</div>'+
-      '<div style="font-size:12px;color:#9AAFC8;margin-top:2px;">Manage users and access</div>'+
-    '</div>'+
-    (canEdit ?
-      '<button data-act="addUserOpen" data-role="" style="background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:10px;padding:10px 20px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;gap:7px;">'+
-        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" pointer-events="none"><path d="M12 5v14M5 12h14"/></svg>Add User'+
-      '</button>'
-    :'')+
-  '</div>'+
-  sections;
+  return '<div style="padding:24px 28px 80px;">'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">'
+    +'<div>'
+      +'<div style="font-size:20px;font-weight:800;color:#0D2B5E;letter-spacing:-0.01em;">Admin Panel</div>'
+      +'<div style="font-size:12px;color:#9AAFC8;margin-top:3px;font-weight:500;">'+allUsers.length+' users · manage roles and access</div>'
+    +'</div>'
+  +'</div>'
+  + sections
+  +'</div>'
+  +(canEdit
+    ? '<button data-act="addUserOpen" data-role="" style="position:fixed;bottom:28px;right:28px;z-index:40;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:13px 22px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(29,95,204,0.4),0 1px 4px rgba(29,95,204,0.3);transition:transform 0.15s,box-shadow 0.15s;" onmouseenter="this.style.transform=\'translateY(-2px)\';this.style.boxShadow=\'0 8px 24px rgba(29,95,204,0.45),0 2px 6px rgba(29,95,204,0.3)\'" onmouseleave="this.style.transform=\'\';this.style.boxShadow=\'0 4px 16px rgba(29,95,204,0.4),0 1px 4px rgba(29,95,204,0.3)\'">'
+      +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" pointer-events="none"><path d="M12 5v14M5 12h14"/></svg>Add User'
+    +'</button>'
+    : '');
 }
 
 
@@ -5915,7 +5917,7 @@ function render(){
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
-  if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
+  if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; mainEl.style.height='100%'; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; mainEl.style.height=''; }
   console.log('[PERF] mainEl.innerHTML took', (performance.now()-_tHtml).toFixed(1)+'ms');
   console.log('[PERF] render() total', (performance.now()-_tRender).toFixed(1)+'ms');
   requestAnimationFrame(function(){ console.log('[PERF] First RAF at', performance.now().toFixed(1)+'ms (page visible)'); });
