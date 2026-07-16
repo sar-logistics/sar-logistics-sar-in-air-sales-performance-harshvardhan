@@ -2852,7 +2852,7 @@ function customerPivotTable(lobData, activeLob, brandC) {
   tbody += '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;max-height:calc(100vh - 130px);overflow-y:auto;">'
+    +'<div style="overflow-x:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
     +'</div>'
   +'</div>';
@@ -3073,7 +3073,7 @@ function agentPivotTable(lobData, activeLob, brandC) {
   tbody += '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;max-height:calc(100vh - 130px);overflow-y:auto;">'
+    +'<div style="overflow-x:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
     +'</div>'
   +'</div>';
@@ -3585,7 +3585,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     + '</tbody>';
 
   return '<div style="background:#fff;border:1px solid #E3EAF3;border-radius:12px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;max-height:calc(100vh - 130px);overflow-y:auto;">'
+    +'<div style="overflow-x:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'+thead+tbody+'</table>'
     +'</div></div>';
 }
@@ -4208,7 +4208,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       +'</div>'
       +'<span style="font-size:11px;color:#94A3B8;font-weight:500;">'+dateLabel+'</span>'
     +'</div>'
-    +'<div style="overflow-x:auto;max-height:calc(100vh - 130px);overflow-y:auto;">'
+    +'<div style="overflow-x:auto;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:700px;">'
         +thead
         +'<tbody>'+grandRows+bodyRows+'</tbody>'
@@ -4581,7 +4581,7 @@ function teamsPage(){
     +topBar
     +'<div style="display:flex;flex:1;min-height:0;overflow:hidden;">'
       // Main chart area — vertical scroll for the whole chart, h-scroll only in ZM strip
-      +'<div style="flex:1;min-width:0;overflow-y:auto;overflow-x:hidden;padding:32px 32px 48px;">'
+      +'<div style="flex:1;min-width:0;overflow:auto;padding:32px 32px 48px;">'
         +chartHtml
       +'</div>'
       +supportPanel
@@ -5272,7 +5272,7 @@ function salesTable(M){
           : '<button data-act="page" data-val="leaderboard" class="btnq" style="display:flex;align-items:center;gap:6px;background:#F4F7FC;border:1.5px solid #D8E1F0;border-radius:999px;padding:6px 14px;font-size:11px;font-weight:700;color:#1E3A66;cursor:pointer;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Leaderboard</button>')
       +'</div>'
     +'</div>'
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - '+(isWeekly2 ? '110' : (state.reportView==='Quarterly'||state.reportView==='Yearly') ? '130' : '200')+'px);">'
+    +'<div style="overflow-x:auto;">'
       +'<table style="width:100%;border-collapse:collapse;min-width:850px;font-variant-numeric:tabular-nums;">'
         +'<thead style="position:sticky;top:0;z-index:4;">'+head+'</thead>'
         +'<tbody>'+body+'</tbody>'
@@ -5749,7 +5749,7 @@ function leaderboard(){
       +'</div>'
     +'</div>'
     // table
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 130px);">'
+    +'<div style="overflow-x:auto;">'
       +'<table style="width:100%;border-collapse:collapse;">'
         +'<thead style="position:sticky;top:0;z-index:4;background:#F4F7FB;">'
           +'<tr>'
