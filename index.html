@@ -1229,12 +1229,19 @@ function fetchTradelaneData(callback, force) {
     + (force ? '&force=1' : '')
     + (dateFrom ? '&dateFrom=' + encodeURIComponent(dateFrom) : '')
     + (dateTo   ? '&dateTo='   + encodeURIComponent(dateTo)   : '');
+  console.log('[TL CACHE] fetchTradelaneData key='+key+' force='+force+' inMemory='+!!_tradelaneCache[key]+' shipments='+(_tradelaneCache[key]&&_tradelaneCache[key].allCountries?_tradelaneCache[key].allCountries.reduce(function(s,c){return s+(c.shipments||0);},0):'n/a'));
   if (!force) {
     if (_tradelaneCache[key]) { tradelaneData = _tradelaneCache[key]; tradelaneDataReady = true; if (callback) callback(); return; }
     // Skip localStorage — tradelane data may be stale from before ocean/isotank fix
   }
   fetch(qs).then(function(r){ return r.json(); })
-    .then(function(data){ if(data.success){data._cacheKey=key;_tradelaneCache[key]=data;tradelaneData=data;tradelaneDataReady=true;} if(callback) callback(); })
+    .then(function(data){
+      if(data.success){
+        console.log('[TL CACHE] fetchTradelaneData FRESH key='+key+' shipments='+(data.allCountries?data.allCountries.reduce(function(s,c){return s+(c.shipments||0);},0):'n/a'));
+        data._cacheKey=key;_tradelaneCache[key]=data;tradelaneData=data;tradelaneDataReady=true;
+      }
+      if(callback) callback();
+    })
     .catch(function(e){ console.warn('Tradelane failed:',e.message); if(callback) callback(); });
 }
 
@@ -3501,6 +3508,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     });
     // Override shipments, tons, gp, revenue from allDrillRows (accurate, lock-based)
     grand.shipments = _gtGrand.shipments;
+    console.log('[TL GT] Grand total from allDrillRows:', _gtGrand.shipments, '| from SRR rows:', rows.reduce(function(s,r){return s+(r.shipments||0);},0), '| activeMons:', activeMons);
     grand.tons      = _gtGrand.tons;
     grand.gp        = _gtGrand.gp;
     grand.revenue   = _gtGrand.revenue;
