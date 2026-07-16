@@ -4315,7 +4315,7 @@ function usagePage(){
         +'<span style="font-family:\'DM Mono\',monospace;font-size:12.5px;font-weight:700;color:#15233B;width:24px;text-align:right;">'+u.totalLogins+'</span>'
       +'</div></td>'
       +'<td style="padding:11px 14px;font-size:11px;color:#64748B;font-family:\'DM Mono\',monospace;white-space:nowrap;">'+fmtLastLogin(u.lastLogin)+'</td>'
-      +'<td style="padding:11px 14px;"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:'+(u.isActive?'#15875A':'#94A3B8')+';"><span style="width:6px;height:6px;border-radius:50%;background:'+(u.isActive?'#15875A':'#CBD5E1')+';display:inline-block;"></span>'+(u.isActive?'Active':'Inactive')+'</span></td>'
+      
     +'</tr>';
   }).join('');
 
@@ -4326,7 +4326,7 @@ function usagePage(){
     + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
   +'</div>'
   +'<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;overflow:hidden;">'
-    +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 130px);">'
+    +'<div style="overflow-x:auto;">'
     +'<table style="width:100%;border-collapse:collapse;">'
       +'<thead style="position:sticky;top:0;z-index:4;"><tr style="background:#F8FAFC;border-bottom:2px solid #E2E8F0;">'
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">#</th>'
@@ -4335,7 +4335,7 @@ function usagePage(){
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Role</th>'
         +'<th style="text-align:right;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Total Logins</th>'
         +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Last Login</th>'
-        +'<th style="text-align:left;padding:9px 14px;font-size:10px;font-weight:700;letter-spacing:0.05em;color:#64748B;text-transform:uppercase;">Status</th>'
+        
       +'</tr></thead>'
       +'<tbody>'+rows+'</tbody>'
     +'</table>'
