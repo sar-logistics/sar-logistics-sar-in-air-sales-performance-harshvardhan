@@ -2035,7 +2035,7 @@ function topbar(){
         +'</div>'
         +(state.viewDropOpen
           ? '<div id="view-drop" style="position:fixed;background:#FFFFFF;border-radius:12px;box-shadow:0 8px 32px rgba(13,43,94,0.18),0 0 0 1px rgba(13,43,94,0.07);z-index:9999;min-width:160px;overflow:hidden;padding:4px;">'
-            +((state.page==='customers'||state.page==='agents'||state.page==='tradelane') ? ['Monthly','Yearly','Custom'] : ['Monthly','Weekly','Quarterly','Yearly','Custom']).map(function(v){
+            +((state.page==='customers'||state.page==='agents'||state.page==='tradelane') ? ['Monthly','Yearly'] : ['Monthly','Weekly','Quarterly','Yearly']).map(function(v){
               var active = state.reportView===v;
               var desc = v==='Monthly'?'Month by month':v==='Weekly'?'Week by week':v==='Quarterly'?'Quarter view':v==='Yearly'?'Full year':'Custom range';
               return '<div data-act="setView" data-val="'+v+'" style="padding:9px 12px;border-radius:8px;cursor:pointer;transition:background 0.1s;">'
