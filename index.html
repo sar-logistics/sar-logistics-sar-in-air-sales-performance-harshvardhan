@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v76'; // v46: force Vercel redeploy — clears browser cache
+var CACHE_VERSION = 'v77'; // v77: auto-bust secondary caches on deploy via _deployTs
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -682,6 +682,24 @@ function fetchLiveData(callback, force){
           _liveDataRetryCount = 0;
           repsRawOriginal = data.repsRaw;
           zonesRaw  = data.zones  || [];
+
+          // Auto-bust secondary caches (tradelane/customers/agents) on new deploy
+          var _serverDeployTs = data._deployTs || '';
+          var _storedDeployTs = '';
+          try { _storedDeployTs = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
+          if (_serverDeployTs && _serverDeployTs !== _storedDeployTs) {
+            console.log('[CACHE] New deploy detected:', _serverDeployTs, '— clearing secondary caches');
+            try {
+              Object.keys(localStorage).filter(function(k){
+                return k.startsWith('sar_') &&
+                  (k.includes('tradelane_') || k.includes('customers_') || k.includes('agents_'));
+              }).forEach(function(k){ localStorage.removeItem(k); });
+              localStorage.setItem('sar_deploy_ts', _serverDeployTs);
+            } catch(e){}
+            _tradelanePivotCache = {}; _tlGrandDrillCache = {};
+            _tradelaneCache = {}; _customerCache = {}; _agentCache = {};
+            tradelaneDataReady = false; customerDataReady = false; agentDataReady = false;
+          }
           // Keep months in FY order, only include months with actual data
           var ALL_FY2 = ['Apr-25','May-25','Jun-25','Jul-25','Aug-25','Sep-25','Oct-25','Nov-25','Dec-25',
             'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',

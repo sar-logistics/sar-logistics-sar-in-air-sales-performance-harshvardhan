@@ -341,7 +341,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-16T-tradelane-tg-field-v3"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-16T-auto-cache-bust-v4"; // bump to force cache rebuild on redeploy
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
