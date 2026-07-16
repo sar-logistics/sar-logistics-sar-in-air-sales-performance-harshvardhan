@@ -3249,7 +3249,7 @@ function tradelanePage(){
   }
   // Table view requires allDrillRows for accurate shipment counts (_tg override)
   // Trigger load and show spinner — don't render stale SRR counts
-  if (state.tradelaneView === 'table' && !allDrillRows) {
+  if (state.tradelaneView === 'table' && !allDrillRows && !_drillLoadAttempted) {
     loadDrillData(function(){ _tradelanePivotCache={}; render(); });
     return '<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#64748B;font-size:13px;gap:10px;">'
       +'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 0.8s linear infinite;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>'
@@ -6162,6 +6162,7 @@ function renderKeepTopbar(){
 var allDrillRows = null;
 var _drillDataLoading = false;
 var _drillDataCallbacks = [];
+var _drillLoadAttempted = false; // set after first load attempt — prevents infinite spinner
 function dedupDrillRows(rows) {
   if (!rows || !rows.length) return rows;
   var seen = {};
@@ -6236,12 +6237,14 @@ function loadDrillData(callback){
         // drillrows kept in-memory only (too large for localStorage)
       }
       _drillDataLoading = false;
+      _drillLoadAttempted = true;
       _drillDataCallbacks.forEach(function(cb){ cb(); });
       _drillDataCallbacks = [];
       if (state.page === 'customers') render(); // refresh customer stats with drill data
     })
     .catch(function(){
       _drillDataLoading = false;
+      _drillLoadAttempted = true;
       _drillDataCallbacks.forEach(function(cb){ cb(); });
       _drillDataCallbacks = [];
     });
