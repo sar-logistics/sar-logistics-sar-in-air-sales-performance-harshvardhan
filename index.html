@@ -397,25 +397,28 @@ function _showDashboardBody() {
       setTimeout(function(){
         if (!_customerCache[key]) {
           var lsc = lsGet('customers_'+key);
-          if (lsc && lsc.success) { _customerCache[key]=lsc; customerData=lsc; customerDataReady=true; return; }
+          var _sDtsC = ''; try { _sDtsC = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
+          if (lsc && lsc.success && (!lsc._deployTs || lsc._deployTs === _sDtsC)) { _customerCache[key]=lsc; customerData=lsc; customerDataReady=true; return; }
           fetch('/api/mongo-batch?action=customers&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-            .then(function(r){return r.json();}).then(function(d){ if(d.success){_customerCache[key]=d;customerData=d;customerDataReady=true;lsSet('customers_'+key,d);} }).catch(function(){});
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){d._deployTs=_sDtsC;_customerCache[key]=d;customerData=d;customerDataReady=true;lsSet('customers_'+key,d);} }).catch(function(){});
         }
       }, 300);
       setTimeout(function(){
         if (!_agentCache[key]) {
           var lsa = lsGet('agents_'+key);
-          if (lsa && lsa.success) { _agentCache[key]=lsa; agentData=lsa; agentDataReady=true; return; }
+          var _sDtsA = ''; try { _sDtsA = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
+          if (lsa && lsa.success && (!lsa._deployTs || lsa._deployTs === _sDtsA)) { _agentCache[key]=lsa; agentData=lsa; agentDataReady=true; return; }
           fetch('/api/mongo-batch?action=agents&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-            .then(function(r){return r.json();}).then(function(d){ if(d.success){_agentCache[key]=d;agentData=d;agentDataReady=true;lsSet('agents_'+key,d);} }).catch(function(){});
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){d._deployTs=_sDtsA;_agentCache[key]=d;agentData=d;agentDataReady=true;lsSet('agents_'+key,d);} }).catch(function(){});
         }
       }, 700);
       setTimeout(function(){
         if (!_tradelaneCache[key]) {
           var lst = lsGet('tradelane_'+key);
-          if (lst && lst.success) { _tradelaneCache[key]=lst; tradelaneData=lst; tradelaneDataReady=true; return; }
+          var _sDts = ''; try { _sDts = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
+          if (lst && lst.success && (!lst._deployTs || lst._deployTs === _sDts)) { _tradelaneCache[key]=lst; tradelaneData=lst; tradelaneDataReady=true; return; }
           fetch('/api/mongo-batch?action=tradelane&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-            .then(function(r){return r.json();}).then(function(d){ if(d.success){_tradelaneCache[key]=d;tradelaneData=d;tradelaneDataReady=true;lsSet('tradelane_'+key,d);} }).catch(function(){});
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){d._deployTs=_sDts;_tradelaneCache[key]=d;tradelaneData=d;tradelaneDataReady=true;lsSet('tradelane_'+key,d);} }).catch(function(){});
         }
       }, 1100);
       setTimeout(function(){ fetchFinanceData(null);  }, 1500);
@@ -934,6 +937,9 @@ function makeFetcher(action, lsKey, setReady) {
     // 1. localStorage hit — instant, no network
     if (!force) {
       var cached = lsGet(lsKey);
+      // Reject cached data if it was saved before the current deploy
+      var _curDts = ''; try { _curDts = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
+      if (cached && cached._deployTs && _curDts && cached._deployTs !== _curDts) cached = null;
       if (cached && cached.success) {
         setReady(cached);
         if (callback) callback();
@@ -962,7 +968,11 @@ function makeFetcher(action, lsKey, setReady) {
     fetch('/api/mongo-batch?action=' + action + (force ? '&force=1' : ''))
       .then(function(r){ return r.json(); })
       .then(function(data){
-        if (data.success) { setReady(data); lsSet(lsKey, data); }
+        if (data.success) {
+          var _dts = ''; try { _dts = localStorage.getItem('sar_deploy_ts') || ''; } catch(e){}
+          data._deployTs = _dts;
+          setReady(data); lsSet(lsKey, data);
+        }
         _inFlight = false;
         var cbs = _callbacks.splice(0);
         cbs.forEach(function(cb){ cb(); });
