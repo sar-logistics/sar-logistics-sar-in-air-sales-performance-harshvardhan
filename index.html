@@ -4394,6 +4394,10 @@ function financePage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading finance pendency…</div>'
       +'</div>';
   }
+  // Weekly view needs allPendencyDrillRows — trigger fetch if missing
+  if (state.reportView === 'Weekly' && !allPendencyDrillRows && !_drillLoadAttempted) {
+    fetchOpData(null, false);
+  }
   return pendencyPage(financeData, 'Finance Pendency', 'FL Pending Jobs', 'FL Done Jobs', '#1D5FCC', false, 'Financial Lock');
 }
 
@@ -4409,6 +4413,11 @@ function opPage(){
       +'<div style="width:18px;height:18px;border:2.5px solid #7C3AED;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading operation pendency…</div>'
       +'</div>';
+  }
+  // Weekly view needs allPendencyDrillRows — trigger fetch if missing
+  if (state.reportView === 'Weekly' && !allPendencyDrillRows && !opDataLoading) {
+    opDataLoading = true;
+    fetchOpData(function(){ opDataLoading = false; if(allPendencyDrillRows) render(); }, false);
   }
   return pendencyPage(opData, 'Operation Pendency', 'OL Pending Jobs', 'OL Done Jobs', '#7C3AED', true, 'Operation Lock');
 }
