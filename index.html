@@ -6915,7 +6915,9 @@ function openDrill(entity, metric, col, valueFmt){
 
 
 // ── Pendency Drill-through ────────────────────────────────────────────────────
-var _pendencyDrillCache = {}; // rep||month||status||lock → rows
+var _pendencyDrillCache = {};
+// Clear pendency drill cache on every deploy so stale 0-row results don't persist
+(function(){ try { var _pdc_ts = localStorage.getItem('_pdc_ts'); if(_pdc_ts !== DEPLOY_TS) { _pendencyDrillCache={}; localStorage.setItem('_pdc_ts', DEPLOY_TS); } } catch(e){} })(); // rep||month||status||lock → rows
 var allPendencyDrillRows = null; // loaded once with opData, filtered client-side
 var _pendencyDrillLoading = false; // prevents infinite render loop while fetching weekly drill rows
 
@@ -7047,10 +7049,8 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       if (r._norm !== repNorm) continue;
     }
 
-    // LOB filter — restrict to active filterLobs (e.g. AIR EXPORT, AIR IMPORT)
-    if (state.filterLobs && state.filterLobs.length > 0) {
-      if (state.filterLobs.indexOf(r.lob) === -1) continue;
-    }
+    // NOTE: LOB filter intentionally NOT applied in pendency drill
+    // Pendency shows ALL LOBs regardless of the global LOB filter
 
     // Lock status filter
     var isDone = isOL ? r.olDone : r.flDone;
@@ -7173,7 +7173,7 @@ function pendencyDrillDrawer(){
       +'<div style="padding:18px 24px 14px;border-bottom:1.5px solid #E8EDF6;flex-shrink:0;background:#FFFFFF;">'
         +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
           +'<div>'
-            +'<div style="font-size:19px;font-weight:800;color:#0D2B5E;letter-spacing:-0.02em;">'+esc(pd.rep)+' \u2014 '+esc(statusLabel)+' \u2014 '+esc(colLabel)+'</div>'
+            +'<div style="font-size:19px;font-weight:800;color:#0D2B5E;letter-spacing:-0.02em;">'+(function(){ if(pd.type==='jobowner'&&pd.rep&&pd.rep.indexOf('||')>-1){ var p=pd.rep.split('||'); return esc(p[0])+' <span style="font-size:14px;font-weight:600;color:#64748B;">(under '+esc(p[1])+')</span>'; } return esc(pd.rep); }())+' \u2014 '+esc(statusLabel)+' \u2014 '+esc(colLabel)+'</div>'
             +'<div style="font-size:12px;color:#64748B;font-weight:500;margin-top:4px;">'+subtitle+'</div>'
           +'</div>'
           +'<button data-act="closePendencyDrill" style="border:none;background:#F4F7FB;width:34px;height:34px;border-radius:8px;cursor:pointer;color:#5B6678;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;">\u2715</button>'
