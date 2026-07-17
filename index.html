@@ -4415,7 +4415,10 @@ function financePage(){
   if (state.reportView === 'Weekly' && !allPendencyDrillRows) {
     if (!_pendencyDrillLoading) {
       _pendencyDrillLoading = true;
-      fetchOpData(function(){ _pendencyDrillLoading = false; render(); }, false);
+      fetch('/api/mongo-batch?action=op').then(function(r){return r.json();}).then(function(d){
+        if (d.success && d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows; }
+        _pendencyDrillLoading = false; render();
+      }).catch(function(){ _pendencyDrillLoading = false; });
     }
     return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading weekly data…</div>'      +'</div>';
   }
@@ -4435,11 +4438,15 @@ function opPage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading operation pendency…</div>'
       +'</div>';
   }
-  // Weekly view needs allPendencyDrillRows — show loading if not ready yet
+  // Weekly view needs allPendencyDrillRows — fetch directly (bypasses makeFetcher sync trap)
   if (state.reportView === 'Weekly' && !allPendencyDrillRows) {
     if (!_pendencyDrillLoading) {
       _pendencyDrillLoading = true;
-      fetchOpData(function(){ _pendencyDrillLoading = false; render(); }, false);
+      fetch('/api/mongo-batch?action=op').then(function(r){return r.json();}).then(function(d){
+        if (d.success && d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows; }
+        _pendencyDrillLoading = false;
+        render();
+      }).catch(function(){ _pendencyDrillLoading = false; });
     }
     return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #7C3AED;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading weekly data…</div>'      +'</div>';
   }
