@@ -7024,9 +7024,15 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
         var parentNorm = normalizeName(parentRep);
         var spNorm2 = normalizeName(r.salesPerson || '');
         var repNameNorm2 = normalizeName(r._repName || '');
-        // parentRep is now rep._norm (raw normalized), so direct _norm match is primary
-        if (r._norm !== parentNorm && (r._displayNorm||'') !== parentNorm &&
-            spNorm2 !== parentNorm && repNameNorm2 !== parentNorm) continue;
+        // Direct match: _norm, _displayNorm, salesPerson, _repName
+        var directMatch = r._norm === parentNorm || (r._displayNorm||'') === parentNorm ||
+                          spNorm2 === parentNorm || repNameNorm2 === parentNorm;
+        // Fallback: _repName starts with parentNorm (handles "Radha Singh" → "Radha Arunkumar Singh")
+        // Only allow if parentNorm is specific enough (>=2 words) to avoid false positives
+        var parentWords = parentNorm.trim().split(/\s+/);
+        var startMatch = !directMatch && parentWords.length >= 2 &&
+                         repNameNorm2.indexOf(parentNorm) === 0;
+        if (!directMatch && !startMatch) continue;
       }
     } else {
       // Fallback: rep name match
