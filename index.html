@@ -26,7 +26,7 @@
   /* Prevent layout recalc on animating elements */
   .kpi-card { will-change: transform; contain: layout style; }
   /* Off-screen table rows don't need to paint — saves ~30% render time on large tables */
-  #main-slot table tbody tr { content-visibility: auto; contain-intrinsic-size: 0 120px; }
+  /* content-visibility removed - was collapsing scroll height incorrectly */
   /* Smooth font swap — never shows invisible text */
   @font-face { font-display: swap; }
   /* GPU-accelerate sidebar (fixed layer) */
