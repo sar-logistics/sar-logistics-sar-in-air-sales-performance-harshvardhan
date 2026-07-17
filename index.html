@@ -577,7 +577,12 @@ function _getRLSReps() {
 function computeFilteredRepsRaw(){
   var filterReps = state.filterReps || [];
 
-  var base = repsRawOriginal;
+  // Exclude non-sales roles (Regional Manager, Admin, HR) from rep list
+  var _excludedRoles = ['regional manager','admin','hr'];
+  var base = repsRawOriginal.filter(function(r){
+    var role = (r.role||'').toLowerCase().trim();
+    return !role || _excludedRoles.indexOf(role) === -1;
+  });
 
   // ── Role-Based Access Control ─────────────────────────────────────
   // Sales Rep  → only their own row
