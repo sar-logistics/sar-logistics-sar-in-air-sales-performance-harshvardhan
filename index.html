@@ -6654,33 +6654,16 @@ function openInsightDrill(drillType, name, drillMonth) {
         }
       }
 
-      // Build shipmentNos fallback for countries with missing _tg (old cached rows)
-      var _tlSnoFallback = null;
-      if (name !== 'Grand Total') {
-        var _tlD2 = tradelaneData || {};
-        var _tlLobData2 = (_tlD2.lobs && _tlD2.lobs[_tlActiveLob]) ? _tlD2.lobs[_tlActiveLob] : _tlD2;
-        var _tlCountry2 = (_tlLobData2.allCountries||[]).find(function(c){ return c.name === name; });
-        if (_tlCountry2 && _tlCountry2.shipmentNos) {
-          _tlSnoFallback = {};
-          _tlCountry2.shipmentNos.forEach(function(s){ _tlSnoFallback[s]=true; });
-        }
-      }
-
       var _tlSeenSno = {};
       var _tlRows = (allDrillRows||[]).filter(function(row){
         // LOB filter
         if (_tlLobFilter.length && _tlLobFilter.indexOf(row.lob) === -1) return false;
         // Active months filter — always applied
         if (!_tlActiveMonsSet[row._ml]) return false;
-        // Tradelane group filter: use _tg if available and non-empty
-        // Fallback to shipmentNos ONLY when _tg is empty (unmapped port)
-        // Never include a row where _tg is set but doesn't match
+        // Tradelane group filter: use _tg only — rows with empty _tg are excluded
+        // (shipmentNos fallback removed — was causing wrong inclusions from SRR mismatches)
         if (name !== 'Grand Total') {
-          if (row._tg && row._tg !== name) return false; // _tg set but wrong country — exclude
-          if (!row._tg) {
-            // _tg empty — use shipmentNos fallback only
-            if (!_tlSnoFallback || !_tlSnoFallback[row.shipmentNo]) return false;
-          }
+          if (row._tg !== name) return false;
         }
         // Rep/zone filter
         if (_tlEffReps && _tlEffReps.indexOf(row._sp) === -1) return false;
