@@ -4293,6 +4293,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           // Job Owners under rep
           if (hasOwners && !repCollapsed) {
             rep.jobOwners.forEach(function(jo){
+              // Skip job owner if LOB filter active and they have no matching LOB jobs
+              if (_joLobIndex && rep._norm) {
+                var _joEntry = _joLobIndex[rep._norm] && _joLobIndex[rep._norm][jo.name];
+                if (!_joEntry) return; // no LOB-matching jobs for this job owner
+              }
               var joColData;
               if (isYearly && _pFyGroups) {
                 joColData = _pFyGroups.map(function(g){
@@ -4365,6 +4370,10 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // Job owners nested under rep (OL page only)
       if (hasOwners && !repCollapsed) {
         rep.jobOwners.forEach(function(jo){
+          if (_joLobIndex && rep._norm) {
+            var _joEntry2 = _joLobIndex[rep._norm] && _joLobIndex[rep._norm][jo.name];
+            if (!_joEntry2) return;
+          }
           var joColData;
           if (isYearly && _pFyGroups) {
             joColData = _pFyGroups.map(function(g){
