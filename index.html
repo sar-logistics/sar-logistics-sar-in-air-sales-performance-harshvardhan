@@ -3981,7 +3981,8 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       if (!_joLobIndex[rk][jk]) _joLobIndex[rk][jk] = {};
       var mk = r._month;
       if (!_joLobIndex[rk][jk][mk]) _joLobIndex[rk][jk][mk] = { pending:0, done:0 };
-      if (isOL ? r.olDone : r.flDone) _joLobIndex[rk][jk][mk].done++;
+      var _isDone = (lockType === 'Operation Lock') ? r.olDone : r.flDone;
+      if (_isDone) _joLobIndex[rk][jk][mk].done++;
       else _joLobIndex[rk][jk][mk].pending++;
     });
   }
@@ -6957,13 +6958,13 @@ var _pendencyDrillLoading = false; // prevents infinite render loop while fetchi
 
 function openPendencyDrill(rep, col, status, lock, type){
   state.pendencyDrill = { rep:rep, col:col, status:status, lock:lock, type:type||'rep', loading:true, rows:null, error:null, columnFilters:{}, openFilterCol:null };
-  render(); // show loading spinner immediately
-
   function _compute(){
+    if (!state.pendencyDrill) return;
     var rows = computePendencyDrillResult(rep, col, status, lock, type||'rep');
     state.pendencyDrill.loading=false; state.pendencyDrill.rows=rows; state.pendencyDrill.count=rows.length;
     render();
   }
+  render(); // show loading spinner
 
   // Always use client-side — load drill rows first if not ready
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
