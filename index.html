@@ -7027,12 +7027,19 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
         // Direct match: _norm, _displayNorm, salesPerson, _repName
         var directMatch = r._norm === parentNorm || (r._displayNorm||'') === parentNorm ||
                           spNorm2 === parentNorm || repNameNorm2 === parentNorm;
-        // Fallback: _repName starts with parentNorm (handles "Radha Singh" → "Radha Arunkumar Singh")
-        // Only allow if parentNorm is specific enough (>=2 words) to avoid false positives
-        var parentWords = parentNorm.trim().split(/\s+/);
-        var startMatch = !directMatch && parentWords.length >= 2 &&
-                         repNameNorm2.indexOf(parentNorm) === 0;
-        if (!directMatch && !startMatch) continue;
+        // Fallback: check if first word + last word of parentNorm appear in _repName
+        // Handles "Radha Singh" matching "Radha Arunkumar Singh"
+        var fuzzyMatch = false;
+        if (!directMatch) {
+          var pWords = parentNorm.trim().split(' ').filter(Boolean);
+          var rWords = repNameNorm2.trim().split(' ').filter(Boolean);
+          if (pWords.length >= 2 && rWords.length >= 2) {
+            var pFirst = pWords[0], pLast = pWords[pWords.length-1];
+            // Match if first word matches AND last word appears anywhere in rep name
+            fuzzyMatch = rWords[0] === pFirst && rWords.indexOf(pLast) > -1;
+          }
+        }
+        if (!directMatch && !fuzzyMatch) continue;
       }
     } else {
       // Fallback: rep name match
