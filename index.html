@@ -5763,7 +5763,7 @@ function drawer(){
 
   var subtitle = d.loading ? 'Loading…'
     : d.count !== undefined
-      ? filteredCount.toLocaleString() + ' job' + (filteredCount === 1 ? '' : 's') + ' matching'
+      ? (filteredCount||0).toLocaleString() + ' job' + ((filteredCount||0) === 1 ? '' : 's') + ' matching'
       : '';
 
   // Footer: shows sum of DISPLAYED rows + full total if truncated
@@ -6653,14 +6653,34 @@ function openInsightDrill(drillType, name, drillMonth) {
         }
       }
 
+      // Build shipmentNos fallback for countries with missing _tg (old cached rows)
+      var _tlSnoFallback = null;
+      if (name !== 'Grand Total') {
+        var _tlD2 = tradelaneData || {};
+        var _tlLobData2 = (_tlD2.lobs && _tlD2.lobs[_tlActiveLob]) ? _tlD2.lobs[_tlActiveLob] : _tlD2;
+        var _tlCountry2 = (_tlLobData2.allCountries||[]).find(function(c){ return c.name === name; });
+        if (_tlCountry2 && _tlCountry2.shipmentNos) {
+          _tlSnoFallback = {};
+          _tlCountry2.shipmentNos.forEach(function(s){ _tlSnoFallback[s]=true; });
+        }
+      }
+
       var _tlSeenSno = {};
       var _tlRows = (allDrillRows||[]).filter(function(row){
         // LOB filter
         if (_tlLobFilter.length && _tlLobFilter.indexOf(row.lob) === -1) return false;
         // Active months filter — always applied
         if (!_tlActiveMonsSet[row._ml]) return false;
-        // Tradelane group filter — for specific country; Grand Total = all
-        if (name !== 'Grand Total' && row._tg !== name) return false;
+        // Tradelane group filter: use _tg if available, else fall back to shipmentNos
+        if (name !== 'Grand Total') {
+          if (row._tg) {
+            if (row._tg !== name) return false;
+          } else if (_tlSnoFallback) {
+            if (!_tlSnoFallback[row.shipmentNo]) return false;
+          } else {
+            return false;
+          }
+        }
         // Rep/zone filter
         if (_tlEffReps && _tlEffReps.indexOf(row._sp) === -1) return false;
         // Deduplicate
