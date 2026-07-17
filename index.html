@@ -1237,21 +1237,28 @@ function _debouncedTradelaneFetch() {
 function prefetchTradelaneRanges() {
   if (_tradelanePrefetchDone) return;
   _tradelanePrefetchDone = true;
-  // Only prefetch the last 3/6/12 month ranges — not every individual month
   var allM = months26; if (!allM || !allM.length) return;
   var queue = [];
+  // Prefetch last 3/6/9/12 month ranges for Monthly view
   [3,6,9,12].forEach(function(n){ if(allM.length>=n) queue.push({dateFrom:allM[allM.length-n],dateTo:allM[allM.length-1]}); });
+  // Prefetch full range for Yearly view (Apr-25 → last month) — makes Yearly switch instant
+  queue.push({dateFrom:allM[0], dateTo:allM[allM.length-1]});
+  // Prefetch no-date range (all data)
+  queue.push({dateFrom:'', dateTo:''});
   var idx=0;
   function next(){
     if(idx>=queue.length) return;
-    var r=queue[idx++]; var key=r.dateFrom+'_'+r.dateTo;
+    var r=queue[idx++]; var key=(r.dateFrom||'all')+'_'+(r.dateTo||'all');
     if(_tradelaneCache[key]){setTimeout(next,50);return;}
-    fetch('/api/mongo-batch?action=tradelane&dateFrom='+encodeURIComponent(r.dateFrom)+'&dateTo='+encodeURIComponent(r.dateTo))
+    var qs='/api/mongo-batch?action=tradelane'
+      +(r.dateFrom?'&dateFrom='+encodeURIComponent(r.dateFrom):'')
+      +(r.dateTo?'&dateTo='+encodeURIComponent(r.dateTo):'');
+    fetch(qs)
       .then(function(res){return res.json();})
-      .then(function(d){if(d.success){d._cacheKey=key;_tradelaneCache[key]=d;} setTimeout(next,200);})
-      .catch(function(){setTimeout(next,200);});
+      .then(function(d){if(d.success){d._cacheKey=key;_tradelaneCache[key]=d;} setTimeout(next,300);})
+      .catch(function(){setTimeout(next,300);});
   }
-  setTimeout(next, 2000);
+  setTimeout(next, 1500);
 }
 var fetchOrgData = makeFetcher('org', 'org', function(d){ orgData = d; orgDataReady = true; });
 
@@ -3450,26 +3457,48 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
   // Grand total is summed from rows (lobData.allCountries already filtered by zone/rep)
 
   // Always rebuild Grand Total shipments/tons/gp from allDrillRows (sales-mapped, accurate)
-  // This ensures Grand Total matches Sales Performance exactly regardless of filter state
+  // Cached by LOB+months+reps key — survives view type changes (Monthly→Yearly doesn't rescan)
   if (allDrillRows && allDrillRows.length > 0) {
-    var _gtGrand = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
-    var _gtMD = {};
-    var _gtActiveMonsSet = {};
-    activeMons.forEach(function(m){ _gtActiveMonsSet[m] = true; });
-    var _gtFyMonsSet = {};
-    if (_fyGroups) { _fyGroups.forEach(function(g){ g.idxs.forEach(function(i){ _gtFyMonsSet[months26[i]] = g.key; }); }); }
-    allDrillRows.forEach(function(r){
-      if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
-      if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
-      var inActive = _fyGroups ? !!_gtFyMonsSet[r._ml] : !!_gtActiveMonsSet[r._ml];
-      if (!inActive) return;
-      var _eRev = effectiveRevenue(r);
-      _gtGrand.shipments++; _gtGrand.gp += r.g||0; _gtGrand.revenue += _eRev; _gtGrand.tons += r.tons||0; _gtGrand.teu += r.t||0;
-      var colKey = _fyGroups ? _gtFyMonsSet[r._ml] : r._ml;
-      if (!_gtMD[colKey]) _gtMD[colKey] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
-      _gtMD[colKey].shipments++; _gtMD[colKey].gp += r.g||0; _gtMD[colKey].revenue += _eRev;
-      _gtMD[colKey].tons += r.tons||0; _gtMD[colKey].teu += r.t||0;
-    });
+    var _gtLobKey = (filterLobs && filterLobs.length > 0) ? filterLobs.join(',') : 'ALL';
+    var _gtRepKey = effectiveReps ? JSON.stringify(effectiveReps.slice().sort()) : 'ALL';
+    var _gtMonKey = activeMons.join(',');
+    var _gtCacheKey = _gtLobKey + '|' + _gtRepKey + '|' + _gtMonKey;
+    var _gtCached = _tlGrandDrillCache[_gtCacheKey];
+
+    var _gtGrand, _gtMD;
+    if (_gtCached) {
+      _gtGrand = _gtCached.grand;
+      _gtMD    = _gtCached.md;
+    } else {
+      _gtGrand = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
+      _gtMD = {};
+      var _gtActiveMonsSet = {};
+      activeMons.forEach(function(m){ _gtActiveMonsSet[m] = true; });
+      allDrillRows.forEach(function(r){
+        if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
+        if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
+        if (!_gtActiveMonsSet[r._ml]) return;
+        var _eRev = effectiveRevenue(r);
+        _gtGrand.shipments++; _gtGrand.gp += r.g||0; _gtGrand.revenue += _eRev; _gtGrand.tons += r.tons||0; _gtGrand.teu += r.t||0;
+        var colKey = r._ml;
+        if (!_gtMD[colKey]) _gtMD[colKey] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
+        _gtMD[colKey].shipments++; _gtMD[colKey].gp += r.g||0; _gtMD[colKey].revenue += _eRev;
+        _gtMD[colKey].tons += r.tons||0; _gtMD[colKey].teu += r.t||0;
+      });
+      _tlGrandDrillCache[_gtCacheKey] = { grand: _gtGrand, md: _gtMD };
+    }
+    // For FY groups: aggregate _gtMD months into FY keys
+    var _gtFyMD = _gtMD;
+    if (_fyGroups) {
+      _gtFyMD = {};
+      _fyGroups.forEach(function(g){
+        var acc = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
+        g.idxs.forEach(function(i){ var m=months26[i]; var d=_gtMD[m]; if(!d) return;
+          acc.shipments+=d.shipments; acc.revenue+=d.revenue; acc.gp+=d.gp; acc.tons+=d.tons; acc.teu+=d.teu;
+        });
+        _gtFyMD[g.key] = acc;
+      });
+    }
     // Override shipments, tons, gp, revenue from allDrillRows (accurate, lock-based)
     grand.shipments = _gtGrand.shipments;
     grand.tons      = _gtGrand.tons;
@@ -3480,7 +3509,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     var _allMDKeys = _fyGroups ? _fyGroups.map(function(g){ return g.key; }) : activeMons;
     _allMDKeys.forEach(function(k){
       if (!grandMD[k]) grandMD[k] = { shipments:0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
-      var d = _gtMD[k] || { shipments:0, gp:0, tons:0, revenue:0 };
+      var d = _gtFyMD[k] || { shipments:0, gp:0, tons:0, revenue:0 };
       grandMD[k].shipments = d.shipments;
       grandMD[k].gp        = d.gp;
       grandMD[k].tons      = d.tons;
