@@ -6644,12 +6644,27 @@ function openInsightDrill(drillType, name, drillMonth) {
         });
       }
 
-      // Filter allDrillRows by shipmentNos — deduplicate by shipmentNo (DB may have dupes)
+      // Build active months set — always restrict drill to what's visible in the table
+      var _tlActiveMonsSet = {};
+      if (drillMonth && drillMonth.startsWith('RANGE:')) {
+        // RANGE:Apr-26:Jul-26 — expand to all months in range
+        var _rParts = drillMonth.split(':');
+        var _rFrom = _rParts[1], _rTo = _rParts[2];
+        var _rFi = months26.indexOf(_rFrom), _rTi = months26.indexOf(_rTo);
+        if (_rFi >= 0 && _rTi >= 0) months26.slice(_rFi, _rTi+1).forEach(function(m){ _tlActiveMonsSet[m]=true; });
+      } else if (drillMonth) {
+        _tlActiveMonsSet[drillMonth] = true;
+      } else {
+        // No specific month — use currently active months from the table view
+        filteredMonthIndices().forEach(function(i){ _tlActiveMonsSet[months26[i]]=true; });
+      }
+
+      // Filter allDrillRows by shipmentNos AND active months — deduplicate by shipmentNo
       var _tlSeenSno = {};
       var _tlRows = (allDrillRows||[]).filter(function(row){
         if (!_tlSnoSet || !_tlSnoSet[row.shipmentNo]) return false;
         if (_tlSeenSno[row.shipmentNo]) return false;
-        if (drillMonth && row._ml !== drillMonth) return false;
+        if (!_tlActiveMonsSet[row._ml]) return false;
         _tlSeenSno[row.shipmentNo] = true;
         return true;
       });
