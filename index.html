@@ -6614,57 +6614,57 @@ function openInsightDrill(drillType, name, drillMonth) {
 
   // Tradelane drill: use server API (needs SRR join not available client-side)
   if (drillType === 'tradelane') {
-    // Check cache first
-    var _tlCacheKey = 'tl||'+name+'||'+(drillMonth||'')+'|'+(state.tradelaneLob||'Air');
+    // Build active months set from current view state
+    var _tlActiveMonsSet = {};
+    if (drillMonth && drillMonth.startsWith('RANGE:')) {
+      var _rParts = drillMonth.split(':');
+      var _rFrom = _rParts[1], _rTo = _rParts[2];
+      var _rFi = months26.indexOf(_rFrom), _rTi = months26.indexOf(_rTo);
+      if (_rFi >= 0 && _rTi >= 0) months26.slice(_rFi, _rTi+1).forEach(function(m){ _tlActiveMonsSet[m]=true; });
+    } else if (drillMonth) {
+      _tlActiveMonsSet[drillMonth] = true;
+    } else {
+      // No specific month — use currently active months from filteredMonthIndices
+      filteredMonthIndices().forEach(function(i){ _tlActiveMonsSet[months26[i]]=true; });
+    }
+
+    // Cache key includes active months so changing May→July busts cache
+    var _tlActiveMonsKey = Object.keys(_tlActiveMonsSet).sort().join(',');
+    var _tlCacheKey = 'tl||'+name+'||'+_tlActiveMonsKey+'|'+(state.tradelaneLob||'Air');
     if (_insightDrillCache[_tlCacheKey]) {
       state.drill = _insightDrillCache[_tlCacheKey];
       render();
       return;
     }
-    // Use allDrillRows filtered by shipmentNos from tradelaneData (fast, no server round-trip)
+
+    // Filter allDrillRows directly by _tg (tradelane group) + LOB + active months
+    // This bypasses shipmentNos entirely — accurate regardless of which cache is loaded
     requestAnimationFrame(function(){
       var _tlActiveLob = state.tradelaneLob || 'Air';
-      var _tlD = tradelaneData || {};
-      var _tlLobData = (_tlD.lobs && _tlD.lobs[_tlActiveLob]) ? _tlD.lobs[_tlActiveLob] : _tlD;
-      var _tlCountries = _tlLobData.allCountries || [];
+      var _tlLobFilter = { 'Air':['AIR EXPORT','AIR IMPORT'], 'Ocean':['SEA EXPORT','SEA IMPORT'], 'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT'] }[_tlActiveLob] || [];
 
-      // Build allowed shipmentNo set
-      var _tlSnoSet = null;
-      if (name !== 'Grand Total') {
-        var _tlCountry = _tlCountries.find(function(c){ return c.name === name; });
-        if (_tlCountry && _tlCountry.shipmentNos) {
-          _tlSnoSet = {};
-          _tlCountry.shipmentNos.forEach(function(s){ _tlSnoSet[s] = true; });
+      // Also build repFilter if zone/rep filter active
+      var _tlEffReps = null;
+      if ((state.filterZones||[]).length > 0 || (state.filterReps||[]).length > 0) {
+        _tlEffReps = zoneToRawSPs(state.filterZones||[]);
+        if ((state.filterReps||[]).length > 0) {
+          var _frn = (state.filterReps||[]).map(function(x){return normalizeName(x);});
+          _tlEffReps = _tlEffReps ? _tlEffReps.filter(function(sp){return _frn.indexOf(sp)>-1;}) : _frn;
         }
-      } else {
-        // Grand Total — union of all country shipmentNos
-        _tlSnoSet = {};
-        _tlCountries.forEach(function(c){
-          (c.shipmentNos||[]).forEach(function(s){ _tlSnoSet[s] = true; });
-        });
       }
 
-      // Build active months set — always restrict drill to what's visible in the table
-      var _tlActiveMonsSet = {};
-      if (drillMonth && drillMonth.startsWith('RANGE:')) {
-        // RANGE:Apr-26:Jul-26 — expand to all months in range
-        var _rParts = drillMonth.split(':');
-        var _rFrom = _rParts[1], _rTo = _rParts[2];
-        var _rFi = months26.indexOf(_rFrom), _rTi = months26.indexOf(_rTo);
-        if (_rFi >= 0 && _rTi >= 0) months26.slice(_rFi, _rTi+1).forEach(function(m){ _tlActiveMonsSet[m]=true; });
-      } else if (drillMonth) {
-        _tlActiveMonsSet[drillMonth] = true;
-      } else {
-        // No specific month — use currently active months from the table view
-        filteredMonthIndices().forEach(function(i){ _tlActiveMonsSet[months26[i]]=true; });
-      }
-
-      // Filter allDrillRows by shipmentNos AND active months — deduplicate by shipmentNo
       var _tlSeenSno = {};
       var _tlRows = (allDrillRows||[]).filter(function(row){
-        if (!_tlSnoSet || !_tlSnoSet[row.shipmentNo]) return false;
-        if (_tlSeenSno[row.shipmentNo]) return false;
+        // LOB filter
+        if (_tlLobFilter.length && _tlLobFilter.indexOf(row.lob) === -1) return false;
+        // Active months filter — always applied
         if (!_tlActiveMonsSet[row._ml]) return false;
+        // Tradelane group filter — for specific country; Grand Total = all
+        if (name !== 'Grand Total' && row._tg !== name) return false;
+        // Rep/zone filter
+        if (_tlEffReps && _tlEffReps.indexOf(row._sp) === -1) return false;
+        // Deduplicate
+        if (_tlSeenSno[row.shipmentNo]) return false;
         _tlSeenSno[row.shipmentNo] = true;
         return true;
       });
@@ -7362,14 +7362,14 @@ document.addEventListener('click', function(ev){
     ev.stopPropagation(); state.dateFrom=el.getAttribute('data-val'); state.fromDropOpen=false;
     if(state.page==='customers'){ _debouncedCustomerFetch(); }
     else if(state.page==='agents'){ _debouncedAgentFetch(); }
-    else if(state.page==='tradelane'){ _debouncedTradelaneFetch(); }
+    else if(state.page==='tradelane'){ _insightDrillCache={}; _tradelanePivotCache={}; _debouncedTradelaneFetch(); }
     else { render(); }
   }
   else if(act==='setTo'){
     ev.stopPropagation(); state.dateTo=el.getAttribute('data-val'); state.toDropOpen=false;
     if(state.page==='customers'){ _debouncedCustomerFetch(); }
     else if(state.page==='agents'){ _debouncedAgentFetch(); }
-    else if(state.page==='tradelane'){ _debouncedTradelaneFetch(); }
+    else if(state.page==='tradelane'){ _insightDrillCache={}; _tradelanePivotCache={}; _debouncedTradelaneFetch(); }
     else { render(); }
   }
   else if(act==='toggleFromDrop'){ ev.stopPropagation(); state.fromDropOpen=!state.fromDropOpen; state.toDropOpen=false; state.weeklyDropOpen=false; render(); requestAnimationFrame(positionAllDrops); }
