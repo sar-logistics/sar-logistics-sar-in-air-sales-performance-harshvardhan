@@ -350,8 +350,7 @@ function _showDashboardBody() {
     // allPendencyDrillRows: prefer from opData (already extracted above), fallback to dedicated key
     if (!allPendencyDrillRows) {
       // Try loading from dedicated localStorage key
-      var pdr = lsGet('pendency_drill_rows');
-      if (pdr && Array.isArray(pdr) && pdr.length > 0) { allPendencyDrillRows = pdr; _pendencyDrillCache = {}; }
+      // pendency_drill_rows not cached in localStorage (too large ~18MB)
     }
 
   })();
@@ -1131,7 +1130,6 @@ function prefetchCustomerRanges() {
 var fetchFinanceData  = makeFetcher('finance',   'finance',   function(d){ financeData  = d; financeDataReady  = true; });
 var fetchOpData = makeFetcher('op', 'op', function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows;
     _pendencyDrillCache = {}; // clear stale cache when fresh drill rows arrive
-    try { lsSet('pendency_drill_rows', d.allDrillJobRows); } catch(e) {}
     delete d.allDrillJobRows; } });
 
 // ── Agent Insights fetch (mirrors customer fetch pattern) ─────────────────────
@@ -4426,7 +4424,6 @@ function financePage(){
         if (d.success && d.allDrillJobRows) {
           allPendencyDrillRows = d.allDrillJobRows;
           _pendencyDrillCache = {};
-          try { lsSet('pendency_drill_rows', d.allDrillJobRows); } catch(e) {}
         }
         _pendencyDrillLoading = false; render();
       }).catch(function(){ _pendencyDrillLoading = false; });
@@ -7030,19 +7027,26 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
         // Direct match: _norm, _displayNorm, salesPerson, _repName
         var directMatch = r._norm === parentNorm || (r._displayNorm||'') === parentNorm ||
                           spNorm2 === parentNorm || repNameNorm2 === parentNorm;
-        // Fallback: check if first word + last word of parentNorm appear in _repName
-        // Handles "Radha Singh" matching "Radha Arunkumar Singh"
-        var fuzzyMatch = false;
         if (!directMatch) {
+          // Fuzzy: first word + last word of parentNorm appear in _norm or _repName
+          // Handles "Radha Singh" → "Radha Arunkumar Singh" (_norm = "radha arunkumar singh")
+          // Handles "S Krishnadesikan Krish" → "S Krishnadesikan Krishnadesikan"
           var pWords = parentNorm.trim().split(' ').filter(Boolean);
-          var rWords = repNameNorm2.trim().split(' ').filter(Boolean);
-          if (pWords.length >= 2 && rWords.length >= 2) {
+          if (pWords.length >= 2) {
             var pFirst = pWords[0], pLast = pWords[pWords.length-1];
-            // Match if first word matches AND last word appears anywhere in rep name
-            fuzzyMatch = rWords[0] === pFirst && rWords.indexOf(pLast) > -1;
+            var normWords = (r._norm||'').trim().split(' ').filter(Boolean);
+            var repWords = repNameNorm2.trim().split(' ').filter(Boolean);
+            // first word matches AND last word appears anywhere
+            var fuzzyNorm = normWords.length >= 2 && normWords[0] === pFirst &&
+                            normWords.indexOf(pLast) > -1;
+            // OR repName first word matches AND last word is prefix of any repName word
+            var fuzzyRep = repWords.length >= 2 && repWords[0] === pFirst &&
+                           repWords.some(function(w){ return w.indexOf(pLast) === 0 || pLast.indexOf(w) === 0; });
+            if (!fuzzyNorm && !fuzzyRep) continue;
+          } else {
+            continue;
           }
         }
-        if (!directMatch && !fuzzyMatch) continue;
       }
     } else {
       // Fallback: rep name match
