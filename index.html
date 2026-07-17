@@ -1228,6 +1228,10 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
 function _debouncedTradelaneFetch() {
   var _k = getTradelaneCacheKey();
   if (_tradelaneCache[_k]) { tradelaneData=_tradelaneCache[_k]; tradelaneDataReady=true; render(); return; }
+  // Yearly view: if specific range not cached, try full 'all_all' cache as fallback
+  if (state.reportView === 'Yearly' && _tradelaneCache['all_all']) {
+    tradelaneData=_tradelaneCache['all_all']; tradelaneDataReady=true; render(); return;
+  }
   render(); clearTimeout(_tradelaneFetchTimer);
   _tradelaneFetchTimer = setTimeout(function(){ tradelaneDataReady=false; fetchTradelaneData(function(){ render(); }); }, 300);
 }
@@ -6301,15 +6305,33 @@ function loadDrillData(callback){
       if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
         allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
         _custLobRepMapCache = {}; _agentLobRepMapCache = {}; // clear cached maps — data changed
-        // Patch tradelane cache with correct _tg-based shipment counts
-        // so next load shows correct numbers instantly from cache
         _patchTradelaneCacheWithDrillCounts();
+      }
+      // Bundle tradelane data from ping — store in cache keyed as 'all' so Yearly/all-data views are instant
+      if (data.tradelane && data.tradelane.lobs) {
+        var _tlKey = 'all_all'; // matches fetchTradelaneData key for no dateFrom/dateTo
+        if (!_tradelaneCache[_tlKey]) {
+          data.tradelane._cacheKey = _tlKey;
+          _tradelaneCache[_tlKey] = data.tradelane;
+          // Also cache under full year range key
+          var _allM = months26;
+          if (_allM && _allM.length) {
+            var _yrKey = _allM[0] + '_' + _allM[_allM.length-1];
+            if (!_tradelaneCache[_yrKey]) _tradelaneCache[_yrKey] = data.tradelane;
+          }
+          // If on tradelane page and data not loaded yet, use it immediately
+          if (state.page === 'tradelane' && !tradelaneDataReady) {
+            tradelaneData = data.tradelane; tradelaneDataReady = true;
+          }
+          _patchTradelaneCacheWithDrillCounts();
+        }
       }
       _drillDataLoading = false;
       _drillLoadAttempted = true;
       _drillDataCallbacks.forEach(function(cb){ cb(); });
       _drillDataCallbacks = [];
       if (state.page === 'customers') render();
+      if (state.page === 'tradelane' && tradelaneDataReady) render();
     })
     .catch(function(){
       _drillDataLoading = false;

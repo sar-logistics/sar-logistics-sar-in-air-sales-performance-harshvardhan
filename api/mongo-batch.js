@@ -2172,11 +2172,16 @@ module.exports = async function handler(req, res) {
     const needsOp      = !opCache      || (now2 - opCacheTime)      > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
     const needsDrill   = !drillRowsCache || (now2 - drillRowsCacheTime) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
 
-    // Build all caches in parallel
-    const [salesResult, financeResult, opResult] = await Promise.all([
-      needsSales   ? getSalesAggregate(db, false).catch(() => null)  : Promise.resolve(salesCache),
-      needsFinance ? getFinancePendency(db, false).catch(() => null) : Promise.resolve(financeCache),
-      needsOp      ? getOpPendency(db, false).catch(() => null)      : Promise.resolve(opCache),
+    // Check if tradelane cache needs refresh
+    const needsTradelane = !tradelaneCacheMap['all'] ||
+      (Date.now() - (tradelaneCacheMap['all'].time||0)) > (SALES_CACHE_TTL_MS - 20 * 60 * 1000);
+
+    // Build all caches in parallel — include tradelane (no date filter = all data)
+    const [salesResult, financeResult, opResult, tradelaneResult] = await Promise.all([
+      needsSales     ? getSalesAggregate(db, false).catch(() => null)             : Promise.resolve(salesCache),
+      needsFinance   ? getFinancePendency(db, false).catch(() => null)            : Promise.resolve(financeCache),
+      needsOp        ? getOpPendency(db, false).catch(() => null)                 : Promise.resolve(opCache),
+      needsTradelane ? getTradelaneAggregate(db, false, '', '', 'all').catch(() => null) : Promise.resolve(tradelaneCacheMap['all']?.data || null),
     ]);
 
     // Build drill rows cache if needed
@@ -2213,9 +2218,10 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({
       ok: true, ts: now2,
       lastUpdated,
-      sales:   salesStripped || null,
-      finance: financeResult || null,
-      op:      opResult      || null,
+      sales:      salesStripped  || null,
+      finance:    financeResult  || null,
+      op:         opResult       || null,
+      tradelane:  tradelaneResult || null,
     });
   }
 
