@@ -6923,7 +6923,9 @@ function openPendencyDrill(rep, col, status, lock, type){
   render(); // show loading spinner immediately
 
   function _compute(){
+    console.log('[PD] computing rep=',rep,'col=',col,'type=',type,'allPendencyDrillRows=',allPendencyDrillRows&&allPendencyDrillRows.length);
     var rows = computePendencyDrillResult(rep, col, status, lock, type||'rep');
+    console.log('[PD] result rows=',rows.length);
     state.pendencyDrill.loading=false; state.pendencyDrill.rows=rows; state.pendencyDrill.count=rows.length;
     render();
   }
