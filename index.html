@@ -412,10 +412,8 @@ function _showDashboardBody() {
       }, 700);
       setTimeout(function(){
         if (!_tradelaneCache[key]) {
-          var lst = lsGet('tradelane_'+key);
-          if (lst && lst.success) { _tradelaneCache[key]=lst; tradelaneData=lst; tradelaneDataReady=true; return; }
           fetch('/api/mongo-batch?action=tradelane&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-            .then(function(r){return r.json();}).then(function(d){ if(d.success){_tradelaneCache[key]=d;tradelaneData=d;tradelaneDataReady=true;lsSet('tradelane_'+key,d);} }).catch(function(){});
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){d._cacheKey=key;_tradelaneCache[key]=d;tradelaneData=d;tradelaneDataReady=true;} }).catch(function(){});
         }
       }, 1100);
       setTimeout(function(){ fetchFinanceData(null);  }, 1500);
@@ -1205,24 +1203,24 @@ function getTradelaneDateRange() {
 }
 function getTradelaneCacheKey() { var r = getTradelaneDateRange(); return (r.dateFrom||'all')+'_'+(r.dateTo||'all'); }
 
-function fetchTradelaneData(callback, force) {
-  var r = getTradelaneDateRange();
+function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
+  var r = overrideDateFrom !== undefined
+    ? { dateFrom: overrideDateFrom, dateTo: overrideDateTo }
+    : getTradelaneDateRange();
   var dateFrom = r.dateFrom, dateTo = r.dateTo;
-  var key   = (dateFrom||'all') + '_' + (dateTo||'all');
-  var lsKey = 'tradelane_' + key;
+  var key = (dateFrom||'all') + '_' + (dateTo||'all');
   var qs = '/api/mongo-batch?action=tradelane'
     + (force ? '&force=1' : '')
     + (dateFrom ? '&dateFrom=' + encodeURIComponent(dateFrom) : '')
     + (dateTo   ? '&dateTo='   + encodeURIComponent(dateTo)   : '');
   if (!force) {
     if (_tradelaneCache[key]) { tradelaneData = _tradelaneCache[key]; tradelaneDataReady = true; if (callback) callback(); return; }
-    var lst = lsGet(lsKey);
-    if (lst && lst.success) { _tradelaneCache[key]=lst; tradelaneData=lst; tradelaneDataReady=true; if(callback) callback(); return; }
+    // No localStorage — data too large, in-memory only
   }
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){
-      if(data.success){ data._cacheKey=key; _tradelaneCache[key]=data; tradelaneData=data; tradelaneDataReady=true; lsSet(lsKey,data); }
-      if(callback) callback();
+      if (data.success) { data._cacheKey=key; _tradelaneCache[key]=data; tradelaneData=data; tradelaneDataReady=true; }
+      if (callback) callback();
     })
     .catch(function(e){ console.warn('Tradelane failed:',e.message); if(callback) callback(); });
 }
@@ -1238,27 +1236,22 @@ function prefetchTradelaneRanges() {
   if (_tradelanePrefetchDone) return;
   _tradelanePrefetchDone = true;
   var allM = months26; if (!allM || !allM.length) return;
-  var queue = [];
-  // Prefetch last 3/6/9/12 month ranges for Monthly view
-  [3,6,9,12].forEach(function(n){ if(allM.length>=n) queue.push({dateFrom:allM[allM.length-n],dateTo:allM[allM.length-1]}); });
-  // Prefetch full range for Yearly view (Apr-25 → last month) — makes Yearly switch instant
-  queue.push({dateFrom:allM[0], dateTo:allM[allM.length-1]});
-  // Prefetch no-date range (all data)
-  queue.push({dateFrom:'', dateTo:''});
+  // Priority: full year first (Yearly view), then shorter ranges
+  var queue = [
+    {dateFrom:allM[0], dateTo:allM[allM.length-1]},  // full year — Yearly view instant
+    {dateFrom:'', dateTo:''},                          // all data
+  ];
+  [12,6,3].forEach(function(n){
+    if(allM.length>=n) queue.push({dateFrom:allM[allM.length-n],dateTo:allM[allM.length-1]});
+  });
   var idx=0;
   function next(){
     if(idx>=queue.length) return;
     var r=queue[idx++]; var key=(r.dateFrom||'all')+'_'+(r.dateTo||'all');
-    if(_tradelaneCache[key]){setTimeout(next,50);return;}
-    var qs='/api/mongo-batch?action=tradelane'
-      +(r.dateFrom?'&dateFrom='+encodeURIComponent(r.dateFrom):'')
-      +(r.dateTo?'&dateTo='+encodeURIComponent(r.dateTo):'');
-    fetch(qs)
-      .then(function(res){return res.json();})
-      .then(function(d){if(d.success){d._cacheKey=key;_tradelaneCache[key]=d;} setTimeout(next,300);})
-      .catch(function(){setTimeout(next,300);});
+    if(_tradelaneCache[key]){ next(); return; } // already cached — skip immediately
+    fetchTradelaneData(function(){ setTimeout(next,200); }, false, r.dateFrom, r.dateTo);
   }
-  setTimeout(next, 1500);
+  setTimeout(next, 500); // start sooner — right after initial data loads
 }
 var fetchOrgData = makeFetcher('org', 'org', function(d){ orgData = d; orgDataReady = true; });
 
@@ -6369,7 +6362,7 @@ function _patchTradelaneCacheWithDrillCounts() {
 
     // Re-save to localStorage with corrected counts
     if (patched) {
-      try { lsSet('tradelane_' + cacheKey, cached); } catch(e) {}
+      // tradelane data kept in-memory only (too large for localStorage)
     }
   });
 }
