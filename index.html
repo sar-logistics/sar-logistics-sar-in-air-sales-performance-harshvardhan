@@ -4305,7 +4305,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
                 +'<div style="font-size:10px;font-weight:500;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(jo.name)+'</div>'
                 +'<div style="font-size:8.5px;color:#94A3B8;font-weight:500;">Job Owner</div>'
               +'</div>';
-              bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, 'Cross Sales', repKey, false, jo.name+'||'+rep.name, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';', jo.name+'||'+rep.name, lockType);
+              // Use rep._norm (raw normalized SP name) as parent identifier so drill matching works
+              var _joParentId = (rep._norm || rep.name);
+              bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, 'Cross Sales', repKey, false, jo.name+'||'+_joParentId, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';', jo.name+'||'+_joParentId, lockType);
             });
           }
         });
@@ -4366,7 +4368,8 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
             +'<div style="font-size:10.5px;font-weight:500;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(jo.name)+'</div>'
             +'<div style="font-size:9px;color:#94A3B8;font-weight:500;">Job Owner</div>'
           +'</div>';
-          bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, zone, repKey, false, jo.name+'||'+rep.name, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';', jo.name+'||'+rep.name, lockType);
+          var _jpId = jo.name+'||'+(rep._norm||rep.name);
+          bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, zone, repKey, false, _jpId, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';', _jpId, lockType);
         });
       }
     });
@@ -7020,7 +7023,10 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       if (parentRep) {
         var parentNorm = normalizeName(parentRep);
         var spNorm2 = normalizeName(r.salesPerson || '');
-        if (r._norm !== parentNorm && (r._displayNorm || '') !== parentNorm && spNorm2 !== parentNorm) continue;
+        var repNameNorm2 = normalizeName(r._repName || '');
+        // parentRep is now rep._norm (raw normalized), so direct _norm match is primary
+        if (r._norm !== parentNorm && (r._displayNorm||'') !== parentNorm &&
+            spNorm2 !== parentNorm && repNameNorm2 !== parentNorm) continue;
       }
     } else {
       // Fallback: rep name match
