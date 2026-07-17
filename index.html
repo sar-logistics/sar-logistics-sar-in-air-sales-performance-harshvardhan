@@ -6919,20 +6919,11 @@ var allPendencyDrillRows = null; // loaded once with opData, filtered client-sid
 var _pendencyDrillLoading = false; // prevents infinite render loop while fetching weekly drill rows
 
 function openPendencyDrill(rep, col, status, lock, type){
-  var cacheKey = rep+'||'+col+'||'+status+'||'+lock+'||'+(type||'rep')+'||'+(state.filterLobs||[]).join(',');
   state.pendencyDrill = { rep:rep, col:col, status:status, lock:lock, type:type||'rep', loading:true, rows:null, error:null, columnFilters:{}, openFilterCol:null };
 
-  // In-memory cache hit — instant
-  if (_pendencyDrillCache[cacheKey]) {
-    var c = _pendencyDrillCache[cacheKey];
-    state.pendencyDrill.loading=false; state.pendencyDrill.rows=c.rows; state.pendencyDrill.count=c.count;
-    render(); return;
-  }
-
-  // Client-side filtering from allPendencyDrillRows — zero server round-trip
+  // Client-side filtering from allPendencyDrillRows — always recompute (no cache to go stale)
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
     var rows = computePendencyDrillResult(rep, col, status, lock, type||'rep');
-    _pendencyDrillCache[cacheKey] = { rows: rows, count: rows.length };
     state.pendencyDrill.loading=false; state.pendencyDrill.rows=rows; state.pendencyDrill.count=rows.length;
     render(); return;
   }
