@@ -7019,21 +7019,18 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
         var directMatch = r._norm === parentNorm || (r._displayNorm||'') === parentNorm ||
                           spNorm2 === parentNorm || repNameNorm2 === parentNorm;
         if (!directMatch) {
-          // Fuzzy: first word + last word of parentNorm appear in _norm or _repName
-          // Handles "Radha Singh" → "Radha Arunkumar Singh" (_norm = "radha arunkumar singh")
-          // Handles "S Krishnadesikan Krish" → "S Krishnadesikan Krishnadesikan"
+          // Fuzzy: handles display name being shorter than full name
+          // e.g. "Radha Singh" → "Radha Arunkumar Singh"
+          // STRICT: _repName must START WITH parentNorm words (not just contain them)
+          // This prevents "Nomination Sales" matching "Nomination Sales - US"
           var pWords = parentNorm.trim().split(' ').filter(Boolean);
           if (pWords.length >= 2) {
-            var pFirst = pWords[0], pLast = pWords[pWords.length-1];
-            var normWords = (r._norm||'').trim().split(' ').filter(Boolean);
             var repWords = repNameNorm2.trim().split(' ').filter(Boolean);
-            // first word matches AND last word appears anywhere
-            var fuzzyNorm = normWords.length >= 2 && normWords[0] === pFirst &&
-                            normWords.indexOf(pLast) > -1;
-            // OR repName first word matches AND last word is prefix of any repName word
-            var fuzzyRep = repWords.length >= 2 && repWords[0] === pFirst &&
-                           repWords.some(function(w){ return w.indexOf(pLast) === 0 || pLast.indexOf(w) === 0; });
-            if (!fuzzyNorm && !fuzzyRep) continue;
+            var normWords = (r._norm||'').trim().split(' ').filter(Boolean);
+            // repName must start with ALL parent words in order
+            var repStartsWith = pWords.every(function(pw, pi){ return repWords[pi] === pw; }) && repWords.length > pWords.length;
+            var normStartsWith = pWords.every(function(pw, pi){ return normWords[pi] === pw; }) && normWords.length > pWords.length;
+            if (!repStartsWith && !normStartsWith) continue;
           } else {
             continue;
           }
