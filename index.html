@@ -2299,8 +2299,9 @@ function topbar(){
         +'</button>';
 
         if (isFOpen) {
-          var LOB_KEYS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'];
-          var LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import'};
+          var _isPendencyPage = state.page === 'op' || state.page === 'finance';
+          var LOB_KEYS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'].concat(_isPendencyPage ? ['GENERAL'] : []);
+          var LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','GENERAL':'General'};
           // Always list from the FULL unfiltered dataset — otherwise once you filter
           // down to a subset, you could never see/re-select the excluded reps again
           var _fzPanel = state.filterZones || [];
@@ -3892,6 +3893,34 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     });
   }
 
+  // Build job owner LOB index from allPendencyDrillRows when LOB filter active
+  var _joLobIndex = null;
+  if (_flobs && allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+    _joLobIndex = {}; // "repNorm|joName" -> month -> {pending,done}
+    allPendencyDrillRows.forEach(function(r){
+      if (!r.jobOwner || r.jobOwner === '—') return;
+      if (_flobs.indexOf(r.lob) === -1) return;
+      var rk = normalizeName(r._repName || r._norm || '');
+      var key = rk + '|' + r.jobOwner;
+      if (!_joLobIndex[key]) _joLobIndex[key] = {};
+      var mk = r._month;
+      if (!_joLobIndex[key][mk]) _joLobIndex[key][mk] = { pending:0, done:0 };
+      var _isDone = (lockType === 'Operation Lock') ? r.olDone : r.flDone;
+      if (_isDone) _joLobIndex[key][mk].done++;
+      else _joLobIndex[key][mk].pending++;
+    });
+  }
+
+  // Helper: get job owner data for a month, LOB-filtered if available
+  function _joGet(rep, jo, m) {
+    if (_joLobIndex) {
+      var rk = normalizeName(rep.name||'');
+      var key = rk + '|' + jo.name;
+      return (_joLobIndex[key] && _joLobIndex[key][m]) || { pending:0, done:0 };
+    }
+    return jo.monthData[m] || { pending:0, done:0 };
+  }
+
   // RLS: filter pendency reps to only those visible in repsRaw (already RLS-filtered)
   // This ensures Zonal Manager sees only their zone, Sales Rep sees only themselves
   var _allowedRepNames = null;
@@ -4277,21 +4306,21 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
               if (isYearly && _pFyGroups) {
                 joColData = _pFyGroups.map(function(g){
                   return g.idxs.reduce(function(acc,i){
-                    var src = jo.monthData[months26[i]] || { pending:0, done:0 };
+                    var src = _joGet(rep, jo, months26[i]);
                     acc.pending += src.pending||0; acc.done += src.done||0; return acc;
                   }, { pending:0, done:0 });
                 });
               } else if (isQuarterly && _qGroups) {
                 joColData = _qGroups.map(function(g){
                   return g.months.reduce(function(acc,m){
-                    var src = jo.monthData[m] || { pending:0, done:0 };
+                    var src = _joGet(rep, jo, m);
                     acc.pending += src.pending||0; acc.done += src.done||0; return acc;
                   }, { pending:0, done:0 });
                 });
               } else {
                 joColData = activeCols.map(function(col){
-                  if (isWeekly) { var m = state.weeklyMonth || months26[months26.length-1]; return jo.monthData[m] || { pending:0, done:0 }; }
-                  return jo.monthData[col] || { pending:0, done:0 };
+                  if (isWeekly) { var m = state.weeklyMonth || months26[months26.length-1]; return _joGet(rep, jo, m); }
+                  return _joGet(rep, jo, col);
                 });
               }
               var joFiltered = { colData: joColData, totalPending: joColData.reduce(function(s,c){return s+c.pending;},0), totalDone: joColData.reduce(function(s,c){return s+c.done;},0), total: 0 };
@@ -4337,14 +4366,14 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           if (isYearly && _pFyGroups) {
             joColData = _pFyGroups.map(function(g){
               return g.idxs.reduce(function(acc,i){
-                var src = jo.monthData[months26[i]] || { pending:0, done:0 };
+                var src = _joGet(rep, jo, months26[i]);
                 acc.pending += src.pending||0; acc.done += src.done||0; return acc;
               }, { pending:0, done:0 });
             });
           } else if (isQuarterly && _qGroups) {
             joColData = _qGroups.map(function(g){
               return g.months.reduce(function(acc,m){
-                var src = jo.monthData[m] || { pending:0, done:0 };
+                var src = _joGet(rep, jo, m);
                 acc.pending += src.pending||0; acc.done += src.done||0; return acc;
               }, { pending:0, done:0 });
             });
@@ -4352,9 +4381,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
             joColData = activeCols.map(function(col){
               if (isWeekly) {
                 var m = state.weeklyMonth || months26[months26.length-1];
-                return jo.monthData[m] || { pending:0, done:0 };
+                return _joGet(rep, jo, m);
               }
-              return jo.monthData[col] || { pending:0, done:0 };
+              return _joGet(rep, jo, col);
             });
           }
           var joFiltered = { colData: joColData, totalPending: joColData.reduce(function(s,c){return s+c.pending;},0), totalDone: joColData.reduce(function(s,c){return s+c.done;},0), total: 0 };
@@ -7046,8 +7075,10 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       if (r._norm !== repNorm) continue;
     }
 
-    // NOTE: LOB filter intentionally NOT applied in pendency drill
-    // Pendency shows ALL LOBs regardless of the global LOB filter
+    // Apply global LOB filter — pendency now respects LOB filter (General added as option)
+    if (state.filterLobs && state.filterLobs.length > 0) {
+      if (state.filterLobs.indexOf(r.lob) === -1) continue;
+    }
 
     // Lock status filter
     var isDone = isOL ? r.olDone : r.flDone;
@@ -7109,11 +7140,11 @@ function pendencyDrillDrawer(){
   } else if (!pd.rows || pd.rows.length===0) {
     bodyContent = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:60px 24px;text-align:center;"><div style="font-size:12.5px;color:#94A3B8;font-weight:600;">No matching jobs found.</div></div>';
   } else {
-    // LOB filter: apply for rep/zone/grand types but NOT for jobowner (jobowners can have any LOB)
+    // Apply global LOB filter to all pendency drill rows
     var _pdLobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
-    var visibleRows = (pd.type === 'jobowner' || !_pdLobs)
-      ? pd.rows.slice()
-      : pd.rows.filter(function(r){ return _pdLobs.indexOf(r.lob) !== -1; });
+    var visibleRows = _pdLobs
+      ? pd.rows.filter(function(r){ return _pdLobs.indexOf(r.lob) !== -1; })
+      : pd.rows.slice();
 
     function th(c){
       var isSticky = c.sticky !== undefined;
