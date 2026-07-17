@@ -4413,9 +4413,9 @@ function financePage(){
   }
   // Weekly view needs allPendencyDrillRows — show loading if not ready yet
   if (state.reportView === 'Weekly' && !allPendencyDrillRows) {
-    if (!opDataLoading) {
-      opDataLoading = true;
-      fetchOpData(function(){ opDataLoading = false; render(); }, false);
+    if (!_pendencyDrillLoading) {
+      _pendencyDrillLoading = true;
+      fetchOpData(function(){ _pendencyDrillLoading = false; render(); }, false);
     }
     return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading weekly data…</div>'      +'</div>';
   }
@@ -4437,9 +4437,9 @@ function opPage(){
   }
   // Weekly view needs allPendencyDrillRows — show loading if not ready yet
   if (state.reportView === 'Weekly' && !allPendencyDrillRows) {
-    if (!opDataLoading) {
-      opDataLoading = true;
-      fetchOpData(function(){ opDataLoading = false; render(); }, false);
+    if (!_pendencyDrillLoading) {
+      _pendencyDrillLoading = true;
+      fetchOpData(function(){ _pendencyDrillLoading = false; render(); }, false);
     }
     return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #7C3AED;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading weekly data…</div>'      +'</div>';
   }
@@ -6899,6 +6899,7 @@ function openDrill(entity, metric, col, valueFmt){
 // ── Pendency Drill-through ────────────────────────────────────────────────────
 var _pendencyDrillCache = {}; // rep||month||status||lock → rows
 var allPendencyDrillRows = null; // loaded once with opData, filtered client-side
+var _pendencyDrillLoading = false; // prevents infinite render loop while fetching weekly drill rows
 
 function openPendencyDrill(rep, col, status, lock, type){
   var cacheKey = rep+'||'+col+'||'+status+'||'+lock+'||'+(type||'rep')+'||'+(state.filterLobs||[]).join(',');
