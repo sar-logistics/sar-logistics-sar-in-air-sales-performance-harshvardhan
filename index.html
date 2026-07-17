@@ -349,7 +349,9 @@ function _showDashboardBody() {
     // drillrows not stored in localStorage (too large) — loaded via ping response
     // allPendencyDrillRows: prefer from opData (already extracted above), fallback to dedicated key
     if (!allPendencyDrillRows) {
-    // pendencyDrillRows not loaded from localStorage — kept in-memory only
+      // Try loading from dedicated localStorage key
+      var pdr = lsGet('pendency_drill_rows');
+      if (pdr && Array.isArray(pdr) && pdr.length > 0) { allPendencyDrillRows = pdr; }
     }
 
   })();
@@ -1127,7 +1129,9 @@ function prefetchCustomerRanges() {
   setTimeout(next, 3000);
 }
 var fetchFinanceData  = makeFetcher('finance',   'finance',   function(d){ financeData  = d; financeDataReady  = true; });
-var fetchOpData = makeFetcher('op', 'op', function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows; // pendencyDrillRows in-memory only (30MB, too large for localStorage)
+var fetchOpData = makeFetcher('op', 'op', function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows;
+    // Save drill rows separately so weekly view loads instantly on next page open
+    try { lsSet('pendency_drill_rows', d.allDrillJobRows); } catch(e) {}
     delete d.allDrillJobRows; } });
 
 // ── Agent Insights fetch (mirrors customer fetch pattern) ─────────────────────
@@ -4416,7 +4420,10 @@ function financePage(){
     if (!_pendencyDrillLoading) {
       _pendencyDrillLoading = true;
       fetch('/api/mongo-batch?action=op').then(function(r){return r.json();}).then(function(d){
-        if (d.success && d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows; }
+        if (d.success && d.allDrillJobRows) {
+          allPendencyDrillRows = d.allDrillJobRows;
+          try { lsSet('pendency_drill_rows', d.allDrillJobRows); } catch(e) {}
+        }
         _pendencyDrillLoading = false; render();
       }).catch(function(){ _pendencyDrillLoading = false; });
     }
@@ -8084,6 +8091,7 @@ window.addEventListener('load', function() {
           opData = d.op; opDataReady = true;
           if (d.op.allDrillJobRows) {
             allPendencyDrillRows = d.op.allDrillJobRows;
+            try { lsSet('pendency_drill_rows', d.op.allDrillJobRows); } catch(e) {}
             // pendencyDrillRows in-memory only (too large for localStorage)
           }
           // Strip drill rows before saving op to localStorage (too large)
