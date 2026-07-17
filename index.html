@@ -6923,9 +6923,7 @@ function openPendencyDrill(rep, col, status, lock, type){
   render(); // show loading spinner immediately
 
   function _compute(){
-    console.log('[PD] computing rep=',rep,'col=',col,'type=',type,'allPendencyDrillRows=',allPendencyDrillRows&&allPendencyDrillRows.length);
     var rows = computePendencyDrillResult(rep, col, status, lock, type||'rep');
-    console.log('[PD] result rows=',rows.length);
     state.pendencyDrill.loading=false; state.pendencyDrill.rows=rows; state.pendencyDrill.count=rows.length;
     render();
   }
@@ -7109,11 +7107,8 @@ function pendencyDrillDrawer(){
   } else if (!pd.rows || pd.rows.length===0) {
     bodyContent = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:60px 24px;text-align:center;"><div style="font-size:12.5px;color:#94A3B8;font-weight:600;">No matching jobs found.</div></div>';
   } else {
-    // Filter by global LOB — no per-column filter UI
-    var _pdLobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
-    var visibleRows = pd.rows.filter(function(r){
-      return !_pdLobs || _pdLobs.indexOf(r.lob) !== -1;
-    });
+    // Pendency drawer shows ALL LOBs regardless of global LOB filter
+    var visibleRows = pd.rows.slice();
 
     function th(c){
       var isSticky = c.sticky !== undefined;
