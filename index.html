@@ -3952,7 +3952,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     if (isWeekly && _weeklyJoIndex) {
       var rk = normalizeName(rep.name||'');
       var key = rk + '|' + jo.name;
-      return (_weeklyJoIndex[key] && _weeklyJoIndex[key][m]) || { pending:0, done:0 };
+      var val = (_weeklyJoIndex[key] && _weeklyJoIndex[key][m]) || { pending:0, done:0 };
+      if (rep.name === 'Nomination Sales' && jo.name === 'Saru Singh') {
+        console.log('[DEBUG _joGet] isWeekly=',isWeekly,'key=',key,'m=',m,'val=',JSON.stringify(val),'_weeklyJoIndex[key]=',_weeklyJoIndex[key]);
+      }
+      return val;
     }
     // LOB-filtered monthly index
     if (_joLobIndex) {
