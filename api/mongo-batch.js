@@ -464,13 +464,17 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         let _tg = "";
         if (cls.kind === "AIR") {
           const _portField = cls.direction === "EXPORT" ? "Discharge Port" : "Loading Port";
-          _tg = portToInfo(job[_portField] || "").tradelane;
+          const _portVal = String(job[_portField] || "").trim();
+          _tg = portToInfo(_portVal).tradelane;
+          // Fallback: try city name lookup when ISO2 code not found
+          if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
         } else if (cls.kind === "SEA") {
           if (cls.direction === "EXPORT") {
-            // Discharge Country is plain text
             _tg = countryNameToTradelane(job["Discharge Country"] || "") || (job["Discharge Country"] || "");
           } else {
-            _tg = portToInfo(job["Loading Port"] || "").tradelane;
+            const _portVal = String(job["Loading Port"] || "").trim();
+            _tg = portToInfo(_portVal).tradelane;
+            if (!_tg && _portVal) _tg = cityToTradelane(_portVal);
           }
         } else if (cls.kind === "ISOTANK") {
           const _raw = cls.direction === "EXPORT"
@@ -1415,6 +1419,108 @@ const TRADELANE_MAP = {
   "IS":{"country":"Iceland","tradelane":"Europe"},
   "GL":{"country":"Greenland","tradelane":"Europe"},
 };
+
+// Free-text city/airport name → tradelane (for ports not matched by ISO2 code)
+const CITY_TRADELANE_MAP = {
+  // Europe
+  "aberdeen": "Europe", "goteborg": "Europe", "landvetter": "Europe",
+  "brussel (bruxelles)": "Europe", "brussels": "Europe",
+  "cologne air port": "Europe", "cologne": "Europe", "koeln": "Europe",
+  "dusseldorf": "Europe", "düsseldorf": "Europe",
+  "stuttgart": "Europe", "basel": "Europe",
+  "lille-lesquin apt": "Europe", "lille": "Europe",
+  "marseille": "Europe", "nice": "Europe",
+  "saint-exupery apt/lyon": "Europe", "lyon": "Europe",
+  "toulouse": "Europe",
+  "lisboa": "Europe", "lisbon": "Europe",
+  "porto": "Europe",
+  "roma": "Europe", "rome": "Europe", "napoli": "Europe", "naples": "Europe",
+  "praha": "Europe", "prague": "Europe",
+  "warszawa": "Europe", "warsaw": "Europe",
+  "wien": "Europe", "vienna": "Europe",
+  "otopeni apt/bucuresti": "Europe", "bucharest": "Europe",
+  "thessaloniki": "Europe",
+  "larnaca": "Europe",
+  "riverside park apt/dundee": "Europe", "dundee": "Europe",
+  "istanbul": "Med", "gaziantep": "Med", "cukurova international airport": "Med",
+  "saint petersburg (ex leningrad)": "Asia", "minsk": "Europe",
+  "novosibirsk": "Asia",
+  // LATAM
+  "ciudad de mexico": "LATAM", "mexico city": "LATAM",
+  "felipe angeles international airport": "LATAM",
+  "barranquilla": "LATAM", "cali": "LATAM",
+  "cancun": "LATAM",
+  "techo international airport": "LATAM", "bogota": "LATAM",
+  "panama, ciudad de": "LATAM", "panama city": "LATAM",
+  "paramaribo": "LATAM",
+  "viru viru": "LATAM", "santa cruz": "LATAM",
+  "rio de janeiro internacional apt": "LATAM", "rio de janeiro": "LATAM",
+  "salvador": "LATAM",
+  "sint-maarten apt": "LATAM", "saint kitts": "LATAM",
+  "kingston": "LATAM",
+  "bridgetown": "LATAM",
+  "curacao": "LATAM",
+  "port-au-prince": "LATAM",
+  "port-of-spain": "LATAM",
+  "georgetown": "LATAM",
+  // Africa
+  "dr. antónio agostinho neto international airport": "Africa", "luanda": "Africa",
+  "entebbe": "Africa", "kampala": "Africa",
+  "juba": "Africa",
+  "durban": "Africa",
+  "kano": "Africa",
+  "port harcourt": "Africa",
+  "freetown": "Africa",
+  "conakry": "Africa",
+  "bamako": "Africa",
+  "banjul": "Africa",
+  "blaise diagne international airport": "Africa", "dakar": "Africa",
+  "brazzaville": "Africa", "pointe noire": "Africa",
+  "bujumbura": "Africa",
+  "lilongwe": "Africa",
+  "lome": "Africa",
+  "niamey": "Africa",
+  "n'djamena": "Africa", "ndjamena": "Africa",
+  "mogadishu": "Africa",
+  "hargeisa": "Africa",
+  "gaborone": "Africa",
+  // Middle East
+  "basra": "Middle East",
+  "erbil international apt": "Middle East", "erbil": "Middle East",
+  "salalah": "Middle East",
+  // Asia
+  "bangalore": "Indian Subcontinent", "delhi": "Indian Subcontinent",
+  "mumbai (ex bombay)": "Indian Subcontinent", "mumbai": "Indian Subcontinent",
+  "peshawar": "Indian Subcontinent",
+  "kabul": "Asia",
+  "bishkek (ex frunze)": "Asia", "bishkek": "Asia",
+  "atyrau (ex guryev)": "Asia", "atyrau": "Asia",
+  "kansai int apt": "Asia", "osaka": "Asia",
+  "fukuoka": "Asia",
+  "nagoya, aichi": "Asia", "nagoya": "Asia",
+  "chongqing": "Asia",
+  "shenzhen": "Asia",
+  "zhengzhou": "Asia",
+  "cebu": "Asia",
+  "penang (georgetown)": "Asia", "penang": "Asia",
+  // North America / US
+  "chico": "US", "cincinnati": "US", "el paso": "US",
+  "jacksonville": "US", "kahului": "US", "maui": "US",
+  "palm springs": "US", "philadelphia": "US",
+  "richmond": "US", "saint louis": "US",
+  // Oceania / Indian Ocean islands
+  "mahe island apt": "Others", "mahe": "Others",  // Seychelles
+  "male": "Indian Subcontinent",  // Maldives
+  "malta": "Med",
+  "port louis": "Africa",  // Mauritius → Africa
+  "sir seewoosagur ramgoolam int apt": "Africa",  // Mauritius
+  "ben gurion international apt": "Med",  // Israel
+};
+
+function cityToTradelane(name) {
+  if (!name) return "";
+  return CITY_TRADELANE_MAP[name.toLowerCase().trim()] || "";
+}
 
 // Extract iso2 and tradelane from port string "(CCXXX) City"
 function portToInfo(portStr) {
