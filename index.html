@@ -4294,8 +4294,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           if (hasOwners && !repCollapsed) {
             rep.jobOwners.forEach(function(jo){
               // Skip job owner if LOB filter active and they have no matching LOB jobs
-              if (_joLobIndex && rep._norm) {
-                var _joEntry = _joLobIndex[rep._norm] && _joLobIndex[rep._norm][jo.name];
+              if (_joLobIndex) {
+                var _repKey = rep._norm || normalizeName(rep.name||'');
+                var _joEntry = _joLobIndex[_repKey] && _joLobIndex[_repKey][jo.name];
                 if (!_joEntry) return; // no LOB-matching jobs for this job owner
               }
               var joColData;
@@ -4303,8 +4304,8 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
                 joColData = _pFyGroups.map(function(g){
                   return g.idxs.reduce(function(acc,i){
                     var m = months26[i];
-                    var src = (_joLobIndex&&rep._norm&&_joLobIndex[rep._norm]&&_joLobIndex[rep._norm][jo.name])
-                      ? (_joLobIndex[rep._norm][jo.name][m]||{pending:0,done:0})
+                    var src = (_joLobIndex&&(rep._norm||rep.name)&&_joLobIndex[rep._norm||normalizeName(rep.name||'')]&&_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
+                      ? (_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][m]||{pending:0,done:0})
                       : (jo.monthData[m] || { pending:0, done:0 });
                     acc.pending += src.pending||0; acc.done += src.done||0; return acc;
                   }, { pending:0, done:0 });
@@ -4312,8 +4313,8 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
               } else if (isQuarterly && _qGroups) {
                 joColData = _qGroups.map(function(g){
                   return g.months.reduce(function(acc,m){
-                    var src = (_joLobIndex&&rep._norm&&_joLobIndex[rep._norm]&&_joLobIndex[rep._norm][jo.name])
-                      ? (_joLobIndex[rep._norm][jo.name][m]||{pending:0,done:0})
+                    var src = (_joLobIndex&&(rep._norm||rep.name)&&_joLobIndex[rep._norm||normalizeName(rep.name||'')]&&_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
+                      ? (_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][m]||{pending:0,done:0})
                       : (jo.monthData[m] || { pending:0, done:0 });
                     acc.pending += src.pending||0; acc.done += src.done||0; return acc;
                   }, { pending:0, done:0 });
@@ -4322,12 +4323,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
                 joColData = activeCols.map(function(col){
                   if (isWeekly) {
                     var m = state.weeklyMonth || months26[months26.length-1];
-                    if (_joLobIndex && rep._norm && _joLobIndex[rep._norm] && _joLobIndex[rep._norm][jo.name])
-                      return _joLobIndex[rep._norm][jo.name][m] || { pending:0, done:0 };
+                    if (_joLobIndex && rep._norm && _joLobIndex[rep._norm] && _joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
+                      return _joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][m] || { pending:0, done:0 };
                     return jo.monthData[m] || { pending:0, done:0 };
                   }
-                  if (_joLobIndex && rep._norm && _joLobIndex[rep._norm] && _joLobIndex[rep._norm][jo.name])
-                    return _joLobIndex[rep._norm][jo.name][col] || { pending:0, done:0 };
+                  if (_joLobIndex && rep._norm && _joLobIndex[rep._norm] && _joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
+                    return _joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][col] || { pending:0, done:0 };
                   return jo.monthData[col] || { pending:0, done:0 };
                 });
               }
@@ -4370,8 +4371,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // Job owners nested under rep (OL page only)
       if (hasOwners && !repCollapsed) {
         rep.jobOwners.forEach(function(jo){
-          if (_joLobIndex && rep._norm) {
-            var _joEntry2 = _joLobIndex[rep._norm] && _joLobIndex[rep._norm][jo.name];
+          if (_joLobIndex) {
+            var _repKey2 = rep._norm || normalizeName(rep.name||'');
+            var _joEntry2 = _joLobIndex[_repKey2] && _joLobIndex[_repKey2][jo.name];
             if (!_joEntry2) return;
           }
           var joColData;
@@ -4385,8 +4387,8 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           } else if (isQuarterly && _qGroups) {
             joColData = _qGroups.map(function(g){
               return g.months.reduce(function(acc,m){
-                var src = (_joLobIndex&&rep._norm&&_joLobIndex[rep._norm]&&_joLobIndex[rep._norm][jo.name])
-                  ? (_joLobIndex[rep._norm][jo.name][m]||{pending:0,done:0})
+                var src = (_joLobIndex&&(rep._norm||rep.name)&&_joLobIndex[rep._norm||normalizeName(rep.name||'')]&&_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
+                  ? (_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][m]||{pending:0,done:0})
                   : (jo.monthData[m] || { pending:0, done:0 });
                 acc.pending += src.pending||0; acc.done += src.done||0; return acc;
               }, { pending:0, done:0 });
@@ -4395,12 +4397,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
             joColData = activeCols.map(function(col){
               if (isWeekly) {
                 var m = state.weeklyMonth || months26[months26.length-1];
-                return (_joLobIndex&&rep._norm&&_joLobIndex[rep._norm]&&_joLobIndex[rep._norm][jo.name])
-                  ? (_joLobIndex[rep._norm][jo.name][m]||{pending:0,done:0})
+                return (_joLobIndex&&(rep._norm||rep.name)&&_joLobIndex[rep._norm||normalizeName(rep.name||'')]&&_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
+                  ? (_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][m]||{pending:0,done:0})
                   : (jo.monthData[m] || { pending:0, done:0 });
               }
-              return (_joLobIndex&&rep._norm&&_joLobIndex[rep._norm]&&_joLobIndex[rep._norm][jo.name])
-                ? (_joLobIndex[rep._norm][jo.name][col]||{pending:0,done:0})
+              return (_joLobIndex&&(rep._norm||rep.name)&&_joLobIndex[rep._norm||normalizeName(rep.name||'')]&&_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
+                ? (_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][col]||{pending:0,done:0})
                 : (jo.monthData[col] || { pending:0, done:0 });
             });
           }
