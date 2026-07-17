@@ -5467,9 +5467,10 @@ function drawer(){
       +'<div style="font-size:12.5px;color:#DC2626;font-weight:600;">'+esc(d.error)+'</div>'
     +'</div>';
   } else if (!d.rows || d.rows.length === 0) {
-    bodyContent = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:60px 24px;text-align:center;">'
-      +'<div style="font-size:12.5px;color:#94A3B8;font-weight:600;">No matching job rows found for this cell.</div>'
-    +'</div>';
+    var _emptyMsg = d.insightDrill
+      ? 'No shipment records found for <b>' + esc(d.entity||'') + '</b> in the selected period. This is likely a tradelane mapping mismatch — do a hard refresh (Ctrl+Shift+R) to reload the latest data.'
+      : 'No jobs match this cell for the selected filters.';
+    bodyContent = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:60px 24px;text-align:center;">'      +'<div style="max-width:340px;">'        +'<div style="font-size:13px;font-weight:700;color:#374151;margin-bottom:8px;">No jobs found</div>'        +'<div style="font-size:11.5px;color:#64748B;line-height:1.6;">'+_emptyMsg+'</div>'      +'</div>'    +'</div>';
   } else {
     // ── Column definitions — order matches exactly what was requested, plus
     // three derived OL-status columns matching the reference layout ──
