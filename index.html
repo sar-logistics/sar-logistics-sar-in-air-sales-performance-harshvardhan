@@ -1746,7 +1746,13 @@ function grandEntity(){
       function drillMatch(r, key, isWeek) {
         if(isWeek ? (r._wk!==key) : (r._ml!==key)) return false;
         if(_fl && _fl.indexOf(r.lob)===-1) return false;
-        if(_fz && (!r._zone || _fz.indexOf(r._zone)===-1)) return false;
+        if(_fz) {
+          var _hasCross = _fz.indexOf('Cross Sales') > -1;
+          // Cross Sales reps have _zone=null; other zones match by _zone value
+          if (_hasCross && !r._zone) { /* ok — Cross Sales */ }
+          else if (r._zone && _fz.indexOf(r._zone) > -1) { /* ok — matched zone */ }
+          else return false;
+        }
         if(_fr && (!r._sp  || _fr.indexOf(r._sp)===-1)) return false;
         return true;
       }
@@ -3199,8 +3205,12 @@ function tradelanePage(){
   if (allDrillRows && _needsDrill) {
     var _zoneSpSet = {};
     if (_filterZonesTL.length > 0) {
+      var _hasCrossTL = _filterZonesTL.indexOf('Cross Sales') > -1;
       allDrillRows.forEach(function(r){
-        if (r._zone && _filterZonesTL.indexOf(r._zone) > -1 && r._sp) _zoneSpSet[r._sp] = true;
+        if (!r._sp) return;
+        // Cross Sales = reps with no zone mapping
+        if (_hasCrossTL && !r._zone) { _zoneSpSet[r._sp] = true; return; }
+        if (r._zone && _filterZonesTL.indexOf(r._zone) > -1) { _zoneSpSet[r._sp] = true; }
       });
     }
     var _selRepsNorm = _filterRepsTL.map(function(x){ return normalizeName(x); });
@@ -6437,11 +6447,17 @@ function normalizeName(name){
 function zoneToRawSPs(zones) {
   if (!zones || !zones.length || !allDrillRows) return null;
   var spSet = {};
+  var hasCrossSales = zones.indexOf('Cross Sales') > -1;
+  var otherZones = zones.filter(function(z){ return z !== 'Cross Sales'; });
+
   allDrillRows.forEach(function(r){
-    if (r._zone && zones.indexOf(r._zone) > -1 && r._sp) spSet[r._sp] = true;
+    if (!r._sp) return;
+    // Cross Sales = reps with no zone mapping (_zone null/empty)
+    if (hasCrossSales && !r._zone) { spSet[r._sp] = true; return; }
+    if (otherZones.length > 0 && r._zone && otherZones.indexOf(r._zone) > -1) { spSet[r._sp] = true; }
   });
   var keys = Object.keys(spSet);
-  return keys.length > 0 ? keys : []; // empty array = zone has no jobs
+  return keys.length > 0 ? keys : [];
 }
 
 // Pure in-browser drill filtering — filters allDrillRows by entity+metric+month
