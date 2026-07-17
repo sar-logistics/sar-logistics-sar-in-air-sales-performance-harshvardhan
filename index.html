@@ -2359,7 +2359,9 @@ function topbar(){
                 + '</div>'
               + '</div>' : '');
 
-          var allZoneNames = sortZones(Object.keys(function(){ var z={}; repsRawOriginal.forEach(function(r){ if(r.zone) z[r.zone]=true; }); return z; }()));
+          var allZoneNames = sortZones(Object.keys(function(){ var z={}; repsRawOriginal.forEach(function(r){
+            if(r.zone && r.zone !== 'Others') z[r.zone]=true;
+          }); return z; }()));
           var zoneOpen = state.filterZoneDropOpen;
           var zoneSection = sectionHeader('Zones', (state.filterZones||[]).length, zoneOpen, 'toggleFilterZoneDrop')
             + (zoneOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'                + '<div id="zone-checklist" style="max-height:180px;overflow-y:auto;">'                  + checkRow('All Zones', (state.filterZones||[]).length===0, 'filterZoneAll', '')                  + allZoneNames.map(function(z){ return checkRow(z, (state.filterZones||[]).indexOf(z)>-1, 'toggleFilterZone', z); }).join('')                + '</div>'              + '</div>' : '');
