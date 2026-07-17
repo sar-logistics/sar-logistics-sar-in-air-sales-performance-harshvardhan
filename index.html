@@ -6630,7 +6630,7 @@ function openInsightDrill(drillType, name, drillMonth) {
     }
 
     // Cache key includes active months so changing May→July busts cache
-    var _tlActiveMonsKey = Object.keys(_tlActiveMonsSet).sort().join(',');
+    var _tlActiveMonsKey = Object.keys(_tlActiveMonsSet).sort(function(a,b){ return months26.indexOf(a)-months26.indexOf(b); }).join(',');
     var _tlCacheKey = 'tl||'+name+'||'+_tlActiveMonsKey+'|'+(state.tradelaneLob||'Air');
     if (_insightDrillCache[_tlCacheKey]) {
       state.drill = _insightDrillCache[_tlCacheKey];
