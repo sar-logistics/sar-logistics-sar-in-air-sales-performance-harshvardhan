@@ -7027,9 +7027,14 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
           if (pWords.length >= 2) {
             var repWords = repNameNorm2.trim().split(' ').filter(Boolean);
             var normWords = (r._norm||'').trim().split(' ').filter(Boolean);
-            // repName must start with ALL parent words in order
-            var repStartsWith = pWords.every(function(pw, pi){ return repWords[pi] === pw; }) && repWords.length > pWords.length;
-            var normStartsWith = pWords.every(function(pw, pi){ return normWords[pi] === pw; }) && normWords.length > pWords.length;
+            // repName must start with ALL parent words in order AND next word must not be '-'
+            // Prevents "Nomination Sales" matching "Nomination Sales - US"
+            var repStartsWith = pWords.every(function(pw, pi){ return repWords[pi] === pw; }) &&
+                                repWords.length > pWords.length &&
+                                repWords[pWords.length] !== '-';
+            var normStartsWith = pWords.every(function(pw, pi){ return normWords[pi] === pw; }) &&
+                                 normWords.length > pWords.length &&
+                                 normWords[pWords.length] !== '-';
             if (!repStartsWith && !normStartsWith) continue;
           } else {
             continue;
