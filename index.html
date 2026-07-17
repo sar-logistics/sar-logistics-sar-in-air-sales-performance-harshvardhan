@@ -6672,14 +6672,14 @@ function openInsightDrill(drillType, name, drillMonth) {
         if (_tlLobFilter.length && _tlLobFilter.indexOf(row.lob) === -1) return false;
         // Active months filter — always applied
         if (!_tlActiveMonsSet[row._ml]) return false;
-        // Tradelane group filter: use _tg if available, else fall back to shipmentNos
+        // Tradelane group filter: use _tg if available and non-empty
+        // Fallback to shipmentNos ONLY when _tg is empty (unmapped port)
+        // Never include a row where _tg is set but doesn't match
         if (name !== 'Grand Total') {
-          if (row._tg) {
-            if (row._tg !== name) return false;
-          } else if (_tlSnoFallback) {
-            if (!_tlSnoFallback[row.shipmentNo]) return false;
-          } else {
-            return false;
+          if (row._tg && row._tg !== name) return false; // _tg set but wrong country — exclude
+          if (!row._tg) {
+            // _tg empty — use shipmentNos fallback only
+            if (!_tlSnoFallback || !_tlSnoFallback[row.shipmentNo]) return false;
           }
         }
         // Rep/zone filter
