@@ -351,7 +351,7 @@ function _showDashboardBody() {
     if (!allPendencyDrillRows) {
       // Try loading from dedicated localStorage key
       var pdr = lsGet('pendency_drill_rows');
-      if (pdr && Array.isArray(pdr) && pdr.length > 0) { allPendencyDrillRows = pdr; }
+      if (pdr && Array.isArray(pdr) && pdr.length > 0) { allPendencyDrillRows = pdr; _pendencyDrillCache = {}; }
     }
 
   })();
@@ -1130,7 +1130,7 @@ function prefetchCustomerRanges() {
 }
 var fetchFinanceData  = makeFetcher('finance',   'finance',   function(d){ financeData  = d; financeDataReady  = true; });
 var fetchOpData = makeFetcher('op', 'op', function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows;
-    // Save drill rows separately so weekly view loads instantly on next page open
+    _pendencyDrillCache = {}; // clear stale cache when fresh drill rows arrive
     try { lsSet('pendency_drill_rows', d.allDrillJobRows); } catch(e) {}
     delete d.allDrillJobRows; } });
 
@@ -4425,6 +4425,7 @@ function financePage(){
       fetch('/api/mongo-batch?action=op').then(function(r){return r.json();}).then(function(d){
         if (d.success && d.allDrillJobRows) {
           allPendencyDrillRows = d.allDrillJobRows;
+          _pendencyDrillCache = {};
           try { lsSet('pendency_drill_rows', d.allDrillJobRows); } catch(e) {}
         }
         _pendencyDrillLoading = false; render();
