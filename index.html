@@ -6360,8 +6360,7 @@ function _patchTradelaneCacheWithDrillCounts() {
   };
 
   // Build per-LOB, per-tg, per-month shipment counts from allDrillRows
-  // Structure: lobLabel -> tg -> month -> count
-  var _tgMonthCounts = {};
+  var _tgMonthCounts = {}; // lobLabel -> tg -> month -> count
   allDrillRows.forEach(function(r) {
     if (!r._tg || !r._ml) return;
     var lobLabel = LOB_TO_TL[r.lob] || '';
@@ -6372,38 +6371,24 @@ function _patchTradelaneCacheWithDrillCounts() {
     mc[r._ml] = (mc[r._ml] || 0) + 1;
   });
 
-  // Build per-LOB, per-tg total counts
-  var _tgTotals = {};
-  Object.keys(_tgMonthCounts).forEach(function(lbl) {
-    _tgTotals[lbl] = {};
-    Object.keys(_tgMonthCounts[lbl]).forEach(function(tg) {
-      _tgTotals[lbl][tg] = Object.values(_tgMonthCounts[lbl][tg]).reduce(function(s,v){return s+v;},0);
-    });
-  });
-
-  Object.keys(_tradelaneCache).forEach(function(cacheKey) {
-    var cached = _tradelaneCache[cacheKey];
-    if (!cached || !cached.lobs) return;
-
-    // Patch each LOB's allCountries
+  // Helper: patch a single tradelane data object
+  function patchTlData(tlData) {
+    if (!tlData) return;
     ['Air','Ocean','ISO Tank'].forEach(function(lobLabel) {
-      var lobData = cached.lobs && cached.lobs[lobLabel];
+      var lobData = tlData.lobs && tlData.lobs[lobLabel];
       if (!lobData || !lobData.allCountries) return;
       var tgMonths = _tgMonthCounts[lobLabel] || {};
-      var tgTotals = _tgTotals[lobLabel] || {};
 
       lobData.allCountries.forEach(function(c) {
-        // Patch total shipments
-        if (tgTotals[c.name] !== undefined) {
-          c.shipments = tgTotals[c.name];
-        }
-        // Patch monthData shipments — this fixes per-month columns in table view
         var monthMap = tgMonths[c.name] || {};
+        // Patch total shipments (sum of all months)
+        c.shipments = Object.values(monthMap).reduce(function(s,v){return s+v;},0) || c.shipments;
+        // Patch monthData shipments per month
         if (c.monthData) {
           Object.keys(c.monthData).forEach(function(m) {
             c.monthData[m].shipments = monthMap[m] || 0;
           });
-          // Add months present in drill but missing from monthData
+          // Add months present in drill but missing from SRR monthData
           Object.keys(monthMap).forEach(function(m) {
             if (!c.monthData[m]) {
               c.monthData[m] = { shipments: monthMap[m], revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
@@ -6412,7 +6397,19 @@ function _patchTradelaneCacheWithDrillCounts() {
         }
       });
     });
+  }
+
+  // Patch live tradelaneData first (direct reference — always in sync)
+  patchTlData(tradelaneData);
+
+  // Patch all cached entries too
+  Object.keys(_tradelaneCache).forEach(function(cacheKey) {
+    patchTlData(_tradelaneCache[cacheKey]);
   });
+
+  // Invalidate pivot cache so table re-renders with patched data
+  _tradelanePivotCache = {};
+  _tlGrandDrillCache = {};
 }
 
 // Mapping lookup built once from repsRaw — used for entity filtering
