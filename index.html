@@ -3967,35 +3967,6 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     return { name: rep.name, zone: zone, originalZone: originalZone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
   }).filter(function(r){ return r.total > 0; });
 
-  // Build job owner LOB index from allPendencyDrillRows when LOB filter active
-  // jo.monthData has all LOBs; this gives LOB-filtered counts per jobOwner per repNorm per month
-  var _joLobIndex = null;
-  if (_flobs && allPendencyDrillRows && allPendencyDrillRows.length > 0) {
-    _joLobIndex = {}; // repNorm -> joName -> month -> {pending, done}
-    // Index by BOTH r._norm AND normalizeName(r._repName) so display name lookup works
-    // e.g. "radha arunkumar singh" (_norm) AND "radha singh" (from _repName)
-    function _joAdd(rk, jk, mk, isDone) {
-      if (!rk) return;
-      if (!_joLobIndex[rk]) _joLobIndex[rk] = {};
-      if (!_joLobIndex[rk][jk]) _joLobIndex[rk][jk] = {};
-      if (!_joLobIndex[rk][jk][mk]) _joLobIndex[rk][jk][mk] = { pending:0, done:0 };
-      if (isDone) _joLobIndex[rk][jk][mk].done++;
-      else _joLobIndex[rk][jk][mk].pending++;
-    }
-    allPendencyDrillRows.forEach(function(r) {
-      if (!r.jobOwner || r.jobOwner === '—') return;
-      if (_flobs.indexOf(r.lob) === -1) return;
-      var jk = r.jobOwner;
-      var mk = r._month;
-      var _isDone = (lockType === 'Operation Lock') ? r.olDone : r.flDone;
-      // Index by raw norm
-      _joAdd(r._norm, jk, mk, _isDone);
-      // Also index by display name norm (handles "Radha Singh" lookup for "Radha Arunkumar Singh")
-      var repNameNorm = normalizeName(r._repName || '');
-      if (repNameNorm && repNameNorm !== r._norm) _joAdd(repNameNorm, jk, mk, _isDone);
-    });
-  }
-
   // Grand totals — sum from repsFiltered (already LOB-filtered via _pendencyLobIndex)
   var gtPending = repsFiltered.reduce(function(s,r){ return s+r.totalPending; }, 0);
   var gtDone    = repsFiltered.reduce(function(s,r){ return s+r.totalDone;    }, 0);
@@ -4302,42 +4273,24 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           // Job Owners under rep
           if (hasOwners && !repCollapsed) {
             rep.jobOwners.forEach(function(jo){
-              // Skip job owner if LOB filter active and they have no matching LOB jobs
-              if (_joLobIndex) {
-                var _repKey = rep._norm || normalizeName(rep.name||'');
-                var _joEntry = _joLobIndex[_repKey] && _joLobIndex[_repKey][jo.name];
-                if (!_joEntry) return; // no LOB-matching jobs for this job owner
-              }
               var joColData;
               if (isYearly && _pFyGroups) {
                 joColData = _pFyGroups.map(function(g){
                   return g.idxs.reduce(function(acc,i){
-                    var m = months26[i];
-                    var src = (_joLobIndex&&(rep._norm||rep.name)&&_joLobIndex[rep._norm||normalizeName(rep.name||'')]&&_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
-                      ? (_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][m]||{pending:0,done:0})
-                      : (jo.monthData[m] || { pending:0, done:0 });
+                    var src = jo.monthData[months26[i]] || { pending:0, done:0 };
                     acc.pending += src.pending||0; acc.done += src.done||0; return acc;
                   }, { pending:0, done:0 });
                 });
               } else if (isQuarterly && _qGroups) {
                 joColData = _qGroups.map(function(g){
                   return g.months.reduce(function(acc,m){
-                    var src = (_joLobIndex&&(rep._norm||rep.name)&&_joLobIndex[rep._norm||normalizeName(rep.name||'')]&&_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
-                      ? (_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][m]||{pending:0,done:0})
-                      : (jo.monthData[m] || { pending:0, done:0 });
+                    var src = jo.monthData[m] || { pending:0, done:0 };
                     acc.pending += src.pending||0; acc.done += src.done||0; return acc;
                   }, { pending:0, done:0 });
                 });
               } else {
                 joColData = activeCols.map(function(col){
-                  if (isWeekly) {
-                    var m = state.weeklyMonth || months26[months26.length-1];
-                    if (_joLobIndex && rep._norm && _joLobIndex[rep._norm] && _joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
-                      return _joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][m] || { pending:0, done:0 };
-                    return jo.monthData[m] || { pending:0, done:0 };
-                  }
-                  if (_joLobIndex && rep._norm && _joLobIndex[rep._norm] && _joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
-                    return _joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][col] || { pending:0, done:0 };
+                  if (isWeekly) { var m = state.weeklyMonth || months26[months26.length-1]; return jo.monthData[m] || { pending:0, done:0 }; }
                   return jo.monthData[col] || { pending:0, done:0 };
                 });
               }
@@ -4380,11 +4333,6 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // Job owners nested under rep (OL page only)
       if (hasOwners && !repCollapsed) {
         rep.jobOwners.forEach(function(jo){
-          if (_joLobIndex) {
-            var _repKey2 = rep._norm || normalizeName(rep.name||'');
-            var _joEntry2 = _joLobIndex[_repKey2] && _joLobIndex[_repKey2][jo.name];
-            if (!_joEntry2) return;
-          }
           var joColData;
           if (isYearly && _pFyGroups) {
             joColData = _pFyGroups.map(function(g){
@@ -4396,9 +4344,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           } else if (isQuarterly && _qGroups) {
             joColData = _qGroups.map(function(g){
               return g.months.reduce(function(acc,m){
-                var src = (_joLobIndex&&(rep._norm||rep.name)&&_joLobIndex[rep._norm||normalizeName(rep.name||'')]&&_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
-                  ? (_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][m]||{pending:0,done:0})
-                  : (jo.monthData[m] || { pending:0, done:0 });
+                var src = jo.monthData[m] || { pending:0, done:0 };
                 acc.pending += src.pending||0; acc.done += src.done||0; return acc;
               }, { pending:0, done:0 });
             });
@@ -4406,13 +4352,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
             joColData = activeCols.map(function(col){
               if (isWeekly) {
                 var m = state.weeklyMonth || months26[months26.length-1];
-                return (_joLobIndex&&(rep._norm||rep.name)&&_joLobIndex[rep._norm||normalizeName(rep.name||'')]&&_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
-                  ? (_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][m]||{pending:0,done:0})
-                  : (jo.monthData[m] || { pending:0, done:0 });
+                return jo.monthData[m] || { pending:0, done:0 };
               }
-              return (_joLobIndex&&(rep._norm||rep.name)&&_joLobIndex[rep._norm||normalizeName(rep.name||'')]&&_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name])
-                ? (_joLobIndex[rep._norm||normalizeName(rep.name||'')][jo.name][col]||{pending:0,done:0})
-                : (jo.monthData[col] || { pending:0, done:0 });
+              return jo.monthData[col] || { pending:0, done:0 };
             });
           }
           var joFiltered = { colData: joColData, totalPending: joColData.reduce(function(s,c){return s+c.pending;},0), totalDone: joColData.reduce(function(s,c){return s+c.done;},0), total: 0 };
@@ -6978,13 +6920,13 @@ var _pendencyDrillLoading = false; // prevents infinite render loop while fetchi
 
 function openPendencyDrill(rep, col, status, lock, type){
   state.pendencyDrill = { rep:rep, col:col, status:status, lock:lock, type:type||'rep', loading:true, rows:null, error:null, columnFilters:{}, openFilterCol:null };
+  render(); // show loading spinner immediately
+
   function _compute(){
-    if (!state.pendencyDrill) return;
     var rows = computePendencyDrillResult(rep, col, status, lock, type||'rep');
     state.pendencyDrill.loading=false; state.pendencyDrill.rows=rows; state.pendencyDrill.count=rows.length;
     render();
   }
-  render(); // show loading spinner
 
   // Always use client-side — load drill rows first if not ready
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
@@ -7102,10 +7044,8 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       if (r._norm !== repNorm) continue;
     }
 
-    // LOB filter — apply for all types so drill count matches table
-    if (state.filterLobs && state.filterLobs.length > 0) {
-      if (state.filterLobs.indexOf(r.lob) === -1) continue;
-    }
+    // NOTE: LOB filter intentionally NOT applied in pendency drill
+    // Pendency shows ALL LOBs regardless of the global LOB filter
 
     // Lock status filter
     var isDone = isOL ? r.olDone : r.flDone;
@@ -7167,11 +7107,11 @@ function pendencyDrillDrawer(){
   } else if (!pd.rows || pd.rows.length===0) {
     bodyContent = '<div style="display:flex;align-items:center;justify-content:center;flex:1;padding:60px 24px;text-align:center;"><div style="font-size:12.5px;color:#94A3B8;font-weight:600;">No matching jobs found.</div></div>';
   } else {
-    // LOB filter — apply for all types including jobowner
+    // LOB filter: apply for rep/zone/grand types but NOT for jobowner (jobowners can have any LOB)
     var _pdLobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
-    var visibleRows = _pdLobs
-      ? pd.rows.filter(function(r){ return _pdLobs.indexOf(r.lob) !== -1; })
-      : pd.rows.slice();
+    var visibleRows = (pd.type === 'jobowner' || !_pdLobs)
+      ? pd.rows.slice()
+      : pd.rows.filter(function(r){ return _pdLobs.indexOf(r.lob) !== -1; });
 
     function th(c){
       var isSticky = c.sticky !== undefined;
