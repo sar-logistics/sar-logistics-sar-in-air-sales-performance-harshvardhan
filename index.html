@@ -3972,18 +3972,27 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var _joLobIndex = null;
   if (_flobs && allPendencyDrillRows && allPendencyDrillRows.length > 0) {
     _joLobIndex = {}; // repNorm -> joName -> month -> {pending, done}
+    // Index by BOTH r._norm AND normalizeName(r._repName) so display name lookup works
+    // e.g. "radha arunkumar singh" (_norm) AND "radha singh" (from _repName)
+    function _joAdd(rk, jk, mk, isDone) {
+      if (!rk) return;
+      if (!_joLobIndex[rk]) _joLobIndex[rk] = {};
+      if (!_joLobIndex[rk][jk]) _joLobIndex[rk][jk] = {};
+      if (!_joLobIndex[rk][jk][mk]) _joLobIndex[rk][jk][mk] = { pending:0, done:0 };
+      if (isDone) _joLobIndex[rk][jk][mk].done++;
+      else _joLobIndex[rk][jk][mk].pending++;
+    }
     allPendencyDrillRows.forEach(function(r) {
       if (!r.jobOwner || r.jobOwner === '—') return;
       if (_flobs.indexOf(r.lob) === -1) return;
-      var rk = r._norm || '';
-      if (!_joLobIndex[rk]) _joLobIndex[rk] = {};
       var jk = r.jobOwner;
-      if (!_joLobIndex[rk][jk]) _joLobIndex[rk][jk] = {};
       var mk = r._month;
-      if (!_joLobIndex[rk][jk][mk]) _joLobIndex[rk][jk][mk] = { pending:0, done:0 };
       var _isDone = (lockType === 'Operation Lock') ? r.olDone : r.flDone;
-      if (_isDone) _joLobIndex[rk][jk][mk].done++;
-      else _joLobIndex[rk][jk][mk].pending++;
+      // Index by raw norm
+      _joAdd(r._norm, jk, mk, _isDone);
+      // Also index by display name norm (handles "Radha Singh" lookup for "Radha Arunkumar Singh")
+      var repNameNorm = normalizeName(r._repName || '');
+      if (repNameNorm && repNameNorm !== r._norm) _joAdd(repNameNorm, jk, mk, _isDone);
     });
   }
 
