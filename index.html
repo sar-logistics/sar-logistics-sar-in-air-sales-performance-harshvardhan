@@ -6920,27 +6920,27 @@ var _pendencyDrillLoading = false; // prevents infinite render loop while fetchi
 
 function openPendencyDrill(rep, col, status, lock, type){
   state.pendencyDrill = { rep:rep, col:col, status:status, lock:lock, type:type||'rep', loading:true, rows:null, error:null, columnFilters:{}, openFilterCol:null };
+  render(); // show loading spinner immediately
 
-  // Client-side filtering from allPendencyDrillRows — always recompute (no cache to go stale)
-  if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+  function _compute(){
     var rows = computePendencyDrillResult(rep, col, status, lock, type||'rep');
     state.pendencyDrill.loading=false; state.pendencyDrill.rows=rows; state.pendencyDrill.count=rows.length;
-    render(); return;
+    render();
   }
 
-  // Fallback: fetch from server (only if allPendencyDrillRows not loaded yet)
-  var safeLock = lock || (state.page==='finance' ? 'Financial Lock' : 'Operation Lock');
-  render();
-  var qs = '?action=pendencyDrill&rep='+encodeURIComponent(rep)+'&month='+encodeURIComponent(col)+'&status='+encodeURIComponent(status)+'&lock='+encodeURIComponent(safeLock)+'&type='+encodeURIComponent(type||'rep');
-  fetch('/api/mongo-batch'+qs)
+  // Always use client-side — load drill rows first if not ready
+  if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+    _compute(); return;
+  }
+
+  // Load drill rows then compute
+  fetch('/api/mongo-batch?action=op')
     .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (!data.success) { state.pendencyDrill.loading=false; state.pendencyDrill.error=data.error||'Failed.'; render(); return; }
-      _pendencyDrillCache[cacheKey] = data;
-      state.pendencyDrill.loading=false; state.pendencyDrill.rows=data.rows; state.pendencyDrill.count=data.count;
-      render();
+    .then(function(d){
+      if (d.success && d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows; }
+      _compute();
     })
-    .catch(function(){ state.pendencyDrill.loading=false; state.pendencyDrill.error='Could not reach the server.'; render(); });
+    .catch(function(){ state.pendencyDrill.loading=false; state.pendencyDrill.error='Could not load job data.'; render(); });
 }
 
 // Pure client-side pendency drill filter — handles rep, zone, grand, branch, crosssales, jobowner
