@@ -3864,6 +3864,41 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     });
   }
 
+  // Build weekly job owner index — keyed by "repName|joName" → wkKey → {pending,done}
+  var _weeklyJoIndex = null;
+  if (isWeekly && allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+    _weeklyJoIndex = {};
+    var _wkSet2 = {}; activeCols.forEach(function(k){ _wkSet2[k]=true; });
+    var _selectedMonth2 = state.weeklyMonth || months26[months26.length-1];
+    allPendencyDrillRows.forEach(function(row){
+      if ((row._month||row.month) !== _selectedMonth2) return;
+      if (!row.jobOwner || row.jobOwner === '—') return;
+      if (_flobs && _flobs.length > 0) {
+        if (!_flobs.some(function(fl){ return row.lob && row.lob.toUpperCase()===fl.toUpperCase(); })) return;
+      }
+      // Use _wk from server if available, else derive from date
+      var wk = row._wk;
+      if (!wk) {
+        var lob2 = (row.lob||'').toUpperCase();
+        var rawDate2 = lob2.indexOf('IMPORT')>=0
+          ? (row.etaDischarge||row.etdLoading||row.jobDate||'')
+          : (row.etdLoading||row.etaDischarge||row.jobDate||'');
+        if (!rawDate2) return;
+        var d2 = new Date(rawDate2);
+        if (isNaN(d2)) return;
+        wk = getISOWeek(d2).key;
+      }
+      if (!_wkSet2[wk]) return;
+      var rk = normalizeName(row._repName||'');
+      var key = rk+'|'+row.jobOwner;
+      if (!_weeklyJoIndex[key]) _weeklyJoIndex[key] = {};
+      if (!_weeklyJoIndex[key][wk]) _weeklyJoIndex[key][wk] = { pending:0, done:0 };
+      var isDone2 = lockType==='Financial Lock' ? row.flDone : row.olDone;
+      if (isDone2) _weeklyJoIndex[key][wk].done++;
+      else _weeklyJoIndex[key][wk].pending++;
+    });
+  }
+
   // Build per-rep filtered data
   // Only show zones that exist in Sales Performance (getZones()).
   // Reps whose zone isn't in salesZones get bucketed under 'Cross Sales'.
@@ -3911,8 +3946,15 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     });
   }
 
-  // Helper: get job owner data for a month, LOB-filtered if available
+  // Helper: get job owner data for a period, LOB-filtered and week-filtered if available
   function _joGet(rep, jo, m) {
+    // Weekly view: use week-level index
+    if (isWeekly && _weeklyJoIndex) {
+      var rk = normalizeName(rep.name||'');
+      var key = rk + '|' + jo.name;
+      return (_weeklyJoIndex[key] && _weeklyJoIndex[key][m]) || { pending:0, done:0 };
+    }
+    // LOB-filtered monthly index
     if (_joLobIndex) {
       var rk = normalizeName(rep.name||'');
       var key = rk + '|' + jo.name;
@@ -6982,9 +7024,20 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
     'Jan-26','Feb-26','Mar-26','Apr-26','May-26','Jun-26','Jul-26','Aug-26','Sep-26',
     'Oct-26','Nov-26','Dec-26','Jan-27','Feb-27','Mar-27'];
 
+  // Detect week key format e.g. "2026-W29" — convert to month for _month matching
+  var isWeekKey = col && /^\d{4}-W\d+$/.test(col);
   var allowedMonths = null;
-  if (!isFY && !isRange && col) allowedMonths = new Set([col]);
-  else if (isRange) {
+  if (isWeekKey) {
+    // Convert ISO week key to month label using allPendencyDrillRows
+    var _wkMonthSet = {};
+    if (allPendencyDrillRows) {
+      allPendencyDrillRows.forEach(function(r){ if (r._wk === col && r._month) _wkMonthSet[r._month] = true; });
+    }
+    allowedMonths = Object.keys(_wkMonthSet).length > 0 ? new Set(Object.keys(_wkMonthSet)) : null;
+    // Also store week key for week-level filtering
+  } else if (!isFY && !isRange && col) {
+    allowedMonths = new Set([col]);
+  } else if (isRange) {
     var parts = col.split(':');
     var fi = FY_ALL.indexOf(parts[1]), ti = FY_ALL.indexOf(parts[2]);
     if (fi >= 0 && ti >= 0) allowedMonths = new Set(FY_ALL.slice(fi, ti+1));
@@ -7012,6 +7065,8 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
 
     // Month filter
     if (allowedMonths && !allowedMonths.has(r._month)) continue;
+    // Week key filter — for weekly view, further restrict to the specific week
+    if (isWeekKey && r._wk !== col) continue;
 
     // Entity filter
     if (type === 'grand') {
