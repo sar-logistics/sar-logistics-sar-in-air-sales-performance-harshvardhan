@@ -360,6 +360,23 @@ function _showDashboardBody() {
     loadDrillData(null); // preload drill rows immediately
   }
 
+  // Preload pendency drill rows for weekly OP/FP view — fetched fresh since
+  // allDrillJobRows is deleted before localStorage save (too large)
+  if (!allPendencyDrillRows) {
+    // Fetch opData fresh in background — sets allPendencyDrillRows when it arrives
+    // Use a short delay so it doesn't compete with the critical path ping/sales fetch
+    setTimeout(function(){
+      if (!allPendencyDrillRows) {
+        fetchOpData(function(){
+          // If user is on OP/FP in weekly view, re-render with the now-loaded data
+          if ((state.page === 'op' || state.page === 'finance') && state.reportView === 'Weekly') {
+            render();
+          }
+        }, false);
+      }
+    }, 2000);
+  }
+
   if (dataReady) {
     if (_lobDataFetched) {
       // lobData available — render immediately with correct filtered numbers
@@ -4394,9 +4411,13 @@ function financePage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading finance pendency…</div>'
       +'</div>';
   }
-  // Weekly view needs allPendencyDrillRows — trigger fetch if missing
-  if (state.reportView === 'Weekly' && !allPendencyDrillRows && !_drillLoadAttempted) {
-    fetchOpData(null, false);
+  // Weekly view needs allPendencyDrillRows — show loading if not ready yet
+  if (state.reportView === 'Weekly' && !allPendencyDrillRows) {
+    if (!opDataLoading) {
+      opDataLoading = true;
+      fetchOpData(function(){ opDataLoading = false; render(); }, false);
+    }
+    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading weekly data…</div>'      +'</div>';
   }
   return pendencyPage(financeData, 'Finance Pendency', 'FL Pending Jobs', 'FL Done Jobs', '#1D5FCC', false, 'Financial Lock');
 }
@@ -4414,10 +4435,13 @@ function opPage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading operation pendency…</div>'
       +'</div>';
   }
-  // Weekly view needs allPendencyDrillRows — trigger fetch if missing
-  if (state.reportView === 'Weekly' && !allPendencyDrillRows && !opDataLoading) {
-    opDataLoading = true;
-    fetchOpData(function(){ opDataLoading = false; if(allPendencyDrillRows) render(); }, false);
+  // Weekly view needs allPendencyDrillRows — show loading if not ready yet
+  if (state.reportView === 'Weekly' && !allPendencyDrillRows) {
+    if (!opDataLoading) {
+      opDataLoading = true;
+      fetchOpData(function(){ opDataLoading = false; render(); }, false);
+    }
+    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #7C3AED;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading weekly data…</div>'      +'</div>';
   }
   return pendencyPage(opData, 'Operation Pendency', 'OL Pending Jobs', 'OL Done Jobs', '#7C3AED', true, 'Operation Lock');
 }
