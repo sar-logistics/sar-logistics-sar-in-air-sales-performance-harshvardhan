@@ -1036,8 +1036,12 @@ function getCustomerDateRange() {
     dateFrom = state.dateFrom; dateTo = state.dateTo;
   } else if (v === 'Custom' && state.customDateFrom && state.customDateTo) {
     dateFrom = state.customDateFrom; dateTo = state.customDateTo;
+  } else if (v === 'Yearly') {
+    // Yearly — full range: first month to last available month
+    dateFrom = months26[0];
+    dateTo   = months26[months26.length - 1];
   } else {
-    // Yearly / Quarterly / Weekly — compute from filteredMonthIndices
+    // Quarterly / Weekly — compute from filteredMonthIndices
     var idxs = filteredMonthIndices();
     if (idxs && idxs.length > 0) {
       dateFrom = months26[idxs[0]];
