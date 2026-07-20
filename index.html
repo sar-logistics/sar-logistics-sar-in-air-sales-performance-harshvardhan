@@ -7300,6 +7300,14 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
   }
   var _pSpFilterSet = _pSpFilter ? {} : null;
   if (_pSpFilter) _pSpFilter.forEach(function(sp){ _pSpFilterSet[sp] = true; });
+  // Also build zone set from filterZones for _zone matching (SRR zone field)
+  var _pZoneSet = null;
+  var _pFz = state.filterZones||[];
+  if (_pFz.length > 0) {
+    _pZoneSet = {};
+    // salesZoneSet maps zone names; pendency rows use _zone = zone name
+    _pFz.forEach(function(z){ _pZoneSet[z] = true; });
+  }
 
   var matched = [];
   for (var i = 0; i < allPendencyDrillRows.length; i++) {
@@ -7312,8 +7320,13 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
 
     // Entity filter
     if (type === 'grand') {
-      // Grand Total — apply zone/rep/RLS filter
-      if (_pSpFilterSet && !_pSpFilterSet[r._norm]) continue;
+      // Grand Total — apply zone/rep/RLS filter using _zone field
+      // Use _zone to match against visible zones (same source as zone rows = SRR)
+      if (_pSpFilterSet) {
+        // Check both _norm and _zone for zone-based filtering
+        var _inZone = _pSpFilterSet[r._norm] || (_pZoneSet && _pZoneSet[r._zone]);
+        if (!_inZone) continue;
+      }
     } else if (type === 'crosssales') {
       // All Cross Sales rows (rep zone not in salesZoneSet)
       if (!isCrossSalesRep(r)) continue;
