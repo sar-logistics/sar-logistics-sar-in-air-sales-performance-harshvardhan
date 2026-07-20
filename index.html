@@ -6876,7 +6876,9 @@ function computeDrillResult(entity, metric, month){
     // 4. Entity filter
     var sp = row._sp; // normalizeName(rawSalesPersonName) from server
     if (isGT){
-      // Grand Total = ALL rows
+      // Grand Total — apply repsRaw filter (respects zone/rep/RLS filters)
+      var _gtNorms = getRepsRawNorms();
+      if (Object.keys(_gtNorms).length > 0 && !_gtNorms[sp]) continue;
     } else if (entity === 'Cross Sales'){
       // Cross Sales = unmapped rows only
       if (row._zone) continue;
@@ -7114,7 +7116,7 @@ function openInsightDrill(drillType, name, drillMonth) {
 }
 
 function openDrill(entity, metric, col, valueFmt){
-  var cacheKey = CACHE_VERSION+'||'+entity+'||'+metric+'||'+col+'||'+(state.filterLobs||[]).join(',');
+  var cacheKey = CACHE_VERSION+'||'+entity+'||'+metric+'||'+col+'||'+(state.filterLobs||[]).join(',')+'||'+(state.filterZones||[]).join(',')+'||'+(state.filterReps||[]).join(',')+'||'+(currentUser?currentUser.email:'');
 
   // 1. In-memory cache — instant repeat clicks
   var mem = _drillResultCache[cacheKey];
