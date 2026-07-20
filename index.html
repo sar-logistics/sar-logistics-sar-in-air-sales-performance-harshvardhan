@@ -3330,28 +3330,61 @@ function tradelanePage(){
       topByGPPct:     top10tl(_filtered.filter(function(c){return c.shipments>=2;}),'gpPct'),
     };
   } else if (!_needsDrill) {
-    // No filter — apply LOB filter only from cached data
+    // No filter — patch shipments/tons from allDrillRows then apply LOB filter
+    if (allDrillRows && allDrillRows.length > 0 && lobData.allCountries) {
+      var _patchMonsSet = {};
+      filteredMonthIndices().forEach(function(i){ _patchMonsSet[months26[i]] = true; });
+      // Build _tg counts and tons from allDrillRows
+      var _ptgCount = {}, _ptgTons = {}, _ptgMDCount = {}, _ptgMDTons = {};
+      allDrillRows.forEach(function(r){
+        if (!r._tg || !r._ml || !_patchMonsSet[r._ml]) return;
+        if (filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
+        _ptgCount[r._tg] = (_ptgCount[r._tg]||0) + 1;
+        _ptgTons[r._tg]  = (_ptgTons[r._tg]||0) + (r.tons||0);
+        if (!_ptgMDCount[r._tg]) _ptgMDCount[r._tg] = {};
+        if (!_ptgMDTons[r._tg])  _ptgMDTons[r._tg]  = {};
+        _ptgMDCount[r._tg][r._ml] = (_ptgMDCount[r._tg][r._ml]||0) + 1;
+        _ptgMDTons[r._tg][r._ml]  = (_ptgMDTons[r._tg][r._ml]||0) + (r.tons||0);
+      });
+      // Apply to allCountries
+      lobData.allCountries.forEach(function(c){
+        if (_ptgCount[c.name] !== undefined) {
+          c.shipments = _ptgCount[c.name];
+          c.tons = _ptgTons[c.name] || 0;
+          if (c.monthData) {
+            filteredMonthIndices().forEach(function(i){
+              var m = months26[i];
+              if (!c.monthData[m]) c.monthData[m] = {shipments:0,tons:0,revenue:0,gp:0,teu:0};
+              c.monthData[m].shipments = _ptgMDCount[c.name][m] || 0;
+              c.monthData[m].tons      = _ptgMDTons[c.name][m]  || 0;
+            });
+          }
+        }
+      });
+    }
+
     var LOB_KEY_TO_LABEL = {
       'AIR EXPORT':'Air Exp','AIR IMPORT':'Air Imp',
       'SEA EXPORT':'Sea Exp','SEA IMPORT':'Sea Imp',
       'ISOTANK EXPORT':'ISO Exp','ISOTANK IMPORT':'ISO Imp'
     };
-    if (lobData.allCountries && filterLobs.length > 0) {
-      var _lfFiltered = lobData.allCountries.filter(function(c){
+    var _lfFiltered = lobData.allCountries || [];
+    if (_lfFiltered.length > 0 && filterLobs.length > 0) {
+      _lfFiltered = _lfFiltered.filter(function(c){
         return filterLobs.some(function(fk){ var n=LOB_KEY_TO_LABEL[fk]||''; return n && (c.lobs||[]).indexOf(n)>-1; });
       });
-      function top10tl2(arr,key){ return arr.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,10); }
-      lobData = Object.assign({}, lobData, {
-        allCountries:   _lfFiltered,
-        totalCountries: _lfFiltered.length,
-        topByShipments: top10tl2(_lfFiltered,'shipments'),
-        topByRevenue:   top10tl2(_lfFiltered,'revenue'),
-        topByGP:        top10tl2(_lfFiltered,'gp'),
-        topByTons:      top10tl2(_lfFiltered.filter(function(c){return (c.tons||0)>0;}),'tons'),
-        topByTEU:       top10tl2(_lfFiltered.filter(function(c){return (c.teu||0)>0;}),'teu'),
-        topByGPPct:     top10tl2(_lfFiltered.filter(function(c){return c.shipments>=2;}),'gpPct'),
-      });
     }
+    function top10tl2(arr,key){ return arr.slice().sort(function(a,b){return b[key]-a[key];}).slice(0,10); }
+    lobData = Object.assign({}, lobData, {
+      allCountries:   _lfFiltered,
+      totalCountries: _lfFiltered.length,
+      topByShipments: top10tl2(_lfFiltered,'shipments'),
+      topByRevenue:   top10tl2(_lfFiltered,'revenue'),
+      topByGP:        top10tl2(_lfFiltered,'gp'),
+      topByTons:      top10tl2(_lfFiltered.filter(function(c){return (c.tons||0)>0;}),'tons'),
+      topByTEU:       top10tl2(_lfFiltered.filter(function(c){return (c.teu||0)>0;}),'teu'),
+      topByGPPct:     top10tl2(_lfFiltered.filter(function(c){return c.shipments>=2;}),'gpPct'),
+    });
   }
 
   function effectiveRevenueTL(r) {
