@@ -3035,7 +3035,7 @@ function agentPage(){
     var _frNormA = _effectiveFilterRepsA || [];
     // When RLS active, build agent shipments from allDrillRows (accurate) not salesReps field (SRR, incomplete)
     var filteredAgents;
-    if (_rlsActiveA && allDrillRows && allDrillRows.length > 0) {
+    if (allDrillRows && allDrillRows.length > 0 && _frNormA.length > 0) {
       var _aActiveMonsSet = {};
       filteredMonthIndices().forEach(function(i){ _aActiveMonsSet[months26[i]] = true; });
       var _aAgentCounts = {}; // agentName -> {ships, gp, rev, tons, teu}
