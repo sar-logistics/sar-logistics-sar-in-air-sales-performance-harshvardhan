@@ -2719,7 +2719,8 @@ function customerPage(){
     _effectiveFilterReps = null;
   }
 
-  var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZones.length > 0;
+  var _rlsActiveC = _rlsReps && _rlsReps.length > 0;
+  var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZones.length > 0 || _rlsActiveC;
   if (hasFilters && lobData.allCustomers) {
     var _frNorm = _effectiveFilterReps || [];
     // For zone-scoped RLS: re-aggregate metrics using only zone reps' contributions
@@ -2994,18 +2995,59 @@ function agentPage(){
     _effectiveFilterRepsA = null;
   }
 
-  var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZonesA.length > 0;
+  var _rlsActiveA = _rlsReps.length > 0;
+  var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZonesA.length > 0 || _rlsActiveA;
   if (hasFilters && lobData.allAgents) {
     var _frNormA = _effectiveFilterRepsA || [];
-    var filteredAgents = lobData.allAgents.filter(function(a) {
-      var _frNorm = _frNormA;
-      var repOk = !_effectiveFilterRepsA || (a.salesReps||[]).some(function(r){ return _frNorm.indexOf(normalizeName(r||''))>-1; });
-      var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
-        var needle = LOB_KEY_TO_CUST[fk]||'';
-        return needle && (a.lobs||[]).indexOf(needle)>-1;
+    // When RLS active, build agent shipments from allDrillRows (accurate) not salesReps field (SRR, incomplete)
+    var filteredAgents;
+    if (_rlsActiveA && allDrillRows && allDrillRows.length > 0) {
+      var _aActiveMonsSet = {};
+      filteredMonthIndices().forEach(function(i){ _aActiveMonsSet[months26[i]] = true; });
+      var _aAgentCounts = {}; // agentName -> {ships, gp, rev, tons, teu}
+      var _aLobKeys = {'Air':['AIR EXPORT','AIR IMPORT'],'Ocean':['SEA EXPORT','SEA IMPORT'],'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT']};
+      var _aLobFilter = _aLobKeys[state.agentLob||'Air'] || [];
+      allDrillRows.forEach(function(r){
+        if (_aLobFilter.indexOf(r.lob) === -1) return;
+        if (!_aActiveMonsSet[r._ml]) return;
+        if (_frNormA.length > 0 && _frNormA.indexOf(r._sp) === -1) return;
+        var agents = [];
+        if (r.destAgent) agents.push((r.destAgent||'').toLowerCase());
+        if (r.originAgent && r.originAgent !== r.destAgent) agents.push((r.originAgent||'').toLowerCase());
+        agents.forEach(function(ag){
+          if (!ag) return;
+          if (!_aAgentCounts[ag]) _aAgentCounts[ag] = {ships:0, gp:0, rev:0, tons:0, teu:0};
+          _aAgentCounts[ag].ships++;
+          _aAgentCounts[ag].gp += r.g||0;
+          _aAgentCounts[ag].rev += r.r||0;
+          _aAgentCounts[ag].tons += r.tons||0;
+          _aAgentCounts[ag].teu += r.t||0;
+        });
       });
-      return repOk && lobOk;
-    });
+      filteredAgents = lobData.allAgents.map(function(a){
+        var key = (a.name||'').toLowerCase();
+        var counts = _aAgentCounts[key];
+        if (!counts || counts.ships === 0) return null;
+        return Object.assign({}, a, {
+          shipments: counts.ships,
+          gp: Math.round(counts.gp),
+          revenue: Math.round(counts.rev),
+          tons: Math.round(counts.tons*100)/100,
+          teu: Math.round(counts.teu*100)/100,
+          gpPct: counts.rev > 0 ? Math.round((counts.gp/counts.rev)*1000)/10 : 0
+        });
+      }).filter(Boolean);
+    } else {
+      filteredAgents = lobData.allAgents.filter(function(a) {
+        var _frNorm = _frNormA;
+        var repOk = !_effectiveFilterRepsA || (a.salesReps||[]).some(function(r){ return _frNorm.indexOf(normalizeName(r||''))>-1; });
+        var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
+          var needle = LOB_KEY_TO_CUST[fk]||'';
+          return needle && (a.lobs||[]).indexOf(needle)>-1;
+        });
+        return repOk && lobOk;
+      });
+    }
     function top10fa(arr, key) { return arr.slice().sort(function(a,b){ return b[key]-a[key]; }).slice(0,10); }
     lobData = {
       allAgents:      filteredAgents,
