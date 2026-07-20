@@ -6832,6 +6832,25 @@ function computeDrillResult(entity, metric, month){
   // Instead use: for each rep in repsRaw, check if any allDrillRow._sp matches by
   // trying normalizeName on the rep's name (handles "Name | Code" format by stripping pipe).
   // Build lookup: Set of normSP values that belong to current repsRaw
+  // Pre-build zone/rep/RLS SP filter using zoneToRawSPs (same as zone rows use)
+  var _spFilter = null;
+  var _fz = state.filterZones || [];
+  var _fr = state.filterReps || [];
+  var _rlsSps = _getRLSReps().map(function(n){ return normalizeName(n); });
+  if (_rlsSps.length > 0) {
+    _spFilter = _rlsSps;
+  } else if (_fz.length > 0 && _fr.length > 0) {
+    var _zsp = zoneToRawSPs(_fz) || [];
+    var _frn = _fr.map(function(n){ return normalizeName(n); });
+    _spFilter = _zsp.filter(function(sp){ return _frn.indexOf(sp) > -1; });
+  } else if (_fz.length > 0) {
+    _spFilter = zoneToRawSPs(_fz);
+  } else if (_fr.length > 0) {
+    _spFilter = _fr.map(function(n){ return normalizeName(n); });
+  }
+  var _spFilterSet = _spFilter ? {} : null;
+  if (_spFilter) _spFilter.forEach(function(sp){ _spFilterSet[sp] = true; });
+
   var _repsRawNorms = null; // built lazily only when needed
 
   function getRepsRawNorms() {
@@ -6876,7 +6895,8 @@ function computeDrillResult(entity, metric, month){
     // 4. Entity filter
     var sp = row._sp; // normalizeName(rawSalesPersonName) from server
     if (isGT){
-      // Grand Total — all rows pass (LOB filter already applied above)
+      // Grand Total — apply zone/rep/RLS filter
+      if (_spFilterSet && !_spFilterSet[row._sp]) continue;
     } else if (entity === 'Cross Sales'){
       // Cross Sales = unmapped rows only
       if (row._zone) continue;
