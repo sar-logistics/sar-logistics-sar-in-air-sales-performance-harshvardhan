@@ -3568,7 +3568,9 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
 
     // Build per-tradelane group counts from allDrillRows
     var _tgCount = {};
+    var _tgTons = {};
     var _tgMDCount = {};
+    var _tgMDTons = {};
     allDrillRows.forEach(function(r){
       if (!r._tg) { return; }
       if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
@@ -3577,26 +3579,39 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       if (!inActive) return;
       var tg = r._tg;
       _tgCount[tg] = (_tgCount[tg] || 0) + 1;
+      _tgTons[tg] = (_tgTons[tg] || 0) + (r.tons || 0);
       var colKey = _fyGroups ? _tgFyMonsSet[r._ml] : r._ml;
       if (!_tgMDCount[tg]) _tgMDCount[tg] = {};
+      if (!_tgMDTons[tg]) _tgMDTons[tg] = {};
       _tgMDCount[tg][colKey] = (_tgMDCount[tg][colKey] || 0) + 1;
+      _tgMDTons[tg][colKey] = (_tgMDTons[tg][colKey] || 0) + (r.tons || 0);
     });
 
     // Apply override to each country row
     rows.forEach(function(c){
       if (_tgCount[c.name] !== undefined) {
         c.shipments = _tgCount[c.name];
-        // Also override monthData shipments
+        c.tons = _tgTons[c.name] || 0;
+        // Also override monthData shipments and tons
         if (c.monthData) {
           var tgMD = _tgMDCount[c.name] || {};
+          var tgMDT = _tgMDTons[c.name] || {};
           var _allColKeys = _fyGroups ? _fyGroups.map(function(g){ return g.key; }) : activeMons;
           _allColKeys.forEach(function(k){
             if (!c.monthData[k]) c.monthData[k] = { shipments:0, revenue:0, gp:0, tons:0, teu:0 };
             c.monthData[k].shipments = tgMD[k] || 0;
+            c.monthData[k].tons = tgMDT[k] || 0;
           });
         }
       }
     });
+
+    // Rebuild topByShipments and topByTons from corrected data
+    function _top10tl(arr, key) {
+      return arr.slice().sort(function(a,b){ return (b[key]||0)-(a[key]||0); }).slice(0,10);
+    }
+    lobData.topByShipments = _top10tl(rows, 'shipments');
+    lobData.topByTons = _top10tl(rows.filter(function(c){ return (c.tons||0)>0; }), 'tons');
   }
 
   function tlHue(n){ var h=0; for(var i=0;i<n.length;i++) h=(h*31+n.charCodeAt(i))&0xffff; return h%360; }
@@ -6506,8 +6521,9 @@ function _patchTradelaneCacheWithDrillCounts() {
     'ISOTANK EXPORT':'ISO Tank','ISOTANK IMPORT':'ISO Tank'
   };
 
-  // Build per-LOB, per-tg, per-month shipment counts AND tons from allDrillRows
-  var _tgMonthCounts = {}; // lobLabel -> tg -> month -> {count, tons}
+  // Build per-LOB, per-tg, per-month shipment counts from allDrillRows
+  // (tons patched live in tradelanePivotTable)
+  var _tgMonthCounts = {}; // lobLabel -> tg -> month -> count
   allDrillRows.forEach(function(r) {
     if (!r._tg || !r._ml) return;
     var lobLabel = LOB_TO_TL[r.lob] || '';
@@ -6515,9 +6531,7 @@ function _patchTradelaneCacheWithDrillCounts() {
     if (!_tgMonthCounts[lobLabel]) _tgMonthCounts[lobLabel] = {};
     if (!_tgMonthCounts[lobLabel][r._tg]) _tgMonthCounts[lobLabel][r._tg] = {};
     var mc = _tgMonthCounts[lobLabel][r._tg];
-    if (!mc[r._ml]) mc[r._ml] = { count:0, tons:0 };
-    mc[r._ml].count++;
-    mc[r._ml].tons += r.tons || 0;
+    mc[r._ml] = (mc[r._ml] || 0) + 1;
   });
 
   // Helper: patch a single tradelane data object
@@ -6530,35 +6544,20 @@ function _patchTradelaneCacheWithDrillCounts() {
 
       lobData.allCountries.forEach(function(c) {
         var monthMap = tgMonths[c.name] || {};
-        // Patch total shipments and tons (sum of all months)
-        var totalShip = 0, totalTons = 0;
-        Object.values(monthMap).forEach(function(v){ totalShip += v.count||0; totalTons += v.tons||0; });
+        // Patch total shipments only (tons patched live in tradelanePivotTable)
+        var totalShip = Object.values(monthMap).reduce(function(s,v){return s+(v||0);},0);
         if (totalShip > 0) c.shipments = totalShip;
-        if (totalTons > 0) c.tons = totalTons;
-        // Patch monthData shipments and tons per month
         if (c.monthData) {
           Object.keys(c.monthData).forEach(function(m) {
-            var mv = monthMap[m] || { count:0, tons:0 };
-            c.monthData[m].shipments = mv.count || 0;
-            c.monthData[m].tons = mv.tons || 0;
+            c.monthData[m].shipments = monthMap[m] || 0;
           });
-          // Add months present in drill but missing from SRR monthData
           Object.keys(monthMap).forEach(function(m) {
             if (!c.monthData[m]) {
-              c.monthData[m] = { shipments: monthMap[m].count||0, tons: monthMap[m].tons||0, revenue:0, gp:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
+              c.monthData[m] = { shipments: monthMap[m]||0, revenue:0, gp:0, tons:0, teu:0, fclTeu:0, tankTeu:0, lcl:0 };
             }
           });
         }
       });
-
-      // Rebuild top10 arrays after patching shipments and tons
-      function _top10(arr, key) {
-        return arr.slice().sort(function(a,b){ return (b[key]||0)-(a[key]||0); }).slice(0,10);
-      }
-      if (lobData.allCountries.length > 0) {
-        lobData.topByShipments = _top10(lobData.allCountries, 'shipments');
-        lobData.topByTons      = _top10(lobData.allCountries.filter(function(c){ return (c.tons||0)>0; }), 'tons');
-      }
     });
   }
 
