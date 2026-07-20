@@ -352,6 +352,7 @@ function _showDashboardBody() {
     if (!tc) tc = lsGet('tradelane_' + (state.dateFrom||'Apr-26') + '_' + (state.dateTo||curMonTL));
     if (tc && tc.success) {
       tc._cacheKey = tlLatestKey;
+      tc._isStale = true; // mark stale so patch runs when allDrillRows loads
       _tradelaneCache[tlLatestKey] = tc;
       tradelaneData = tc; tradelaneDataReady = true;
     }
@@ -3194,6 +3195,11 @@ function tradelanePage(){
     if (_tradelaneCache[_tlCurrentKey]) { tradelaneData=_tradelaneCache[_tlCurrentKey]; _tradelanePivotCache={}; }
     else { tradelaneDataReady=false; tradelaneDataLoading=false; }
   }
+  // Show spinner if data is stale (localStorage) and allDrillRows not loaded yet
+  if (tradelaneDataReady && tradelaneData && tradelaneData._isStale && !allDrillRows) {
+    return '<div style="display:flex;align-items:center;justify-content:center;padding:80px 0;">'      +'<div style="display:flex;flex-direction:column;align-items:center;gap:14px;">'        +'<div class="login-spinner" style="width:24px;height:24px;border-width:3px;"></div>'        +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading tradelane insights…</div>'      +'</div>'    +'</div>';
+  }
+
   if (!tradelaneDataReady) {
     if (!tradelaneDataLoading) {
       tradelaneDataLoading = true;
@@ -6537,6 +6543,12 @@ function loadDrillData(callback){
         allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
         _custLobRepMapCache = {}; _agentLobRepMapCache = {}; // clear cached maps — data changed
         _patchTradelaneCacheWithDrillCounts();
+        // Re-render tradelane page if it was showing stale cached data
+        if (state.page === 'tradelane' && tradelaneData && tradelaneData._isStale) {
+          tradelaneData._isStale = false;
+          _tradelanePivotCache = {}; _tlGrandDrillCache = {};
+          render();
+        }
       }
       // Bundle tradelane data from ping — store in cache keyed as 'all' so Yearly/all-data views are instant
       if (data.tradelane && data.tradelane.lobs) {
