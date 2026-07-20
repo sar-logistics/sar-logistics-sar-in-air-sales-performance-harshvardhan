@@ -6911,9 +6911,12 @@ function openInsightDrill(drillType, name, drillMonth) {
       var _tlActiveLob = state.tradelaneLob || 'Air';
       var _tlLobFilter = { 'Air':['AIR EXPORT','AIR IMPORT'], 'Ocean':['SEA EXPORT','SEA IMPORT'], 'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT'] }[_tlActiveLob] || [];
 
-      // Also build repFilter if zone/rep filter active
+      // Build repFilter from RLS + zone/rep filters
+      var _tlRLSReps = _getRLSReps();
       var _tlEffReps = null;
-      if ((state.filterZones||[]).length > 0 || (state.filterReps||[]).length > 0) {
+      if (_tlRLSReps.length > 0) {
+        _tlEffReps = _tlRLSReps.map(function(x){return normalizeName(x);});
+      } else if ((state.filterZones||[]).length > 0 || (state.filterReps||[]).length > 0) {
         _tlEffReps = zoneToRawSPs(state.filterZones||[]);
         if ((state.filterReps||[]).length > 0) {
           var _frn = (state.filterReps||[]).map(function(x){return normalizeName(x);});
