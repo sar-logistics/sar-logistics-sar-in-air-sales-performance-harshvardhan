@@ -6836,9 +6836,13 @@ function computeDrillResult(entity, metric, month){
   var _spFilter = null;
   var _fz = state.filterZones || [];
   var _fr = state.filterReps || [];
-  var _rlsSps = _getRLSReps().map(function(n){ return normalizeName(n); });
-  if (_rlsSps.length > 0) {
-    _spFilter = _rlsSps;
+  // For RLS: use zoneToRawSPs on the user's zone — gives exact _sp values matching allDrillRows
+  var _rlsZone = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager') ? (currentUser.zone||'') : '';
+  var _rlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(currentUser.name||'') : '';
+  if (_rlsZone) {
+    _spFilter = zoneToRawSPs([_rlsZone]) || [];
+  } else if (_rlsName) {
+    _spFilter = [_rlsName];
   } else if (_fz.length > 0 && _fr.length > 0) {
     var _zsp = zoneToRawSPs(_fz) || [];
     var _frn = _fr.map(function(n){ return normalizeName(n); });
