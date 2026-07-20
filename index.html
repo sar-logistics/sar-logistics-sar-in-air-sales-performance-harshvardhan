@@ -1856,8 +1856,9 @@ function sortZones(arr){
 }
 function getZones(){
   var seen = {}, zones = [];
+  var _excludeZones = ['Others'];
   repsRaw.forEach(function(r){
-    if (!seen[r.zone]) { seen[r.zone] = true; zones.push(r.zone); }
+    if (!seen[r.zone] && _excludeZones.indexOf(r.zone) === -1) { seen[r.zone] = true; zones.push(r.zone); }
   });
   return sortZones(zones);
 }
