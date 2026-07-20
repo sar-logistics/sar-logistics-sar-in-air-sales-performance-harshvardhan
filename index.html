@@ -6554,17 +6554,24 @@ function loadDrillData(callback){
         if (state.page === 'tradelane' && !tradelaneDataReady) {
           tradelaneData = data.tradelane; tradelaneDataReady = true;
         }
-        // Save stripped version to sessionStorage (remove shipmentNos - too large)
+        // Save stripped version to sessionStorage (remove large arrays)
         try {
           var _tlStrip = JSON.parse(JSON.stringify(data.tradelane));
           ['Air','Ocean','ISO Tank'].forEach(function(lob){
             if(_tlStrip.lobs&&_tlStrip.lobs[lob]&&_tlStrip.lobs[lob].allCountries){
-              _tlStrip.lobs[lob].allCountries.forEach(function(c){ delete c.shipmentNos; });
+              _tlStrip.lobs[lob].allCountries.forEach(function(c){
+                delete c.shipmentNos; // 440KB
+                delete c.weekData;    // 119KB
+                delete c.salesReps;   // 19KB
+                delete c.countries;   // 3KB
+              });
             }
           });
-          if(_tlStrip.allCountries) _tlStrip.allCountries.forEach(function(c){ delete c.shipmentNos; });
+          if(_tlStrip.allCountries) _tlStrip.allCountries.forEach(function(c){
+            delete c.shipmentNos; delete c.weekData; delete c.salesReps; delete c.countries;
+          });
           sessionStorage.setItem('tl_cache', JSON.stringify(_tlStrip));
-        } catch(e) {}
+        } catch(e) { console.warn('tl sessionStorage save failed:', e.message); }
         _patchTradelaneCacheWithDrillCounts();
       }
       _drillDataLoading = false;
