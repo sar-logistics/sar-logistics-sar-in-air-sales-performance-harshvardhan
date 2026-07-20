@@ -429,7 +429,12 @@ function _showDashboardBody() {
           var lsc = lsGet('customers_'+key);
           if (lsc && lsc.success) { _customerCache[key]=lsc; customerData=lsc; customerDataReady=true; return; }
           fetch('/api/mongo-batch?action=customers&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
-            .then(function(r){return r.json();}).then(function(d){ if(d.success){_customerCache[key]=d;customerData=d;customerDataReady=true;lsSet('customers_'+key,d);} }).catch(function(){});
+            .then(function(r){return r.json();}).then(function(d){ if(d.success){_customerCache[key]=d;customerData=d;customerDataReady=true;
+              try{var _cSave=JSON.parse(JSON.stringify(d));
+                if(_cSave.lobs) Object.keys(_cSave.lobs).forEach(function(l){(_cSave.lobs[l].allCustomers||[]).forEach(function(c){delete c.repMetrics;delete c.shipmentNos;});});
+                (_cSave.allCustomers||[]).forEach(function(c){delete c.repMetrics;delete c.shipmentNos;});
+                lsSet('customers_'+key,_cSave);}catch(e){}
+            } }).catch(function(){});
         }
       }, 300);
       setTimeout(function(){
@@ -444,7 +449,17 @@ function _showDashboardBody() {
         if (!_tradelaneCache[key]) {
           fetch('/api/mongo-batch?action=tradelane&dateFrom='+encodeURIComponent(from)+'&dateTo='+encodeURIComponent(to))
             .then(function(r){return r.json();}).then(function(d){ if(d.success){d._cacheKey=key;_tradelaneCache[key]=d;tradelaneData=d;tradelaneDataReady=true;
-              try{lsSet('tradelane_'+key,d);}catch(e){} } }).catch(function(){});
+              try{
+                var _tlSave = JSON.parse(JSON.stringify(d));
+                ['Air','Ocean','ISO Tank'].forEach(function(lob){
+                  if(_tlSave.lobs&&_tlSave.lobs[lob]&&_tlSave.lobs[lob].allCountries){
+                    _tlSave.lobs[lob].allCountries.forEach(function(c){
+                      delete c.shipmentNos; delete c.weekData; delete c.salesReps; delete c.countries;
+                    });
+                  }
+                });
+                lsSet('tradelane_'+key, _tlSave);
+              }catch(e){} } }).catch(function(){});
         }
       }, 1100);
       setTimeout(function(){ fetchFinanceData(null);  }, 1500);
