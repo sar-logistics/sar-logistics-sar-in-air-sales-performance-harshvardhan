@@ -2735,8 +2735,8 @@ function customerPage(){
         if (_cLobFilter.indexOf(r.lob) === -1) return;
         if (!_cActiveMonsSet[r._ml]) return;
         if (_frNorm.length > 0 && _frNorm.indexOf(r._sp) === -1) return;
-        var cust = (r.customer||'').toLowerCase();
-        if (!cust) return;
+        var cust = (r.customer||'').trim().toLowerCase();
+        if (!cust || cust === '-' || cust === 'n/a') return;
         if (!_cCustCounts[cust]) _cCustCounts[cust] = {ships:0, gp:0, rev:0, tons:0, teu:0};
         _cCustCounts[cust].ships++;
         _cCustCounts[cust].gp += r.g||0;
@@ -3046,10 +3046,10 @@ function agentPage(){
         if (!_aActiveMonsSet[r._ml]) return;
         if (_frNormA.length > 0 && _frNormA.indexOf(r._sp) === -1) return;
         var agents = [];
-        if (r.destAgent) agents.push((r.destAgent||'').toLowerCase());
-        if (r.originAgent && r.originAgent !== r.destAgent) agents.push((r.originAgent||'').toLowerCase());
+        if (r.destAgent) agents.push((r.destAgent||'').trim().toLowerCase());
+        if (r.originAgent && r.originAgent !== r.destAgent) agents.push((r.originAgent||'').trim().toLowerCase());
         agents.forEach(function(ag){
-          if (!ag) return;
+          if (!ag || ag === '-' || ag === 'n/a') return;
           if (!_aAgentCounts[ag]) _aAgentCounts[ag] = {ships:0, gp:0, rev:0, tons:0, teu:0};
           _aAgentCounts[ag].ships++;
           _aAgentCounts[ag].gp += r.g||0;
