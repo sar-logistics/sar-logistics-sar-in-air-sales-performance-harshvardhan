@@ -6868,9 +6868,10 @@ function openInsightDrill(drillType, name, drillMonth) {
   }
 
   // Check cache first — instant for repeat clicks (skip for tradelane — has its own LOB-keyed cache below)
+  var _rlsUserKey = currentUser ? (currentUser.email||currentUser.name||'') : '';
   if (drillType !== 'tradelane') {
     var _iDateR = drillType==='customer' ? getCustomerDateRange() : getAgentDateRange();
-    var _iCacheKey = drillType + '||' + name + '||' + (_iDateR.dateFrom||'') + '||' + (_iDateR.dateTo||'') + '||' + (drillMonth||'');
+    var _iCacheKey = drillType + '||' + name + '||' + (_iDateR.dateFrom||'') + '||' + (_iDateR.dateTo||'') + '||' + (drillMonth||'') + '||' + _rlsUserKey;
     var _iCached = _insightDrillCache[_iCacheKey];
     if (_iCached) {
       state.drill = _iCached;
@@ -6897,7 +6898,7 @@ function openInsightDrill(drillType, name, drillMonth) {
 
     // Cache key includes active months so changing May→July busts cache
     var _tlActiveMonsKey = Object.keys(_tlActiveMonsSet).sort(function(a,b){ return months26.indexOf(a)-months26.indexOf(b); }).join(',');
-    var _tlCacheKey = 'tl||'+name+'||'+_tlActiveMonsKey+'|'+(state.tradelaneLob||'Air');
+    var _tlCacheKey = 'tl||'+name+'||'+_tlActiveMonsKey+'|'+(state.tradelaneLob||'Air')+'|'+_rlsUserKey;
     if (_insightDrillCache[_tlCacheKey]) {
       state.drill = _insightDrillCache[_tlCacheKey];
       render();
