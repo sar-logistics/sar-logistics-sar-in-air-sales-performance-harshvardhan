@@ -1015,15 +1015,15 @@ var _customerFetchTimer = null;
 // If the range is already cached, updates instantly with no delay
 function _debouncedCustomerFetch() {
   var _k = getCustomerCacheKey();
-  // Cache hit → instant, no debounce needed
+  // Cache hit → instant
   if (_customerCache[_k]) {
     customerData = _customerCache[_k]; customerDataReady = true; render(); return;
   }
-  // Not cached → show current data (don't blank the page), then debounce the fetch
-  render(); // re-render with stale data so UI stays responsive while user picks
+  // Not cached → set not ready and fetch
+  customerDataReady = false;
+  render(); // show loading spinner
   clearTimeout(_customerFetchTimer);
   _customerFetchTimer = setTimeout(function() {
-    customerDataReady = false;
     fetchCustomerData(function(){ render(); });
   }, 300);
 }
@@ -1110,8 +1110,9 @@ function prefetchCustomerRanges() {
   var allM = months26;
   if (!allM || allM.length === 0) return;
 
-  // Only prefetch common windows — NOT every individual month (too large for localStorage)
+  // Prefetch yearly range first, then common windows
   var queue = [];
+  queue.push({ dateFrom: allM[0], dateTo: allM[allM.length - 1] }); // full yearly
   [3, 6, 9, 12].forEach(function(n) {
     if (allM.length >= n) queue.push({ dateFrom: allM[allM.length - n], dateTo: allM[allM.length - 1] });
   });
@@ -1182,10 +1183,10 @@ function fetchAgentData(callback, force) {
 function _debouncedAgentFetch() {
   var _k = getAgentCacheKey();
   if (_agentCache[_k]) { agentData = _agentCache[_k]; agentDataReady = true; render(); return; }
-  render();
+  agentDataReady = false;
+  render(); // show loading spinner
   clearTimeout(_agentFetchTimer);
   _agentFetchTimer = setTimeout(function() {
-    agentDataReady = false;
     fetchAgentData(function(){ render(); });
   }, 300);
 }
@@ -1196,6 +1197,8 @@ function prefetchAgentRanges() {
   var allM = months26;
   if (!allM || allM.length === 0) return;
   var queue = [];
+  // Include full yearly range first
+  queue.push({ dateFrom: allM[0], dateTo: allM[allM.length-1] });
   [3, 6, 9, 12].forEach(function(n) {
     if (allM.length >= n) queue.push({ dateFrom: allM[allM.length-n], dateTo: allM[allM.length-1] });
   });
