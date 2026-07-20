@@ -7285,6 +7285,22 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
 
   var repNorm = normalizeName(rep);
 
+  // Pre-build zone/rep/RLS SP filter for grand total
+  var _pSpFilter = null;
+  var _pRlsZone = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager') ? (currentUser.zone||'') : '';
+  var _pRlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(currentUser.name||'') : '';
+  if (_pRlsZone) {
+    _pSpFilter = zoneToRawSPs([_pRlsZone]);
+  } else if (_pRlsName) {
+    _pSpFilter = [_pRlsName];
+  } else if ((state.filterZones||[]).length > 0) {
+    _pSpFilter = zoneToRawSPs(state.filterZones);
+  } else if ((state.filterReps||[]).length > 0) {
+    _pSpFilter = (state.filterReps||[]).map(function(n){ return normalizeName(n); });
+  }
+  var _pSpFilterSet = _pSpFilter ? {} : null;
+  if (_pSpFilter) _pSpFilter.forEach(function(sp){ _pSpFilterSet[sp] = true; });
+
   var matched = [];
   for (var i = 0; i < allPendencyDrillRows.length; i++) {
     var r = allPendencyDrillRows[i];
@@ -7296,7 +7312,8 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
 
     // Entity filter
     if (type === 'grand') {
-      // Grand Total — all rows pass
+      // Grand Total — apply zone/rep/RLS filter
+      if (_pSpFilterSet && !_pSpFilterSet[r._norm]) continue;
     } else if (type === 'crosssales') {
       // All Cross Sales rows (rep zone not in salesZoneSet)
       if (!isCrossSalesRep(r)) continue;
