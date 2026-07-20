@@ -6533,8 +6533,8 @@ function _patchTradelaneCacheWithDrillCounts() {
         // Patch total shipments and tons (sum of all months)
         var totalShip = 0, totalTons = 0;
         Object.values(monthMap).forEach(function(v){ totalShip += v.count||0; totalTons += v.tons||0; });
-        c.shipments = totalShip || c.shipments;
-        c.tons = totalTons || c.tons;
+        if (totalShip > 0) c.shipments = totalShip;
+        if (totalTons > 0) c.tons = totalTons;
         // Patch monthData shipments and tons per month
         if (c.monthData) {
           Object.keys(c.monthData).forEach(function(m) {
@@ -6550,6 +6550,15 @@ function _patchTradelaneCacheWithDrillCounts() {
           });
         }
       });
+
+      // Rebuild top10 arrays after patching shipments and tons
+      function _top10(arr, key) {
+        return arr.slice().sort(function(a,b){ return (b[key]||0)-(a[key]||0); }).slice(0,10);
+      }
+      if (lobData.allCountries.length > 0) {
+        lobData.topByShipments = _top10(lobData.allCountries, 'shipments');
+        lobData.topByTons      = _top10(lobData.allCountries.filter(function(c){ return (c.tons||0)>0; }), 'tons');
+      }
     });
   }
 
