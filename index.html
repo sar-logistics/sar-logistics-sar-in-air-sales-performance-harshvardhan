@@ -2723,30 +2723,64 @@ function customerPage(){
   var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZones.length > 0 || _rlsActiveC;
   if (hasFilters && lobData.allCustomers) {
     var _frNorm = _effectiveFilterReps || [];
-    // For zone-scoped RLS: re-aggregate metrics using only zone reps' contributions
-    var filteredCusts = lobData.allCustomers.filter(function(c) {
-      var repOk = !_effectiveFilterReps || (c.salesReps || []).some(function(r){
-        return _frNorm.indexOf(normalizeName(r||'')) > -1;
+    // Use allDrillRows for accurate counts when rep/zone/RLS filter active
+    var filteredCusts;
+    if (allDrillRows && allDrillRows.length > 0 && _effectiveFilterReps && _effectiveFilterReps.length > 0) {
+      var _cActiveMonsSet = {};
+      filteredMonthIndices().forEach(function(i){ _cActiveMonsSet[months26[i]] = true; });
+      var _cLobKeys = {'Air':['AIR EXPORT','AIR IMPORT'],'Ocean':['SEA EXPORT','SEA IMPORT'],'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT']};
+      var _cLobFilter = _cLobKeys[state.customerLob||'Air'] || [];
+      var _cCustCounts = {};
+      allDrillRows.forEach(function(r){
+        if (_cLobFilter.indexOf(r.lob) === -1) return;
+        if (!_cActiveMonsSet[r._ml]) return;
+        if (_frNorm.length > 0 && _frNorm.indexOf(r._sp) === -1) return;
+        var cust = (r.customer||'').toLowerCase();
+        if (!cust) return;
+        if (!_cCustCounts[cust]) _cCustCounts[cust] = {ships:0, gp:0, rev:0, tons:0, teu:0};
+        _cCustCounts[cust].ships++;
+        _cCustCounts[cust].gp += r.g||0;
+        _cCustCounts[cust].rev += r.r||0;
+        _cCustCounts[cust].tons += r.tons||0;
+        _cCustCounts[cust].teu += r.t||0;
       });
-      var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
-        var needle = LOB_KEY_TO_CUST[fk] || '';
-        return needle && (c.lobs || []).indexOf(needle) > -1;
-      });
-      return repOk && lobOk;
-    }).map(function(c) {
-      // Re-sum metrics from only the allowed reps' contributions
-      if (!_effectiveFilterReps || !c.repMetrics) return c;
-      var ship=0, rev=0, gp=0, tons=0, teu=0;
-      Object.keys(c.repMetrics).forEach(function(rep){
-        if (_frNorm.indexOf(normalizeName(rep)) === -1) return;
-        var m = c.repMetrics[rep];
-        ship += m.shipments||0; rev += m.revenue||0; gp += m.gp||0;
-        tons += m.tons||0; teu += m.teu||0;
-      });
-      return Object.assign({}, c, { shipments:ship, revenue:Math.round(rev), gp:Math.round(gp),
-        tons:Math.round(tons*100)/100, teu:Math.round(teu*100)/100,
-        gpPct: rev>0 ? Math.round((gp/rev)*1000)/10 : 0 });
-    }).filter(function(c){ return c.shipments > 0; });
+      filteredCusts = lobData.allCustomers.map(function(c){
+        var key = (c.name||'').toLowerCase();
+        var counts = _cCustCounts[key];
+        if (!counts || counts.ships === 0) return null;
+        return Object.assign({}, c, {
+          shipments: counts.ships,
+          gp: Math.round(counts.gp),
+          revenue: Math.round(counts.rev),
+          tons: Math.round(counts.tons*100)/100,
+          teu: Math.round(counts.teu*100)/100,
+          gpPct: counts.rev > 0 ? Math.round((counts.gp/counts.rev)*1000)/10 : 0
+        });
+      }).filter(Boolean);
+    } else {
+      filteredCusts = lobData.allCustomers.filter(function(c) {
+        var repOk = !_effectiveFilterReps || (c.salesReps || []).some(function(r){
+          return _frNorm.indexOf(normalizeName(r||'')) > -1;
+        });
+        var lobOk = filterLobs.length === 0 || filterLobs.some(function(fk){
+          var needle = LOB_KEY_TO_CUST[fk] || '';
+          return needle && (c.lobs || []).indexOf(needle) > -1;
+        });
+        return repOk && lobOk;
+      }).map(function(c) {
+        if (!_effectiveFilterReps || !c.repMetrics) return c;
+        var ship=0, rev=0, gp=0, tons=0, teu=0;
+        Object.keys(c.repMetrics).forEach(function(rep){
+          if (_frNorm.indexOf(normalizeName(rep)) === -1) return;
+          var m = c.repMetrics[rep];
+          ship += m.shipments||0; rev += m.revenue||0; gp += m.gp||0;
+          tons += m.tons||0; teu += m.teu||0;
+        });
+        return Object.assign({}, c, { shipments:ship, revenue:Math.round(rev), gp:Math.round(gp),
+          tons:Math.round(tons*100)/100, teu:Math.round(teu*100)/100,
+          gpPct: rev>0 ? Math.round((gp/rev)*1000)/10 : 0 });
+      }).filter(function(c){ return c.shipments > 0; });
+    }
     function top10f(arr, key) { return arr.slice().sort(function(a,b){ return b[key]-a[key]; }).slice(0,10); }
     lobData = {
       allCustomers:   filteredCusts,
