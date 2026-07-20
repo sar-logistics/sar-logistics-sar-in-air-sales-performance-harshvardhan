@@ -2807,7 +2807,8 @@ function customerPage(){
   +'</div>';
 
   if (activeView === 'table') {
-    var _custPivotKey = activeLob+'|'+state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+state.currency+'|'+state.custSortCol+'|'+state.custSortDir+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+(allDrillRows?allDrillRows.length:0);
+    var _rlsKeyCust = currentUser ? (currentUser.email||currentUser.name||'') : '';
+    var _custPivotKey = activeLob+'|'+state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+state.currency+'|'+state.custSortCol+'|'+state.custSortDir+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+(allDrillRows?allDrillRows.length:0)+'|'+_rlsKeyCust;
     if (!_customerPivotCache[_custPivotKey]) {
       _customerPivotCache[_custPivotKey] = customerPivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterReps);
     }
@@ -3066,7 +3067,8 @@ function agentPage(){
   +'</div>';
 
   if (activeView === 'table') {
-    var _agentPivotKey = activeLob+'|'+state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+state.currency+'|'+state.agentSortCol+'|'+state.agentSortDir+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+(allDrillRows?allDrillRows.length:0);
+    var _rlsKeyAgent = currentUser ? (currentUser.email||currentUser.name||'') : '';
+    var _agentPivotKey = activeLob+'|'+state.reportView+'|'+state.dateFrom+'|'+state.dateTo+'|'+state.currency+'|'+state.agentSortCol+'|'+state.agentSortDir+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+(allDrillRows?allDrillRows.length:0)+'|'+_rlsKeyAgent;
     if (!_agentPivotCache[_agentPivotKey]) {
       _agentPivotCache[_agentPivotKey] = agentPivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterRepsA);
     }
@@ -3459,7 +3461,8 @@ function tradelanePage(){
     var _tlDR = getTradelaneDateRange();
     var _tlOpen = state.tradelaneShipOpen||{};
     var _openKeys = Object.keys(_tlOpen).filter(function(k){return _tlOpen[k];}).sort().join(',');
-    var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(state.yearType||'Financial')+'|'+(state.selectedQuarter||'')+'|'+(state.weeklyMonth||'')+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+_openKeys+'|'+state.currency;
+    var _tlRLSKey = currentUser ? (currentUser.email||currentUser.name||'') : '';
+    var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(state.yearType||'Financial')+'|'+(state.selectedQuarter||'')+'|'+(state.weeklyMonth||'')+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+_openKeys+'|'+state.currency+'|'+_tlRLSKey;
     if (!_tradelanePivotCache[_tlPivotKey]) {
       _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterRepsTL);
     }
