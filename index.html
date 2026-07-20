@@ -609,6 +609,11 @@ function _getRLSReps() {
   if (role === 'zonal manager') {
     var userZone = (currentUser.zone || '').trim();
     if (!userZone) return [];
+    // Use zoneToRawSPs to get exact _sp values matching allDrillRows
+    // (display names like "Radha Singh" ≠ raw SP "radha arunkumar singh")
+    var zoneSPs = zoneToRawSPs([userZone]);
+    if (zoneSPs && zoneSPs.length > 0) return zoneSPs;
+    // Fallback to display names if zoneToRawSPs not available
     return repsRawOriginal
       .filter(function(r){ return !r.isBranch && r.zone === userZone; })
       .map(function(r){ return r.name; });
