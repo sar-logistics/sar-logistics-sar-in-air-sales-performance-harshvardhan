@@ -6850,6 +6850,11 @@ function computeDrillResult(entity, metric, month){
     return _repsRawNorms;
   }
 
+  // Pre-build repsRaw norms for zone/rep/RLS filter (null = no filter = show all)
+  var _rrNorms = null;
+  var _rrNormsRaw = getRepsRawNorms();
+  if (Object.keys(_rrNormsRaw).length > 0) _rrNorms = _rrNormsRaw;
+
   var matched = [];
   for (var i=0; i<allDrillRows.length; i++){
     var row = allDrillRows[i];
@@ -6858,6 +6863,9 @@ function computeDrillResult(entity, metric, month){
     if (_activeLobFilter && !isWeek) {
       if (_activeLobFilter.indexOf(row.lob) === -1) continue;
     }
+
+    // 1b. Zone/Rep/RLS filter (pre-built outside loop)
+    if (_rrNorms && !_rrNorms[row._sp]) continue;
 
     // 2. Metric/collection filter — no row exclusion based on metric
     // The LOB filter already restricts rows. Metric only affects the value summed.
