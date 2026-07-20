@@ -6876,9 +6876,7 @@ function computeDrillResult(entity, metric, month){
     // 4. Entity filter
     var sp = row._sp; // normalizeName(rawSalesPersonName) from server
     if (isGT){
-      // Grand Total — apply repsRaw filter (respects zone/rep/RLS filters)
-      var _gtNorms = getRepsRawNorms();
-      if (Object.keys(_gtNorms).length > 0 && !_gtNorms[sp]) continue;
+      // Grand Total — all rows pass (LOB filter already applied above)
     } else if (entity === 'Cross Sales'){
       // Cross Sales = unmapped rows only
       if (row._zone) continue;
