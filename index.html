@@ -6541,24 +6541,22 @@ function loadDrillData(callback){
       }
       // Bundle tradelane data from ping — store in cache keyed as 'all' so Yearly/all-data views are instant
       if (data.tradelane && data.tradelane.lobs) {
-        var _tlKey = 'all_all'; // matches fetchTradelaneData key for no dateFrom/dateTo
-        if (!_tradelaneCache[_tlKey]) {
-          data.tradelane._cacheKey = _tlKey;
-          _tradelaneCache[_tlKey] = data.tradelane;
-          // Also cache under full year range key
-          var _allM = months26;
-          if (_allM && _allM.length) {
-            var _yrKey = _allM[0] + '_' + _allM[_allM.length-1];
-            if (!_tradelaneCache[_yrKey]) _tradelaneCache[_yrKey] = data.tradelane;
-          }
-          // If on tradelane page and data not loaded yet, use it immediately
-          if (state.page === 'tradelane' && !tradelaneDataReady) {
-            tradelaneData = data.tradelane; tradelaneDataReady = true;
-          }
-          // Save to sessionStorage for instant load on refresh (session only, no quota issues)
-          try { sessionStorage.setItem('tl_cache', JSON.stringify(data.tradelane)); } catch(e) {}
-          _patchTradelaneCacheWithDrillCounts();
+        var _tlKey = 'all_all';
+        data.tradelane._cacheKey = _tlKey;
+        _tradelaneCache[_tlKey] = data.tradelane;
+        // Also cache under full year range key
+        var _allM = months26;
+        if (_allM && _allM.length) {
+          var _yrKey = _allM[0] + '_' + _allM[_allM.length-1];
+          _tradelaneCache[_yrKey] = data.tradelane;
         }
+        // If on tradelane page and data not loaded yet, use it immediately
+        if (state.page === 'tradelane' && !tradelaneDataReady) {
+          tradelaneData = data.tradelane; tradelaneDataReady = true;
+        }
+        // Always save to sessionStorage so next refresh is instant
+        try { sessionStorage.setItem('tl_cache', JSON.stringify(data.tradelane)); } catch(e) {}
+        _patchTradelaneCacheWithDrillCounts();
       }
       _drillDataLoading = false;
       _drillLoadAttempted = true;
