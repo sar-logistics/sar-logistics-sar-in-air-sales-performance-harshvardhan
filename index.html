@@ -7821,24 +7821,17 @@ document.addEventListener('click', function(ev){
       syncDateRangeToData();
     }
 
-    // Customer page: Yearly/Quarterly don't need a new fetch — same data, different aggregation
+    // Customer page: check if correct cache key is loaded for this view
     if(state.page==='customers'){
-      if (v === 'Yearly' || v === 'Quarterly') {
-        // Use whatever data is already loaded — aggregation is client-side
-        render(); return;
-      }
       var _k=getCustomerCacheKey();
       if(_customerCache[_k]){ customerData=_customerCache[_k]; customerDataReady=true; render(); }
-      else { customerDataReady=false; fetchCustomerData(function(){ render(); }); }
+      else { customerDataReady=false; render(); fetchCustomerData(function(){ render(); }); }
       return;
     }
     if(state.page==='agents'){
-      if (v === 'Yearly' || v === 'Quarterly') {
-        render(); return;
-      }
       var _ak=getAgentCacheKey();
       if(_agentCache[_ak]){ agentData=_agentCache[_ak]; agentDataReady=true; render(); }
-      else { agentDataReady=false; fetchAgentData(function(){ render(); }); }
+      else { agentDataReady=false; render(); fetchAgentData(function(){ render(); }); }
       return;
     }
     if(state.page==='tradelane'){
@@ -8205,8 +8198,7 @@ window.addEventListener('load', function() {
           opData = d.op; opDataReady = true;
           if (d.op.allDrillJobRows) {
             allPendencyDrillRows = d.op.allDrillJobRows;
-            try { lsSet('pendency_drill_rows', d.op.allDrillJobRows); } catch(e) {}
-            // pendencyDrillRows in-memory only (too large for localStorage)
+            // pendencyDrillRows kept in-memory only (18MB — too large for localStorage)
           }
           // Strip drill rows before saving op to localStorage (too large)
           var opToSave = Object.assign({}, d.op);
