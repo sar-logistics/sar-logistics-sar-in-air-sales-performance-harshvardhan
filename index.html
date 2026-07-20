@@ -342,14 +342,21 @@ function _showDashboardBody() {
     var latestKey = 'Apr-26_' + curMonBoot;
     var ac = lsGet('agents_' + latestKey) || lsGet('agents_' + defKey);
     if (ac && ac.success) { agentData = ac; agentDataReady = true; _agentCache[latestKey] = ac; }
-    // Load tradelane from localStorage for instant render
-    var tc = lsGet('tradelane_' + latestKey) || lsGet('tradelane_' + defKey) || lsGet('tradelane_all_all');
-    if (tc && tc.success) {
-      tradelaneData = tc; tradelaneDataReady = true;
-      var _tlBootKey = tc._cacheKey || latestKey;
-      _tradelaneCache[_tlBootKey] = tc;
-      _tradelaneCache['all_all'] = tc;
-    }
+    // Load tradelane from sessionStorage if available (saved from previous ping)
+    var tc = null;
+    try {
+      var _tlSess = sessionStorage.getItem('tl_cache');
+      if (_tlSess) {
+        tc = JSON.parse(_tlSess);
+        if (tc && tc.lobs) {
+          tc._cacheKey = 'all_all';
+          _tradelaneCache['all_all'] = tc;
+          tradelaneData = tc; tradelaneDataReady = true;
+          var _allM2 = months26;
+          if (_allM2 && _allM2.length) _tradelaneCache[_allM2[0]+'_'+_allM2[_allM2.length-1]] = tc;
+        }
+      }
+    } catch(e) {}
     var cusc = lsGet('customers_' + latestKey) || lsGet('customers_' + defKey);
     if (cusc && cusc.success) { customerData = cusc; customerDataReady = true; _customerCache[latestKey] = cusc; }
     // drillrows not stored in localStorage (too large) — loaded via ping response
@@ -1256,8 +1263,7 @@ function fetchTradelaneData(callback, force, overrideDateFrom, overrideDateTo) {
   }
   fetch(qs).then(function(r){ return r.json(); })
     .then(function(data){
-      if (data.success) { data._cacheKey=key; _tradelaneCache[key]=data; tradelaneData=data; tradelaneDataReady=true;
-        try { lsSet('tradelane_'+key, data); } catch(e) {} }
+      if (data.success) { data._cacheKey=key; _tradelaneCache[key]=data; tradelaneData=data; tradelaneDataReady=true; }
       if (callback) callback();
     })
     .catch(function(e){ console.warn('Tradelane failed:',e.message); if(callback) callback(); });
@@ -6549,8 +6555,8 @@ function loadDrillData(callback){
           if (state.page === 'tradelane' && !tradelaneDataReady) {
             tradelaneData = data.tradelane; tradelaneDataReady = true;
           }
-          // Save to localStorage for instant load next visit
-          try { lsSet('tradelane_all_all', data.tradelane); } catch(e) {}
+          // Save to sessionStorage for instant load on refresh (session only, no quota issues)
+          try { sessionStorage.setItem('tl_cache', JSON.stringify(data.tradelane)); } catch(e) {}
           _patchTradelaneCacheWithDrillCounts();
         }
       }
