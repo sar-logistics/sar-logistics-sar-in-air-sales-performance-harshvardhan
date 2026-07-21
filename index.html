@@ -366,6 +366,17 @@ function _showDashboardBody() {
     }
 
   })();
+  // Clean up orphaned localStorage keys from old versions
+  try {
+    var _keysToDelete = [];
+    for (var _lsk in localStorage) {
+      if (_lsk.startsWith('sar_') && !_lsk.endsWith('_'+CACHE_VERSION) && _lsk !== 'sar_user_session') {
+        _keysToDelete.push(_lsk);
+      }
+    }
+    _keysToDelete.forEach(function(k){ localStorage.removeItem(k); });
+    if (_keysToDelete.length > 0) console.log('[Cache] Cleaned', _keysToDelete.length, 'old keys');
+  } catch(e) {}
   console.log('[PERF] bootstrapSecondaryCache total', (performance.now()-_tBoot).toFixed(1)+'ms');
 
   // Load drill rows in background immediately — so first drill click is instant
@@ -774,7 +785,7 @@ function fetchLiveData(callback, force){
           // Save with lobData included so next boot has correct numbers from first render
           setCachedSalesData({ repsRaw: repsRawOriginal, zones: zonesRaw, months: months26 });
           if (data.allDrillRows && data.allDrillRows.length > 0 && !allDrillRows) {
-            allDrillRows = dedupDrillRows(data.allDrillRows); _patchTgOnDrillRows(allDrillRows);
+            allDrillRows = dedupDrillRows(data.allDrillRows); _patchTgOnDrillRows(allDrillRows); _drillIdx = _buildDrillIndex(allDrillRows);
             // drillrows kept in-memory only (too large for localStorage)
           }
           // If allDrillRows not in sales response, fetch it silently in background
@@ -1908,7 +1919,7 @@ function zoneEntity(zoneName){
     avatarBg: 'oklch(0.5 0.14 ' + zoneHue(zoneName) + ')',
     isZone: true, zone: zoneName,
     ship: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
-                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(_isCross?!r._zone:r._zone===zoneName);}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
+                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; if(_drillIdx&&_drillIdx.byMonth[_ml]){var _mIdxs=_drillIdx.byMonth[_ml];var cnt=0;for(var _xi=0;_xi<_mIdxs.length;_xi++){var _xr=allDrillRows[_mIdxs[_xi]];if(_fl&&_fl.indexOf(_xr.lob)===-1)continue;if(_isCross?_xr._zone:_xr._zone!==zoneName)continue;cnt++;}return cnt;} return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(_isCross?!r._zone:r._zone===zoneName);}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
     gp:   isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){return sum(zReps.map(function(r){return r.gp[i]||0;}));}),
     tons: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
@@ -2487,7 +2498,7 @@ function kpiRow(M){
   var wkeys = isWeeklyView ? filteredWeekKeys() : null;
 
   var shipData  = isWeeklyView
-    ? wkeys.map(function(k){ if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null;return allDrillRows.filter(function(r){return r._wk===k&&(!_fl||_fl.indexOf(r.lob)>-1);}).length;} return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0); })
+    ? wkeys.map(function(k){ if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; if(_drillIdx&&_drillIdx.byWk[k]){var _wkRows=_drillIdx.byWk[k];return _fl?_wkRows.filter(function(i){return _fl.indexOf(allDrillRows[i].lob)>-1;}).length:_wkRows.length;} return allDrillRows.filter(function(r){return r._wk===k&&(!_fl||_fl.indexOf(r.lob)>-1);}).length;} return repsRaw.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0); })
     : idxs.map(function(i){ return repsRaw.reduce(function(s,r){return s+(r.ship[i]||0);},0); });
   var teuData   = isWeeklyView
     ? wkeys.map(function(k){ return repsRaw.reduce(function(s,r){ return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0); },0); })
@@ -6435,6 +6446,87 @@ function renderKeepTopbar(){
 // dashboard data arrives. Once loaded, every drill click filters this array
 // in the browser — zero server round-trips, instant response.
 var allDrillRows = null;
+
+// Drill indexes — built once when allDrillRows loads, used everywhere instead of full scans
+var _drillIdx = null; // { bySp, byZone, byMonth, byTg, byWk, byLob, byCust, byAgent }
+
+function _buildDrillIndex(rows) {
+  var idx = {
+    bySp:    {},  // sp → [i, ...]
+    byZone:  {},  // zone → [i, ...]
+    byMonth: {},  // month → [i, ...]
+    byTg:    {},  // tradelane group → [i, ...]
+    byWk:    {},  // week key → [i, ...]
+    byLob:   {},  // lob → [i, ...]
+    byCust:  {},  // customer lower → [i, ...]
+    byAgent: {}   // agent lower → [i, ...]
+  };
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    // sp
+    if (r._sp) { if (!idx.bySp[r._sp]) idx.bySp[r._sp]=[]; idx.bySp[r._sp].push(i); }
+    // zone
+    var z = r._zone || '__cross__';
+    if (!idx.byZone[z]) idx.byZone[z]=[]; idx.byZone[z].push(i);
+    // month
+    if (r._ml) { if (!idx.byMonth[r._ml]) idx.byMonth[r._ml]=[]; idx.byMonth[r._ml].push(i); }
+    // tradelane group
+    if (r._tg) { if (!idx.byTg[r._tg]) idx.byTg[r._tg]=[]; idx.byTg[r._tg].push(i); }
+    // week
+    if (r._wk) { if (!idx.byWk[r._wk]) idx.byWk[r._wk]=[]; idx.byWk[r._wk].push(i); }
+    // lob
+    if (r.lob) { if (!idx.byLob[r.lob]) idx.byLob[r.lob]=[]; idx.byLob[r.lob].push(i); }
+    // customer
+    var cust = (r.customer||'').toLowerCase().trim();
+    if (cust) { if (!idx.byCust[cust]) idx.byCust[cust]=[]; idx.byCust[cust].push(i); }
+    // agent
+    var da = (r.destAgent||'').toLowerCase().trim();
+    var oa = (r.originAgent||'').toLowerCase().trim();
+    if (da) { if (!idx.byAgent[da]) idx.byAgent[da]=[]; idx.byAgent[da].push(i); }
+    if (oa && oa !== da) { if (!idx.byAgent[oa]) idx.byAgent[oa]=[]; idx.byAgent[oa].push(i); }
+  }
+  return idx;
+}
+
+// Helper: get row indices matching multiple criteria (AND logic via smallest set first)
+function _drillQuery(filters) {
+  // filters: { sp: [...], zone: [...], month: [...], lob: [...], tg: [...], wk: [...] }
+  if (!_drillIdx || !allDrillRows) return null; // fallback to full scan
+  var sets = [];
+  if (filters.sp && filters.sp.length > 0) {
+    var spSet = new Set();
+    filters.sp.forEach(function(sp){ (_drillIdx.bySp[sp]||[]).forEach(function(i){ spSet.add(i); }); });
+    sets.push(spSet);
+  }
+  if (filters.zone && filters.zone.length > 0) {
+    var zSet = new Set();
+    filters.zone.forEach(function(z){ (_drillIdx.byZone[z]||[]).forEach(function(i){ zSet.add(i); }); });
+    sets.push(zSet);
+  }
+  if (filters.month && filters.month.length > 0) {
+    var mSet = new Set();
+    filters.month.forEach(function(m){ (_drillIdx.byMonth[m]||[]).forEach(function(i){ mSet.add(i); }); });
+    sets.push(mSet);
+  }
+  if (filters.lob && filters.lob.length > 0) {
+    var lSet = new Set();
+    filters.lob.forEach(function(l){ (_drillIdx.byLob[l]||[]).forEach(function(i){ lSet.add(i); }); });
+    sets.push(lSet);
+  }
+  if (filters.wk) {
+    sets.push(new Set(_drillIdx.byWk[filters.wk]||[]));
+  }
+  if (sets.length === 0) return null; // no filter, fallback
+  // Intersect: start with smallest set
+  sets.sort(function(a,b){ return a.size - b.size; });
+  var result = sets[0];
+  for (var i = 1; i < sets.length; i++) {
+    var next = new Set();
+    result.forEach(function(idx){ if (sets[i].has(idx)) next.add(idx); });
+    result = next;
+  }
+  return Array.from(result).map(function(i){ return allDrillRows[i]; });
+}
 var _drillDataLoading = false;
 var _drillDataCallbacks = [];
 var _drillLoadAttempted = false;
@@ -6639,7 +6731,7 @@ function loadDrillData(callback){
     .then(function(r){ return r.json(); })
     .then(function(data){
       if (data.sales && data.sales.allDrillRows && data.sales.allDrillRows.length > 0) {
-        allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
+        allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows); _drillIdx = _buildDrillIndex(allDrillRows);
         _custLobRepMapCache = {}; _agentLobRepMapCache = {}; // clear cached maps — data changed
         _patchTradelaneCacheWithDrillCounts();
         // Re-render tradelane page if it was showing stale cached data
@@ -6837,13 +6929,12 @@ function computeDrillResult(entity, metric, month){
   // Instead use: for each rep in repsRaw, check if any allDrillRow._sp matches by
   // trying normalizeName on the rep's name (handles "Name | Code" format by stripping pipe).
   // Build lookup: Set of normSP values that belong to current repsRaw
-  // Pre-build zone/rep/RLS SP filter using zoneToRawSPs (same as zone rows use)
-  var _spFilter = null;
+  // Build SP/Zone/RLS filters
   var _fz = state.filterZones || [];
   var _fr = state.filterReps || [];
-  // For RLS: use zoneToRawSPs on the user's zone — gives exact _sp values matching allDrillRows
   var _rlsZone = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager') ? (currentUser.zone||'') : '';
   var _rlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(currentUser.name||'') : '';
+  var _spFilter = null;
   if (_rlsZone) {
     _spFilter = zoneToRawSPs([_rlsZone]) || [];
   } else if (_rlsName) {
@@ -6859,6 +6950,40 @@ function computeDrillResult(entity, metric, month){
   }
   var _spFilterSet = _spFilter ? {} : null;
   if (_spFilter) _spFilter.forEach(function(sp){ _spFilterSet[sp] = true; });
+
+  // ── FAST PATH: use drill index for common cases ──────────────────
+  // Build query filters for index lookup
+  var _idxFilters = {};
+  var _activeLobsForIdx = _activeLobFilter ? _activeLobFilter : null;
+  if (_activeLobsForIdx) _idxFilters.lob = _activeLobsForIdx;
+  if (_spFilter && _spFilter.length > 0) _idxFilters.sp = _spFilter;
+  // Month filter
+  var _idxMonths = [];
+  if (typeof col === 'string' && col.startsWith('RANGE:')) {
+    var _rp = col.split(':'); var _fi = FY_ALL.indexOf(_rp[1]), _ti = FY_ALL.indexOf(_rp[2]);
+    if (_fi >= 0 && _ti >= 0) _idxMonths = FY_ALL.slice(_fi, _ti+1);
+  } else if (col && col !== 'FY Total' && !col.startsWith('RANGE:')) {
+    _idxMonths = [col];
+  }
+  if (_idxMonths.length > 0) _idxFilters.month = _idxMonths;
+  // Try indexed query for Grand Total (most common fast case)
+  if (isGT && _drillIdx && Object.keys(_idxFilters).length > 0) {
+    var _idxRows = _drillQuery(_idxFilters);
+    if (_idxRows !== null) {
+      var _idxResult = [];
+      for (var ii = 0; ii < _idxRows.length; ii++) {
+        var _ir = _idxRows[ii];
+        if (metric === 'Shipments') _idxResult.push({ row: _ir });
+        else {
+          // Apply metric filter
+          var _isDone = _ir.financialLock || false;
+          _idxResult.push({ row: _ir });
+        }
+      }
+      return { rows: _idxRows, count: _idxRows.length };
+    }
+  }
+  // ── END FAST PATH ─────────────────────────────────────────────────
 
   var _repsRawNorms = null; // built lazily only when needed
 
