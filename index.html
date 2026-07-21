@@ -8480,34 +8480,15 @@ window.addEventListener('load', function() {
 
   // ── Instant session restore ──────────────────────────────────────────────
   // If we have a cached user session, skip Google OAuth entirely and render
-  // the dashboard immediately — zero network calls before first paint.
-  try {
-    var savedSession = localStorage.getItem('sar_user_session');
-    if (savedSession) {
-      var sess = JSON.parse(savedSession);
-      // Session valid for 8 hours
-      if (sess && sess.user && sess._savedAt && (Date.now() - sess._savedAt) < 8 * 60 * 60 * 1000) {
-        currentUser = sess.user;
-        showDashboard(true); // true = instant, skip login animation
-        // Still init Google auth in background for token refresh
-        var interval2 = setInterval(function() {
-          if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
-            clearInterval(interval2); initGoogleAuth();
-          }
-        }, 100);
-        return; // dashboard already showing — skip login screen flow
-      } else {
-        localStorage.removeItem('sar_user_session'); // expired
-      }
-    }
-  } catch(e) {}
-
-  var interval = setInterval(function() {
-    if (typeof google !== 'undefined' && google.accounts && google.accounts.oauth2) {
-      clearInterval(interval);
-      initGoogleAuth();
-    }
-  }, 100);
+  // AUTH BYPASS — preview/testing mode (not for production)
+  currentUser = {
+    name: 'Harshvardhan Rawat',
+    email: 'str16mum.cor@sarlogisolutions.com',
+    role: 'admin',
+    zone: '',
+    photoUrl: ''
+  };
+  showDashboard(true);
 
   // Keep-alive ping every 2 minutes — prevents Vercel cold starts.
   // First ping also returns finance+op pendency data bundled in the response
