@@ -341,7 +341,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-22T-air-v3-lobdata-rev";
+const DEPLOY_TS = "2026-07-22T-air-v4-lobdata-monthly-rev";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -899,6 +899,7 @@ async function computeSalesAggregate(db) {
         repLobData[repKey][lobKey][monthLabel].tons += tons;
         repLobData[repKey][lobKey][monthLabel].teu  += teu;
         repLobData[repKey][lobKey][monthLabel].lcl  += lcl;
+        repLobData[repKey][lobKey][monthLabel].rev += rev; repLobData[repKey][lobKey][monthLabel].revBilled += billedRev; repLobData[repKey][lobKey][monthLabel].revProv += provRev;
         // Week-level LOB data for LOB-filtered weekly view
         if (rowDate) {
           const wk = isoWeekInfo(rowDate).key;
