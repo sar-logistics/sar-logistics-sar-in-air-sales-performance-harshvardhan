@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v82'; // bump on every deploy to wipe stale localStorage
+var CACHE_VERSION = 'v83'; // bump on every deploy to wipe stale localStorage
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -5486,8 +5486,12 @@ function tableRows(){
 
     if (shipOpen) {
       rows.push(metric('Tons (Air)',         1, 'tons', '#5B8DEF', dispTons, sum(dispTons), false));
-      rows.push(metric('TEUs (Ocean)',       1, 'teu',  '#5B8DEF', teus, sum(teus), false));
-      rows.push(metric('LCL (Ocean in CBM)', 1, 'cbm',  '#9AA4B2', lcl, sum(lcl), false));
+      // TEUs and LCL only relevant when Ocean/ISO Tank LOBs are active
+      var _hasOceanLob = !state.filterLobs||state.filterLobs.length===0||state.filterLobs.some(function(l){return l.indexOf('SEA')>-1||l.indexOf('ISOTANK')>-1;});
+      if (_hasOceanLob) {
+        rows.push(metric('TEUs (Ocean)',       1, 'teu',  '#5B8DEF', teus, sum(teus), false));
+        rows.push(metric('LCL (Ocean in CBM)', 1, 'cbm',  '#9AA4B2', lcl, sum(lcl), false));
+      }
     }
 
     var revOpen = state.revOpen[e.name] === true;
