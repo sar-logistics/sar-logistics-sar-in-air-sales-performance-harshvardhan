@@ -341,7 +341,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-22T-air-v2-revenue-projection";
+const DEPLOY_TS = "2026-07-22T-air-v3-lobdata-rev";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -891,7 +891,7 @@ async function computeSalesAggregate(db) {
         const lobKey = cls.kind + (cls.direction ? " " + cls.direction : "");
         if (!repLobData[repKey]) repLobData[repKey] = {};
         if (!repLobData[repKey][lobKey]) repLobData[repKey][lobKey] = {};
-        if (!repLobData[repKey][lobKey][monthLabel]) repLobData[repKey][lobKey][monthLabel] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+        if (!repLobData[repKey][lobKey][monthLabel]) repLobData[repKey][lobKey][monthLabel] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
         repLobData[repKey][lobKey][monthLabel].gp   += gp;
         repLobData[repKey][lobKey][monthLabel].gpProv   += gpProv;
         repLobData[repKey][lobKey][monthLabel].gpActual += gpActual;
@@ -903,7 +903,7 @@ async function computeSalesAggregate(db) {
         if (rowDate) {
           const wk = isoWeekInfo(rowDate).key;
           if (!repLobData[repKey][lobKey]._week) repLobData[repKey][lobKey]._week = {};
-          if (!repLobData[repKey][lobKey]._week[wk]) repLobData[repKey][lobKey]._week[wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+          if (!repLobData[repKey][lobKey]._week[wk]) repLobData[repKey][lobKey]._week[wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
           repLobData[repKey][lobKey]._week[wk].gp += gp;
           repLobData[repKey][lobKey]._week[wk].gpProv += gpProv;
           repLobData[repKey][lobKey]._week[wk].gpActual += gpActual;
@@ -911,6 +911,7 @@ async function computeSalesAggregate(db) {
           repLobData[repKey][lobKey]._week[wk].tons += tons;
           repLobData[repKey][lobKey]._week[wk].teu += teu;
           repLobData[repKey][lobKey]._week[wk].lcl += lcl;
+        repLobData[repKey][lobKey]._week[wk].rev += rev; repLobData[repKey][lobKey]._week[wk].revBilled += billedRev; repLobData[repKey][lobKey]._week[wk].revProv += provRev;
         }
       }
 
