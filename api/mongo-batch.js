@@ -341,7 +341,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-22T-air-v12-branch-lobdata-rev";
+const DEPLOY_TS = "2026-07-22T-air-v13-cache-bust";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
