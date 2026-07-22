@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v90'; // bump on every deploy to wipe stale localStorage
+var CACHE_VERSION = 'v91'; // bump on every deploy to wipe stale localStorage
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -1919,7 +1919,7 @@ function zoneEntity(zoneName){
     avatarBg: 'oklch(0.5 0.14 ' + zoneHue(zoneName) + ')',
     isZone: true, zone: zoneName,
     ship: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
-                   : idxs.map(function(i){ return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
+                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(_isCross?!r._zone:r._zone===zoneName);}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
     gp:   isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){return sum(zReps.map(function(r){return r.gp[i]||0;}));}),
     tons: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
