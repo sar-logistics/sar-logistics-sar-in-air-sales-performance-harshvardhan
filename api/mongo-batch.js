@@ -341,7 +341,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-22T-air-v8-rev-split-correct";
+const DEPLOY_TS = "2026-07-22T-air-v9-rev-billed-always";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -525,7 +525,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           volumeUnit:   job["Volume Unit"]         || "",
           operationLock: job["Operation Lock"]     || "",
           financialLock: job["Financial Lock"]     || "",
-          g: rowGP, r: isProvisional ? provRevenue : billedRevenue, x: postedCost,
+          g: rowGP, r: billedRevenue, x: postedCost,
           t: parseFloat(job["Container TEU"] || 0) || 0,
           chargeableWeight,
           chargeableWeightUnit,
@@ -789,11 +789,10 @@ async function computeSalesAggregate(db) {
       const gpActual = isProvisional ? 0 : gp;
       const billedRev = parseFloat(job["Billed Revenue (C)"]      || 0) || 0;
       const provRev   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      // rev = pick-one (FL/OL logic) — locked→billed, unlocked→prov
-      const rev = isProvisional ? provRev : billedRev;
-      // revBilled = locked jobs only, revProv = unlocked jobs only → revBilled+revProv = rev
-      const revBilledAmt = isProvisional ? 0 : billedRev;
-      const revProvAmt   = isProvisional ? provRev : 0;
+      // Revenue = Billed Revenue (C) always — matches sheet P&L report
+      const rev = billedRev;
+      const revBilledAmt = isProvisional ? 0 : billedRev;  // locked jobs only
+      const revProvAmt   = isProvisional ? provRev : 0;     // unlocked jobs only
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
