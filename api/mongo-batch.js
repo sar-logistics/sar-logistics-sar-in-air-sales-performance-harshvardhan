@@ -341,7 +341,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-22T-air-rev-v2-billed-only";
+const DEPLOY_TS = "2026-07-22T-air-rev-v3-pickone";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -525,7 +525,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           volumeUnit:   job["Volume Unit"]         || "",
           operationLock: job["Operation Lock"]     || "",
           financialLock: job["Financial Lock"]     || "",
-          g: rowGP, r: billedRevenue, x: postedCost,
+          g: rowGP, r: isProvisional ? provRevenue : billedRevenue, x: postedCost,
           t: parseFloat(job["Container TEU"] || 0) || 0,
           chargeableWeight,
           chargeableWeightUnit,
@@ -789,10 +789,11 @@ async function computeSalesAggregate(db) {
       const gpActual = isProvisional ? 0 : gp;
       const billedRev = parseFloat(job["Billed Revenue (C)"]      || 0) || 0;
       const provRev   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      // Revenue = Billed Revenue (C) always — matches sheet P&L
-      const rev = billedRev;
+      // Revenue = pick-one: locked → Billed Revenue (C), unlocked → Provisional Revenue (A)
+      // Billed sub-row = locked jobs only, Provisional sub-row = unlocked jobs only → adds up to Revenue
+      const rev = isProvisional ? provRev : billedRev;
       const revBilledAmt = isProvisional ? 0 : billedRev;  // locked jobs → Billed sub-row
-      const revProvAmt   = isProvisional ? billedRev : 0;  // unlocked jobs → Provisional sub-row
+      const revProvAmt   = isProvisional ? provRev : 0;    // unlocked jobs → Provisional sub-row
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
