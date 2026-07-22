@@ -341,7 +341,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-22T-air-rev-v1";
+const DEPLOY_TS = "2026-07-22T-air-rev-v2-billed-only";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -789,9 +789,10 @@ async function computeSalesAggregate(db) {
       const gpActual = isProvisional ? 0 : gp;
       const billedRev = parseFloat(job["Billed Revenue (C)"]      || 0) || 0;
       const provRev   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      const rev = billedRev + provRev;
-      const revBilledAmt = billedRev;
-      const revProvAmt   = provRev;
+      // Revenue = Billed Revenue (C) always — matches sheet P&L
+      const rev = billedRev;
+      const revBilledAmt = isProvisional ? 0 : billedRev;  // locked jobs → Billed sub-row
+      const revProvAmt   = isProvisional ? billedRev : 0;  // unlocked jobs → Provisional sub-row
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
