@@ -341,7 +341,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-22T-air-v4-lobdata-monthly-rev";
+const DEPLOY_TS = "2026-07-22T-air-v5-rev-fl-logic";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -525,7 +525,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           volumeUnit:   job["Volume Unit"]         || "",
           operationLock: job["Operation Lock"]     || "",
           financialLock: job["Financial Lock"]     || "",
-          g: rowGP, r: billedRevenue + provRevenue, x: postedCost,
+          g: rowGP, r: isProvisional ? provRevenue : billedRevenue, x: postedCost,
           t: parseFloat(job["Container TEU"] || 0) || 0,
           chargeableWeight,
           chargeableWeightUnit,
@@ -789,7 +789,8 @@ async function computeSalesAggregate(db) {
       const gpActual = isProvisional ? 0 : gp;
       const billedRev = parseFloat(job["Billed Revenue (C)"]      || 0) || 0;
       const provRev   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      const rev = billedRev + provRev;
+      // Revenue uses same lock logic as GP: FL for Air, OL for Sea/ISO
+      const rev = isProvisional ? provRev : billedRev;
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
