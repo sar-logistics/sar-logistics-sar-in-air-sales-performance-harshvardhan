@@ -341,7 +341,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-16T-auto-cache-bust-v4"; // bump to force cache rebuild on redeploy
+const DEPLOY_TS = "2026-07-22T-air-rev-v1";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -750,6 +750,7 @@ async function computeSalesAggregate(db) {
     db.collection(cn).find({}, { projection: {
       "Sales Person":1, "Job Date":1, "LOB":1, "Location":1, "Customer":1,
       "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
+      "Billed Revenue (C)":1, "Provisional Revenue (A)":1,
       "Financial Lock":1, "Operation Lock":1,
       "ETD Loading Port":1, "ETA Discharge":1,
       "Chargeable Weight":1, "Chargeable Weight Unit":1,
@@ -786,6 +787,11 @@ async function computeSalesAggregate(db) {
       const { gp, isProvisional } = pickGP(job, cls);
       const gpProv   = isProvisional ? gp : 0;
       const gpActual = isProvisional ? 0 : gp;
+      const billedRev = parseFloat(job["Billed Revenue (C)"]      || 0) || 0;
+      const provRev   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
+      const rev = billedRev + provRev;
+      const revBilledAmt = billedRev;
+      const revProvAmt   = provRev;
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
@@ -826,7 +832,7 @@ async function computeSalesAggregate(db) {
 
         const branch = String(job["Location"] || "Unspecified").trim() || "Unspecified";
         if (!branchMonthData[branch]) branchMonthData[branch] = {};
-        if (!branchMonthData[branch][monthLabel]) branchMonthData[branch][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0 };
+        if (!branchMonthData[branch][monthLabel]) branchMonthData[branch][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0, rev: 0, revBilled: 0, revProv: 0 };
         branchMonthData[branch][monthLabel].gp   += gp;
         branchMonthData[branch][monthLabel].gpProv   += gpProv;
         branchMonthData[branch][monthLabel].gpActual += gpActual;
@@ -834,20 +840,22 @@ async function computeSalesAggregate(db) {
         branchMonthData[branch][monthLabel].tons += tons;
         branchMonthData[branch][monthLabel].teu  += teu;
         branchMonthData[branch][monthLabel].lcl  += lcl;
+        branchMonthData[branch][monthLabel].rev += rev; branchMonthData[branch][monthLabel].revBilled += revBilledAmt; branchMonthData[branch][monthLabel].revProv += revProvAmt;
         // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
         if (rowDate) {
           const wk = isoWeekInfo(rowDate).key;
           if (!branchWeekData[branch]) branchWeekData[branch] = {};
-          if (!branchWeekData[branch][wk]) branchWeekData[branch][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+          if (!branchWeekData[branch][wk]) branchWeekData[branch][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
           branchWeekData[branch][wk].gp += gp; branchWeekData[branch][wk].gpProv += gpProv; branchWeekData[branch][wk].gpActual += gpActual; branchWeekData[branch][wk].ship += 1;
           branchWeekData[branch][wk].tons += tons; branchWeekData[branch][wk].teu += teu; branchWeekData[branch][wk].lcl += lcl;
+          branchWeekData[branch][wk].rev += rev; branchWeekData[branch][wk].revBilled += revBilledAmt; branchWeekData[branch][wk].revProv += revProvAmt;
         }
         // LOB accumulation (Sea Export/Import, ISOTANK Export/Import, Air Export/Import)
         {
           const lobKey = cls.kind + (cls.direction ? " " + cls.direction : "");
           if (!branchLobData[branch]) branchLobData[branch] = {};
           if (!branchLobData[branch][lobKey]) branchLobData[branch][lobKey] = {};
-          if (!branchLobData[branch][lobKey][monthLabel]) branchLobData[branch][lobKey][monthLabel] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+          if (!branchLobData[branch][lobKey][monthLabel]) branchLobData[branch][lobKey][monthLabel] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
           branchLobData[branch][lobKey][monthLabel].gp   += gp;
           branchLobData[branch][lobKey][monthLabel].gpProv   += gpProv;
           branchLobData[branch][lobKey][monthLabel].gpActual += gpActual;
@@ -855,6 +863,7 @@ async function computeSalesAggregate(db) {
           branchLobData[branch][lobKey][monthLabel].tons += tons;
           branchLobData[branch][lobKey][monthLabel].teu  += teu;
           branchLobData[branch][lobKey][monthLabel].lcl  += lcl;
+          branchLobData[branch][lobKey][monthLabel].rev += rev; branchLobData[branch][lobKey][monthLabel].revBilled += revBilledAmt; branchLobData[branch][lobKey][monthLabel].revProv += revProvAmt;
         }
         continue;
       }
@@ -862,7 +871,7 @@ async function computeSalesAggregate(db) {
       const repKey = mapped.displayName + "||" + mapped.zone;
 
       if (!repMonthData[repKey]) repMonthData[repKey] = {};
-      if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0 };
+      if (!repMonthData[repKey][monthLabel]) repMonthData[repKey][monthLabel] = { gp: 0, gpProv: 0, gpActual: 0, ship: 0, tons: 0, teu: 0, lcl: 0, rev: 0, revBilled: 0, revProv: 0 };
       repMonthData[repKey][monthLabel].gp   += gp;
       repMonthData[repKey][monthLabel].gpProv   += gpProv;
       repMonthData[repKey][monthLabel].gpActual += gpActual;
@@ -870,20 +879,22 @@ async function computeSalesAggregate(db) {
       repMonthData[repKey][monthLabel].tons += tons;
       repMonthData[repKey][monthLabel].teu  += teu;
       repMonthData[repKey][monthLabel].lcl  += lcl;
+      repMonthData[repKey][monthLabel].rev += rev; repMonthData[repKey][monthLabel].revBilled += revBilledAmt; repMonthData[repKey][monthLabel].revProv += revProvAmt;
       // Weekly accumulation — keyed by true ISO week (Mon-Sun), e.g. "2026-W14"
       if (rowDate) {
         const wk = isoWeekInfo(rowDate).key;
         if (!repWeekData[repKey]) repWeekData[repKey] = {};
-        if (!repWeekData[repKey][wk]) repWeekData[repKey][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+        if (!repWeekData[repKey][wk]) repWeekData[repKey][wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
         repWeekData[repKey][wk].gp += gp; repWeekData[repKey][wk].gpProv += gpProv; repWeekData[repKey][wk].gpActual += gpActual; repWeekData[repKey][wk].ship += 1;
         repWeekData[repKey][wk].tons += tons; repWeekData[repKey][wk].teu += teu; repWeekData[repKey][wk].lcl += lcl;
+        repWeekData[repKey][wk].rev += rev; repWeekData[repKey][wk].revBilled += revBilledAmt; repWeekData[repKey][wk].revProv += revProvAmt;
       }
       // LOB accumulation (monthly + weekly)
       {
         const lobKey = cls.kind + (cls.direction ? " " + cls.direction : "");
         if (!repLobData[repKey]) repLobData[repKey] = {};
         if (!repLobData[repKey][lobKey]) repLobData[repKey][lobKey] = {};
-        if (!repLobData[repKey][lobKey][monthLabel]) repLobData[repKey][lobKey][monthLabel] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+        if (!repLobData[repKey][lobKey][monthLabel]) repLobData[repKey][lobKey][monthLabel] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
         repLobData[repKey][lobKey][monthLabel].gp   += gp;
         repLobData[repKey][lobKey][monthLabel].gpProv   += gpProv;
         repLobData[repKey][lobKey][monthLabel].gpActual += gpActual;
@@ -891,11 +902,12 @@ async function computeSalesAggregate(db) {
         repLobData[repKey][lobKey][monthLabel].tons += tons;
         repLobData[repKey][lobKey][monthLabel].teu  += teu;
         repLobData[repKey][lobKey][monthLabel].lcl  += lcl;
+        repLobData[repKey][lobKey][monthLabel].rev += rev; repLobData[repKey][lobKey][monthLabel].revBilled += revBilledAmt; repLobData[repKey][lobKey][monthLabel].revProv += revProvAmt;
         // Week-level LOB data for LOB-filtered weekly view
         if (rowDate) {
           const wk = isoWeekInfo(rowDate).key;
           if (!repLobData[repKey][lobKey]._week) repLobData[repKey][lobKey]._week = {};
-          if (!repLobData[repKey][lobKey]._week[wk]) repLobData[repKey][lobKey]._week[wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0 };
+          if (!repLobData[repKey][lobKey]._week[wk]) repLobData[repKey][lobKey]._week[wk] = { gp:0, gpProv:0, gpActual:0, ship:0, tons:0, teu:0, lcl:0, rev:0, revBilled:0, revProv:0 };
           repLobData[repKey][lobKey]._week[wk].gp += gp;
           repLobData[repKey][lobKey]._week[wk].gpProv += gpProv;
           repLobData[repKey][lobKey]._week[wk].gpActual += gpActual;
@@ -903,6 +915,7 @@ async function computeSalesAggregate(db) {
           repLobData[repKey][lobKey]._week[wk].tons += tons;
           repLobData[repKey][lobKey]._week[wk].teu += teu;
           repLobData[repKey][lobKey]._week[wk].lcl += lcl;
+          repLobData[repKey][lobKey]._week[wk].rev += rev; repLobData[repKey][lobKey]._week[wk].revBilled += revBilledAmt; repLobData[repKey][lobKey]._week[wk].revProv += revProvAmt;
         }
       }
 
@@ -939,6 +952,9 @@ async function computeSalesAggregate(db) {
       email: meta.email,
       hue:   zoneHue(meta.zone),
       gp, gpProv, gpActual, ship, tons, teu, lcl,
+      rev:       activeMonths.map(m => monthData[m]?.rev       || 0),
+      revBilled: activeMonths.map(m => monthData[m]?.revBilled || 0),
+      revProv:   activeMonths.map(m => monthData[m]?.revProv   || 0),
       tank:  activeMonths.map(() => 0),
       tgt:          repTgt,
       weeklyTgt:    meta.weeklyTarget  || 0,
@@ -968,6 +984,9 @@ async function computeSalesAggregate(db) {
       email: "",
       hue:   zoneHue(CROSS_SALES_ZONE + branchName),
       gp, gpProv, gpActual, ship, tons, teu, lcl,
+      rev:       activeMonths.map(m => monthData[m]?.rev       || 0),
+      revBilled: activeMonths.map(m => monthData[m]?.revBilled || 0),
+      revProv:   activeMonths.map(m => monthData[m]?.revProv   || 0),
       tank:  activeMonths.map(() => 0),
       tgt:   0,
       isBranch: true,
