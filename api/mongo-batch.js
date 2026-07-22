@@ -341,7 +341,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-22T-air-v1-revenue";
+const DEPLOY_TS = "2026-07-22T-air-v2-revenue-projection";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -750,6 +750,7 @@ async function computeSalesAggregate(db) {
     db.collection(cn).find({}, { projection: {
       "Sales Person":1, "Job Date":1, "LOB":1, "Location":1, "Customer":1,
       "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
+      "Billed Revenue (C)":1, "Provisional Revenue (A)":1,
       "Financial Lock":1, "Operation Lock":1,
       "ETD Loading Port":1, "ETA Discharge":1,
       "Chargeable Weight":1, "Chargeable Weight Unit":1,
