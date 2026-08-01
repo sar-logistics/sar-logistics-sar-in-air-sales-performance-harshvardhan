@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v91'; // bump on every deploy to wipe stale localStorage
+var CACHE_VERSION = 'v92'; // bump on every deploy to wipe stale localStorage
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -1801,8 +1801,11 @@ function model(){
         && (!_fz_sg||((_fz_sg.indexOf('Cross Sales')>-1&&!r._zone)||(_fz_sg.indexOf(r._zone)>-1)))
         && (!_fr_sg||(_fr_sg.indexOf(r._sp)>-1));
     }).length;
+  } else if (_fl_sg) {
+    // lobData available instantly from localStorage — use as fast fallback
+    shipGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){var m=months26[i]; return _fl_sg.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].ship)||0);},0);}));}));
   } else {
-    shipGrand = (_lobDataFetched&&_fl_sg) ? sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){var m=months26[i]; return _fl_sg.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].ship)||0);},0);}));})) : sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return r.ship[i]||0;}));}));
+    shipGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return r.ship[i]||0;}));}));
   }
   var tonsGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.tons&&r.tons[i])||0;}));}));
   var tgtGrand  = (_mRole === 'sales rep' || _frNorm)
@@ -1848,6 +1851,8 @@ function grandEntity(){
       });
       return idxs.map(function(i){ var _ml=months26[i];
         if(allDrillRows&&allDrillRows.length>0) return allDrillRows.filter(function(r){return drillMatch(r,_ml,false);}).length;
+        // LOB filter active — use lobData as instant fallback
+        if(_fl&&_lobDataFetched) return sum(repsRaw.map(function(r){return _fl.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][_ml]&&r.lobData[lob][_ml].ship)||0);},0);}));
         return sum(repsRaw.map(function(r){return r.ship[i]||0;}));
       });
     })(),
