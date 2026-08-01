@@ -172,7 +172,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v86'; // bump on every deploy to wipe stale localStorage
+var CACHE_VERSION = 'v87'; // bump on every deploy to wipe stale localStorage
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -8169,7 +8169,8 @@ document.addEventListener('click', function(ev){
     var anyExpanded = zones.some(function(z){ return state.zoneOpen[z] !== false; });
     // Also check if any shipment detail rows are open
     var anyShipOpen = Object.keys(state.shipOpen||{}).some(function(k){ return state.shipOpen[k]; });
-    var anyOpen = anyExpanded || anyShipOpen;
+    var anyRevOpen  = Object.keys(state.revOpen||{}).some(function(k){ return state.revOpen[k]; });
+    var anyOpen = anyExpanded || anyShipOpen || anyRevOpen;
     var newVal = anyOpen ? false : true;
     // Toggle zones
     zones.forEach(function(z){ state.zoneOpen[z] = newVal; });
