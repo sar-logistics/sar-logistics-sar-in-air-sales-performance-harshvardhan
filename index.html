@@ -4260,8 +4260,10 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var _branchLocIndex = {};
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
     var _isOLPage = lockType === 'Operation Lock';
+    var _blFl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
     allPendencyDrillRows.forEach(function(r){
       if (salesZoneSet[r._zone]) return; // mapped zone — not Cross Sales
+      if (_blFl && _blFl.indexOf(r.lob) === -1) return; // LOB filter — was missing, inflated totals
       var loc = (r.location || '').trim();
       if (!loc || loc === '—') return;
       var m = r._month;
