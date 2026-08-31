@@ -6579,7 +6579,7 @@ function render(){
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
-  if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; } else { mainEl.style.overflow=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
+  if(state.page==='teams'){ mainEl.style.overflow='hidden'; mainEl.style.padding='0'; mainEl.style.display='flex'; mainEl.style.flexDirection='column'; } else { mainEl.style.overflowY='auto'; mainEl.style.overflowX=''; mainEl.style.padding=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
   console.log('[PERF] mainEl.innerHTML took', (performance.now()-_tHtml).toFixed(1)+'ms');
   document.getElementById('drawer-slot').innerHTML=drawer()+feedbackModal()+orgEditModal()+addUserModal()+(state.pendencyDrill?pendencyDrillDrawer():'');
   if(scrollTop) mainEl.scrollTop=scrollTop;
