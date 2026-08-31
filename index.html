@@ -7102,8 +7102,14 @@ function computeDrillResult(entity, metric, month){
       // Grand Total — apply zone/rep/RLS filter
       if (_spFilterSet && !_spFilterSet[row._sp]) continue;
     } else if (entity === 'Cross Sales'){
-      // Cross Sales = unmapped rows only (_zone is null for all Cross Sales reps)
+      // Cross Sales = unmapped rows only, excluding branches now shown under their own zones
       if (row._zone) continue;
+      if (BRANCH_ZONE_MAP[(row.location || '').trim()]) continue;
+    } else if (ZONE_BRANCHES_MAP[entity]) {
+      // Synthetic zone (e.g. INAZ08 (Chennai)) — match by branch locations, unmapped only
+      var _szBranches = ZONE_BRANCHES_MAP[entity];
+      if (row._zone) continue;
+      if (_szBranches.indexOf((row.location || '').trim()) === -1) continue;
     } else {
       var isZoneEntity = repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; });
       if (isZoneEntity) {
