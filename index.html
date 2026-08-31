@@ -1950,7 +1950,12 @@ function zoneEntity(zoneName){
   var isWeekly = state.reportView === 'Weekly' && weekDataLoaded();
   var idxs = filteredMonthIndices();
   var wkeys = isWeekly ? filteredWeekKeys() : null;
-  var zReps = repsRaw.filter(function(r){ return r.zone === zoneName; });
+  var zReps = repsRaw.filter(function(r){
+    if (r.zone !== zoneName) return false;
+    // Exclude branches now shown under their own zone from Cross Sales GP/Rev totals
+    if (zoneName === 'Cross Sales' && r.isBranch && BRANCH_ZONE_MAP[r.name]) return false;
+    return true;
+  });
   var zData = zonesRaw.find(function(z){ return z.zone === zoneName; }) || {};
   var _zb = ZONE_BRANCHES_MAP[zoneName] || [];
   var _fl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
