@@ -2488,11 +2488,24 @@ module.exports = async function handler(req, res) {
       if (salesCache && !forceRefresh) {
         const isStale = (Date.now() - salesCacheTime) > SALES_CACHE_TTL_MS;
         if (isStale) getSalesAggregate(db, true).catch(() => {});
-        return res.status(200).json(strip(salesCache));
+        const strippedCache = strip(salesCache);
+        if (drillRowsCache && drillRowsCache.allRows && drillRowsCache.allRows.length > 0) {
+          strippedCache.allDrillRows = drillRowsCache.allRows;
+        }
+        return res.status(200).json(strippedCache);
       }
 
       const result = await getSalesAggregate(db, forceRefresh);
-      return res.status(200).json(strip(result));
+      // Ensure drill rows are built so they can be bundled — runs in parallel-ish since
+      // getSalesAggregate already awaited; this only fires if cache is missing/stale.
+      if (!drillRowsCache || drillRowsCache.deployTs !== DEPLOY_TS) {
+        await getDrillRows(db, 'Grand Total', 'Shipments', 'FY Total').catch(() => {});
+      }
+      const stripped = strip(result);
+      if (drillRowsCache && drillRowsCache.allRows && drillRowsCache.allRows.length > 0) {
+        stripped.allDrillRows = drillRowsCache.allRows;
+      }
+      return res.status(200).json(stripped);
     }
 
     if (action === "customers") {
