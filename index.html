@@ -1926,7 +1926,10 @@ var BRANCH_ZONE_MAP = {
   'Ahmedabad':  'INAZ06 (Ahmedabad) - Rushabh Shah',
   'Gandhidham': 'INAZ06 (Ahmedabad) - Rushabh Shah',
   'Bangalore':  'INAZ07 (Bangalore) - Kavitha A',
+  'Chennai':    'INAZ08 (Chennai)',
 };
+// Synthetic zones — exist only in display layer, no mapping sheet entry
+var SYNTHETIC_ZONES = ['INAZ08 (Chennai)'];
 // Inverse: zone → [branch names]
 var ZONE_BRANCHES_MAP = {};
 Object.keys(BRANCH_ZONE_MAP).forEach(function(b){ var z=BRANCH_ZONE_MAP[b]; if(!ZONE_BRANCHES_MAP[z]) ZONE_BRANCHES_MAP[z]=[]; ZONE_BRANCHES_MAP[z].push(b); });
@@ -1937,6 +1940,8 @@ function getZones(){
   repsRaw.forEach(function(r){
     if (!seen[r.zone] && _excludeZones.indexOf(r.zone) === -1) { seen[r.zone] = true; zones.push(r.zone); }
   });
+  // Inject synthetic zones that have no mapping sheet entry
+  SYNTHETIC_ZONES.forEach(function(z){ if (!seen[z]) { seen[z]=true; zones.push(z); } });
   return sortZones(zones);
 }
 
