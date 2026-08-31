@@ -7430,10 +7430,10 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       // All Cross Sales rows (rep zone not in salesZoneSet)
       if (!isCrossSalesRep(r)) continue;
     } else if (type === 'branch') {
-      // Branch = specific originalZone under Cross Sales
-      // rep = branch name (= originalZone value stored as _zone in drill row)
-      if (r._zone !== rep) continue;
+      // Branch under Cross Sales — server uses row.location === branch name
+      // Only unmapped reps qualify (isCrossSalesRep)
       if (!isCrossSalesRep(r)) continue;
+      if ((r.location || '').trim() !== rep) continue;
     } else if (type === 'zone') {
       // Regular Sales Performance zone
       if (r._zone !== rep) continue;
