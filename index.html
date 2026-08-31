@@ -1926,7 +1926,10 @@ var BRANCH_ZONE_MAP = {
   'Ahmedabad':  'INAZ06 (Ahmedabad) - Rushabh Shah',
   'Gandhidham': 'INAZ06 (Ahmedabad) - Rushabh Shah',
   'Bangalore':  'INAZ07 (Bangalore) - Kavitha A',
+  'Chennai':    'INAZ08 (Chennai)',
 };
+// Synthetic zones — exist only in display layer, no mapping sheet entry
+var SYNTHETIC_ZONES = ['INAZ08 (Chennai)'];
 // Inverse: zone → [branch names]
 var ZONE_BRANCHES_MAP = {};
 Object.keys(BRANCH_ZONE_MAP).forEach(function(b){ var z=BRANCH_ZONE_MAP[b]; if(!ZONE_BRANCHES_MAP[z]) ZONE_BRANCHES_MAP[z]=[]; ZONE_BRANCHES_MAP[z].push(b); });
@@ -1937,6 +1940,8 @@ function getZones(){
   repsRaw.forEach(function(r){
     if (!seen[r.zone] && _excludeZones.indexOf(r.zone) === -1) { seen[r.zone] = true; zones.push(r.zone); }
   });
+  // Inject synthetic zones that have no mapping sheet entry
+  SYNTHETIC_ZONES.forEach(function(z){ if (!seen[z]) { seen[z]=true; zones.push(z); } });
   return sortZones(zones);
 }
 
@@ -7097,8 +7102,14 @@ function computeDrillResult(entity, metric, month){
       // Grand Total — apply zone/rep/RLS filter
       if (_spFilterSet && !_spFilterSet[row._sp]) continue;
     } else if (entity === 'Cross Sales'){
-      // Cross Sales = unmapped rows only (_zone is null for all Cross Sales reps)
+      // Cross Sales = unmapped rows only, excluding branches now shown under their own zones
       if (row._zone) continue;
+      if (BRANCH_ZONE_MAP[(row.location || '').trim()]) continue;
+    } else if (ZONE_BRANCHES_MAP[entity]) {
+      // Synthetic zone (e.g. INAZ08 (Chennai)) — match by branch locations, unmapped only
+      var _szBranches = ZONE_BRANCHES_MAP[entity];
+      if (row._zone) continue;
+      if (_szBranches.indexOf((row.location || '').trim()) === -1) continue;
     } else {
       var isZoneEntity = repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; });
       if (isZoneEntity) {
