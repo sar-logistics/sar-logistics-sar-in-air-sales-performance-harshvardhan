@@ -324,11 +324,6 @@ function _showDashboardBody() {
       } catch(e) {}
     }
     // Drill rows are stored separately under 'drillrows' key (not bundled in sales)
-    // Load compact branch summary cache for instant first render of synthetic/branch zones
-    try {
-      var _bsc = localStorage.getItem('sar_branch_summary_' + CACHE_VERSION);
-      if (_bsc) { window._branchSummaryCache = JSON.parse(_bsc); }
-    } catch(e) {}
   }
 
   // Pre-populate all secondary data from localStorage before first render
@@ -1922,31 +1917,12 @@ function sortZones(arr){
     return a.localeCompare(b, undefined, {sensitivity:'base'});
   });
 }
-// Branch → zone display mapping (display only — no mapping sheet changes)
-// Branches listed here are shown under their zone instead of Cross Sales
-var BRANCH_ZONE_MAP = {
-  'Mumbai':     'INAZ02 (Mumbai) - Aniket M',
-  'Delhi':      'INAZ03 (Delhi) - Chiranjit',
-  'Hyderabad':  'INAZ05 (Hyderabad) - Geetha',
-  'Ahmedabad':  'INAZ06 (Ahmedabad) - Rushabh Shah',
-  'Gandhidham': 'INAZ06 (Ahmedabad) - Rushabh Shah',
-  'Bangalore':  'INAZ07 (Bangalore) - Kavitha A',
-  'Chennai':    'INAZ08 (Chennai)',
-};
-// Synthetic zones — exist only in display layer, no mapping sheet entry
-var SYNTHETIC_ZONES = ['INAZ08 (Chennai)'];
-// Inverse: zone → [branch names]
-var ZONE_BRANCHES_MAP = {};
-Object.keys(BRANCH_ZONE_MAP).forEach(function(b){ var z=BRANCH_ZONE_MAP[b]; if(!ZONE_BRANCHES_MAP[z]) ZONE_BRANCHES_MAP[z]=[]; ZONE_BRANCHES_MAP[z].push(b); });
-
 function getZones(){
   var seen = {}, zones = [];
   var _excludeZones = ['Others'];
   repsRaw.forEach(function(r){
     if (!seen[r.zone] && _excludeZones.indexOf(r.zone) === -1) { seen[r.zone] = true; zones.push(r.zone); }
   });
-  // Inject synthetic zones that have no mapping sheet entry
-  SYNTHETIC_ZONES.forEach(function(z){ if (!seen[z]) { seen[z]=true; zones.push(z); } });
   return sortZones(zones);
 }
 
@@ -1957,46 +1933,14 @@ function zoneEntity(zoneName){
   var wkeys = isWeekly ? filteredWeekKeys() : null;
   var zReps = repsRaw.filter(function(r){ return r.zone === zoneName; });
   var zData = zonesRaw.find(function(z){ return z.zone === zoneName; }) || {};
-  var _zb = ZONE_BRANCHES_MAP[zoneName] || [];
-  var _fl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
-
-  // Pre-build branch row index for gp/rev (allDrillRows, location-based)
-  var _bIdx = {};
-  if (_zb.length > 0 && allDrillRows && allDrillRows.length > 0) {
-    allDrillRows.forEach(function(row){
-      if (row._zone) return;
-      var loc = (row.location || '').trim();
-      if (_zb.indexOf(loc) === -1) return;
-      if (_fl && _fl.indexOf(row.lob) === -1) return;
-      var ml = row._ml;
-      if (!_bIdx[ml]) _bIdx[ml] = { gp:0, rev:0, tons:0, teu:0 };
-      _bIdx[ml].gp   += row.g || 0;
-      _bIdx[ml].rev  += row.r || 0;
-      _bIdx[ml].tons += row.tons || 0;
-      _bIdx[ml].teu  += row.t || 0;
-    });
-  } else if (_zb.length > 0 && window._branchSummaryCache) {
-    // Fallback: use compact summary cache from previous session
-    _zb.forEach(function(bName){
-      var bsc = window._branchSummaryCache[bName];
-      if (!bsc) return;
-      Object.keys(bsc).forEach(function(ml){
-        if (!_bIdx[ml]) _bIdx[ml] = { gp:0, rev:0, tons:0, teu:0 };
-        _bIdx[ml].gp   += bsc[ml].gp   || 0;
-        _bIdx[ml].rev  += bsc[ml].rev  || 0;
-        _bIdx[ml].tons += bsc[ml].tons || 0;
-        _bIdx[ml].teu  += bsc[ml].teu  || 0;
-      });
-    });
-  }
   return {
     name: zoneName, initials: zoneName.slice(0,2).toUpperCase(),
     avatarBg: 'oklch(0.5 0.14 ' + zoneHue(zoneName) + ')',
     isZone: true, zone: zoneName,
     ship: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
-                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; var _zb=ZONE_BRANCHES_MAP[zoneName]||[]; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(_isCross?(!r._zone&&!BRANCH_ZONE_MAP[(r.location||'').trim()]):(r._zone===zoneName||(_zb.length>0&&!r._zone&&_zb.indexOf((r.location||'').trim())>-1)));}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
+                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(_isCross?!r._zone:r._zone===zoneName);}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
     gp:   isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
-                   : idxs.map(function(i){var m=months26[i]; var _bgp=(_bIdx[m]&&_bIdx[m].gp)||0; return ((_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(zReps.map(function(r){return (r.gp&&r.gp[i])||0;})))+_bgp;}),
+                   : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(zReps.map(function(r){return (r.gp&&r.gp[i])||0;}));}),
     tons: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
                    : idxs.map(function(i){return sum(zReps.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
     teu:  isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0);},0);})
@@ -2005,7 +1949,7 @@ function zoneEntity(zoneName){
                    : idxs.map(function(i){return sum(zReps.map(function(r){return (r.lcl&&r.lcl[i])||0;}));}),
     gpProv:   isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpProv)||0;}));}) : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gpProv)||0);},0);})) : sum(zReps.map(function(r){return (r.gpProv&&r.gpProv[i])||0;}));}),
     gpActual: isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpActual)||0;}));}) : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gpActual)||0);},0);})) : sum(zReps.map(function(r){return (r.gpActual&&r.gpActual[i])||0;}));}),
-    rev:       isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0;}));}) : idxs.map(function(i){var m=months26[i]; var _brev=(_bIdx[m]&&_bIdx[m].rev)||0; return ((_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].rev)||0);},0);})) : sum(zReps.map(function(r){return (r.rev&&r.rev[i])||0;})))+_brev;}),
+    rev:       isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].rev)||0;}));}) : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].rev)||0);},0);})) : sum(zReps.map(function(r){return (r.rev&&r.rev[i])||0;}));}),
     revBilled: isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revBilled)||0;}));}) : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].revBilled)||0);},0);})) : sum(zReps.map(function(r){return (r.revBilled&&r.revBilled[i])||0;}));}),
     revProv:   isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].revProv)||0;}));}) : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].revProv)||0);},0);})) : sum(zReps.map(function(r){return (r.revProv&&r.revProv[i])||0;}));}),
     tank: (isWeekly ? wkeys : idxs).map(function(){ return 0; }),
@@ -2081,33 +2025,28 @@ function repEntity(r){
 
   // For branch reps: compute all metrics from allDrillRows filtered by location
   // This matches drill-through which also uses location-based matching
-  if (r.isBranch && !isWeekly) {
+  if (r.isBranch && allDrillRows && allDrillRows.length > 0) {
     var _bLoc = r.name;
     var _bfl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
+    var _bRows = allDrillRows.filter(function(row){
+      if (row._zone) return false; // unmapped only — same as Cross Sales zone filter
+      if ((row.location || '').trim() !== _bLoc) return false;
+      if (_bfl && _bfl.indexOf(row.lob) === -1) return false;
+      return true;
+    });
+    // Build month-keyed index for fast lookup
     var _bIdx = {};
-    if (allDrillRows && allDrillRows.length > 0) {
-      // Full path: filter allDrillRows by location + LOB
-      var _bRows = allDrillRows.filter(function(row){
-        if (row._zone) return false;
-        if ((row.location || '').trim() !== _bLoc) return false;
-        if (_bfl && _bfl.indexOf(row.lob) === -1) return false;
-        return true;
-      });
-      _bRows.forEach(function(row){
-        var ml = row._ml;
-        if (!_bIdx[ml]) _bIdx[ml] = { ship:0, gp:0, gpProv:0, gpActual:0, rev:0, tons:0, teu:0, lcl:0 };
-        _bIdx[ml].ship++;
-        _bIdx[ml].gp   += row.g || 0;
-        _bIdx[ml].rev  += row.r || 0;
-        _bIdx[ml].tons += row.tons || 0;
-        _bIdx[ml].teu  += row.t || 0;
-        if (row.prov === 1) _bIdx[ml].gpProv   += row.g || 0;
-        else                _bIdx[ml].gpActual  += row.g || 0;
-      });
-    } else if (window._branchSummaryCache && window._branchSummaryCache[_bLoc]) {
-      // Fast fallback: compact summary cached from previous session (no per-LOB breakdown)
-      _bIdx = window._branchSummaryCache[_bLoc];
-    }
+    _bRows.forEach(function(row){
+      var ml = row._ml;
+      if (!_bIdx[ml]) _bIdx[ml] = { ship:0, gp:0, gpProv:0, gpActual:0, rev:0, tons:0, teu:0, lcl:0 };
+      _bIdx[ml].ship++;
+      _bIdx[ml].gp      += row.g || 0;
+      _bIdx[ml].rev     += row.r || 0;
+      _bIdx[ml].tons    += row.tons || 0;
+      _bIdx[ml].teu     += row.t || 0;
+      if (row.prov === 1) _bIdx[ml].gpProv   += row.g || 0;
+      else                _bIdx[ml].gpActual  += row.g || 0;
+    });
     return {
       name: r.name, initials: ini,
       avatarBg: 'oklch(0.6 0.12 ' + r.hue + ')',
@@ -2180,14 +2119,8 @@ function entities(){
     if (_role !== 'sales rep') list.push(zoneEntity(z));
     var isCollapsed = state.zoneOpen[z] === false; // default open unless explicitly collapsed
     if (!isCollapsed) {
-      repsRaw.filter(function(r){ return r.zone === z && !(r.isBranch && BRANCH_ZONE_MAP[r.name]); }).forEach(function(r){
+      repsRaw.filter(function(r){ return r.zone === z; }).forEach(function(r){
         list.push(repEntity(r));
-      });
-      // Inject mapped branches as regular rep rows under this zone
-      var _zoneBranches = ZONE_BRANCHES_MAP[z] || [];
-      _zoneBranches.forEach(function(bName){
-        var bRep = repsRawOriginal.find(function(r){ return r.isBranch && r.name === bName; });
-        if (bRep) list.push(repEntity(bRep));
       });
     }
   });
@@ -6839,22 +6772,6 @@ function loadDrillData(callback){
         allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
         _custLobRepMapCache = {}; _agentLobRepMapCache = {}; // clear cached maps — data changed
         _patchTradelaneCacheWithDrillCounts();
-        // Save compact branch summary for instant first render on next boot
-        try {
-          var _allBranches = Object.keys(BRANCH_ZONE_MAP);
-          var _bsum = {};
-          allDrillRows.forEach(function(r){
-            if (r._zone) return;
-            var loc = (r.location||'').trim();
-            if (_allBranches.indexOf(loc) === -1) return;
-            if (!_bsum[loc]) _bsum[loc] = {};
-            if (!_bsum[loc][r._ml]) _bsum[loc][r._ml] = {ship:0,gp:0,rev:0,tons:0,teu:0};
-            var m = _bsum[loc][r._ml];
-            m.ship++; m.gp+=(r.g||0); m.rev+=(r.r||0); m.tons+=(r.tons||0); m.teu+=(r.t||0);
-          });
-          localStorage.setItem('sar_branch_summary_' + CACHE_VERSION, JSON.stringify(_bsum));
-          window._branchSummaryCache = _bsum;
-        } catch(e) {}
         // Re-render tradelane page if it was showing stale cached data
         if (state.page === 'tradelane' && tradelaneData && tradelaneData._isStale) {
           tradelaneData._isStale = false;
@@ -7141,18 +7058,11 @@ function computeDrillResult(entity, metric, month){
       // Grand Total — apply zone/rep/RLS filter
       if (_spFilterSet && !_spFilterSet[row._sp]) continue;
     } else if (entity === 'Cross Sales'){
-      // Cross Sales = unmapped rows only, excluding branches now shown under their own zones
+      // Cross Sales = unmapped rows only (_zone is null for all Cross Sales reps)
       if (row._zone) continue;
-      if (BRANCH_ZONE_MAP[(row.location || '').trim()]) continue;
     } else {
       var isZoneEntity = repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; });
-      var isSyntheticZone = SYNTHETIC_ZONES && SYNTHETIC_ZONES.indexOf(entity) > -1;
-      if (isSyntheticZone) {
-        // Synthetic zone (e.g. INAZ08 (Chennai)) — match by branch locations, unmapped only
-        var _szBranches = ZONE_BRANCHES_MAP[entity] || [];
-        if (row._zone) continue;
-        if (_szBranches.indexOf((row.location || '').trim()) === -1) continue;
-      } else if (isZoneEntity) {
+      if (isZoneEntity) {
         // Zone: row._zone must match
         if (row._zone !== entity) continue;
       } else if (_isBranchEntity) {
