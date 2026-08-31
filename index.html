@@ -7144,14 +7144,15 @@ function computeDrillResult(entity, metric, month){
       // Cross Sales = unmapped rows only, excluding branches now shown under their own zones
       if (row._zone) continue;
       if (BRANCH_ZONE_MAP[(row.location || '').trim()]) continue;
-    } else if (ZONE_BRANCHES_MAP[entity]) {
-      // Synthetic zone (e.g. INAZ08 (Chennai)) — match by branch locations, unmapped only
-      var _szBranches = ZONE_BRANCHES_MAP[entity];
-      if (row._zone) continue;
-      if (_szBranches.indexOf((row.location || '').trim()) === -1) continue;
     } else {
       var isZoneEntity = repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; });
-      if (isZoneEntity) {
+      var isSyntheticZone = SYNTHETIC_ZONES && SYNTHETIC_ZONES.indexOf(entity) > -1;
+      if (isSyntheticZone) {
+        // Synthetic zone (e.g. INAZ08 (Chennai)) — match by branch locations, unmapped only
+        var _szBranches = ZONE_BRANCHES_MAP[entity] || [];
+        if (row._zone) continue;
+        if (_szBranches.indexOf((row.location || '').trim()) === -1) continue;
+      } else if (isZoneEntity) {
         // Zone: row._zone must match
         if (row._zone !== entity) continue;
       } else if (_isBranchEntity) {
