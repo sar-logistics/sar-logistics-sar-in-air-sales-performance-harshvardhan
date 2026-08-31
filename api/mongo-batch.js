@@ -276,6 +276,26 @@ function getDateColumnFor(cls) {
   return "Job Date";
 }
 
+// Get date value with fallback chain:
+// Export: ETD Loading Port → ETD First Leg of Origin → Job Date
+// Import: ETA Discharge → ETA Last Leg of Destination → Job Date
+function getDateValueFor(job, cls) {
+  if (cls.direction === "EXPORT") {
+    return job["ETD Loading Port"]
+        || job["ETD First Leg of Origin"]
+        || job["Job Date"]
+        || null;
+  }
+  if (cls.direction === "IMPORT") {
+    return job["ETA Discharge"]
+        || job["ETA Last Leg of Destination"]
+        || job["Job Date"]
+        || null;
+  }
+  // General/Road jobs — use Job Date only (no direction, ETD/ETA not applicable)
+  return job["Job Date"] || null;
+}
+
 // Google Sheets exports dates such as 04/05/2026 in day/month/year format.
 // `new Date("04/05/2026")` treats that as April 5 in JavaScript, incorrectly
 // putting 4 May shipments into April. Parse date-only values explicitly and
@@ -431,9 +451,10 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
     for (const { collName, rows } of allResults) {
       for (const job of rows) {
         const cls = classifyRow(job, collName);
-        const dateCol = getDateColumnFor(cls);
-        // Use ETD/ETA only — no Job Date fallback. Jobs with blank ETD/ETA are excluded.
-        const primaryDateStr = job[dateCol];
+        // Fallback chain: primary ETD/ETA → origin/destination leg → Job Date
+        // (matches Ocean dashboard — was previously ETD/ETA only, dropping jobs
+        // with blank ETD/ETA that had a valid fallback date available)
+        const primaryDateStr = getDateValueFor(job, cls);
         if (!primaryDateStr) continue;
         const d = parseSheetDate(primaryDateStr);
         if (!d) continue;
@@ -753,6 +774,7 @@ async function computeSalesAggregate(db) {
       "Billed Revenue (C)":1, "Provisional Revenue (A)":1,
       "Financial Lock":1, "Operation Lock":1,
       "ETD Loading Port":1, "ETA Discharge":1,
+      "ETD First Leg of Origin":1, "ETA Last Leg of Destination":1,
       "Chargeable Weight":1, "Chargeable Weight Unit":1,
       "Container TEU":1, "Volume":1, "Volume Unit":1, "Cargo Type":1,
     }}).toArray().then(rows => ({ collName: cn, jobs: rows }))
@@ -767,10 +789,11 @@ async function computeSalesAggregate(db) {
       // NOT by which collection it happens to be stored in — protects
       // against rows that were misfiled into the wrong sheet tab.
       const cls = classifyRow(job, collName);
-      const dateCol = getDateColumnFor(cls);
 
-      // Use ETD/ETA only — no Job Date fallback. Jobs with blank ETD/ETA are excluded.
-      const primaryDate = job[dateCol];
+      // Fallback chain: primary ETD/ETA → origin/destination leg → Job Date
+      // (matches Ocean dashboard — was previously ETD/ETA only, dropping jobs
+      // with blank ETD/ETA that had a valid fallback date available)
+      const primaryDate = getDateValueFor(job, cls);
       if (!primaryDate) continue;
       const d = parseSheetDate(primaryDate);
       if (!d) continue;
