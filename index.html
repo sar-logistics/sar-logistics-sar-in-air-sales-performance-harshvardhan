@@ -324,6 +324,11 @@ function _showDashboardBody() {
       } catch(e) {}
     }
     // Drill rows are stored separately under 'drillrows' key (not bundled in sales)
+    // Load compact branch summary cache for instant first render of synthetic/branch zones
+    try {
+      var _bsc = localStorage.getItem('sar_branch_summary_' + CACHE_VERSION);
+      if (_bsc) { window._branchSummaryCache = JSON.parse(_bsc); }
+    } catch(e) {}
   }
 
   // Pre-populate all secondary data from localStorage before first render
@@ -1959,7 +1964,7 @@ function zoneEntity(zoneName){
   var _bIdx = {};
   if (_zb.length > 0 && allDrillRows && allDrillRows.length > 0) {
     allDrillRows.forEach(function(row){
-      if (row._zone) return; // unmapped only
+      if (row._zone) return;
       var loc = (row.location || '').trim();
       if (_zb.indexOf(loc) === -1) return;
       if (_fl && _fl.indexOf(row.lob) === -1) return;
@@ -1969,6 +1974,19 @@ function zoneEntity(zoneName){
       _bIdx[ml].rev  += row.r || 0;
       _bIdx[ml].tons += row.tons || 0;
       _bIdx[ml].teu  += row.t || 0;
+    });
+  } else if (_zb.length > 0 && window._branchSummaryCache) {
+    // Fallback: use compact summary cache from previous session
+    _zb.forEach(function(bName){
+      var bsc = window._branchSummaryCache[bName];
+      if (!bsc) return;
+      Object.keys(bsc).forEach(function(ml){
+        if (!_bIdx[ml]) _bIdx[ml] = { gp:0, rev:0, tons:0, teu:0 };
+        _bIdx[ml].gp   += bsc[ml].gp   || 0;
+        _bIdx[ml].rev  += bsc[ml].rev  || 0;
+        _bIdx[ml].tons += bsc[ml].tons || 0;
+        _bIdx[ml].teu  += bsc[ml].teu  || 0;
+      });
     });
   }
   return {
@@ -2063,28 +2081,33 @@ function repEntity(r){
 
   // For branch reps: compute all metrics from allDrillRows filtered by location
   // This matches drill-through which also uses location-based matching
-  if (r.isBranch && allDrillRows && allDrillRows.length > 0) {
+  if (r.isBranch && !isWeekly) {
     var _bLoc = r.name;
     var _bfl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
-    var _bRows = allDrillRows.filter(function(row){
-      if (row._zone) return false; // unmapped only — same as Cross Sales zone filter
-      if ((row.location || '').trim() !== _bLoc) return false;
-      if (_bfl && _bfl.indexOf(row.lob) === -1) return false;
-      return true;
-    });
-    // Build month-keyed index for fast lookup
     var _bIdx = {};
-    _bRows.forEach(function(row){
-      var ml = row._ml;
-      if (!_bIdx[ml]) _bIdx[ml] = { ship:0, gp:0, gpProv:0, gpActual:0, rev:0, tons:0, teu:0, lcl:0 };
-      _bIdx[ml].ship++;
-      _bIdx[ml].gp      += row.g || 0;
-      _bIdx[ml].rev     += row.r || 0;
-      _bIdx[ml].tons    += row.tons || 0;
-      _bIdx[ml].teu     += row.t || 0;
-      if (row.prov === 1) _bIdx[ml].gpProv   += row.g || 0;
-      else                _bIdx[ml].gpActual  += row.g || 0;
-    });
+    if (allDrillRows && allDrillRows.length > 0) {
+      // Full path: filter allDrillRows by location + LOB
+      var _bRows = allDrillRows.filter(function(row){
+        if (row._zone) return false;
+        if ((row.location || '').trim() !== _bLoc) return false;
+        if (_bfl && _bfl.indexOf(row.lob) === -1) return false;
+        return true;
+      });
+      _bRows.forEach(function(row){
+        var ml = row._ml;
+        if (!_bIdx[ml]) _bIdx[ml] = { ship:0, gp:0, gpProv:0, gpActual:0, rev:0, tons:0, teu:0, lcl:0 };
+        _bIdx[ml].ship++;
+        _bIdx[ml].gp   += row.g || 0;
+        _bIdx[ml].rev  += row.r || 0;
+        _bIdx[ml].tons += row.tons || 0;
+        _bIdx[ml].teu  += row.t || 0;
+        if (row.prov === 1) _bIdx[ml].gpProv   += row.g || 0;
+        else                _bIdx[ml].gpActual  += row.g || 0;
+      });
+    } else if (window._branchSummaryCache && window._branchSummaryCache[_bLoc]) {
+      // Fast fallback: compact summary cached from previous session (no per-LOB breakdown)
+      _bIdx = window._branchSummaryCache[_bLoc];
+    }
     return {
       name: r.name, initials: ini,
       avatarBg: 'oklch(0.6 0.12 ' + r.hue + ')',
@@ -6816,6 +6839,22 @@ function loadDrillData(callback){
         allDrillRows = dedupDrillRows(data.sales.allDrillRows); _patchTgOnDrillRows(allDrillRows);
         _custLobRepMapCache = {}; _agentLobRepMapCache = {}; // clear cached maps — data changed
         _patchTradelaneCacheWithDrillCounts();
+        // Save compact branch summary for instant first render on next boot
+        try {
+          var _allBranches = Object.keys(BRANCH_ZONE_MAP);
+          var _bsum = {};
+          allDrillRows.forEach(function(r){
+            if (r._zone) return;
+            var loc = (r.location||'').trim();
+            if (_allBranches.indexOf(loc) === -1) return;
+            if (!_bsum[loc]) _bsum[loc] = {};
+            if (!_bsum[loc][r._ml]) _bsum[loc][r._ml] = {ship:0,gp:0,rev:0,tons:0,teu:0};
+            var m = _bsum[loc][r._ml];
+            m.ship++; m.gp+=(r.g||0); m.rev+=(r.r||0); m.tons+=(r.tons||0); m.teu+=(r.t||0);
+          });
+          localStorage.setItem('sar_branch_summary_' + CACHE_VERSION, JSON.stringify(_bsum));
+          window._branchSummaryCache = _bsum;
+        } catch(e) {}
         // Re-render tradelane page if it was showing stale cached data
         if (state.page === 'tradelane' && tradelaneData && tradelaneData._isStale) {
           tradelaneData._isStale = false;
