@@ -142,7 +142,7 @@
     <div class="login-subtitle">Sign in with your SAR Google Workspace account to access the sales performance dashboard.</div>
 
     <!-- Google Sign-In button -->
-    <button class="google-btn" id="google-signin-btn" onclick="if(typeof startGoogleSignIn==='function'){startGoogleSignIn();}else{this.disabled=true;setTimeout(function(){document.getElementById('google-signin-btn').disabled=false;},1500);}">
+    <button class="google-btn" id="google-signin-btn" onclick="startGoogleSignIn()">
       <svg class="g-logo" width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
         <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
         <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
@@ -1926,10 +1926,7 @@ var BRANCH_ZONE_MAP = {
   'Ahmedabad':  'INAZ06 (Ahmedabad) - Rushabh Shah',
   'Gandhidham': 'INAZ06 (Ahmedabad) - Rushabh Shah',
   'Bangalore':  'INAZ07 (Bangalore) - Kavitha A',
-  'Chennai':    'INAZ08 (Chennai)',
 };
-// Synthetic zones — exist only in display layer, no mapping sheet entry
-var SYNTHETIC_ZONES = ['INAZ08 (Chennai)'];
 // Inverse: zone → [branch names]
 var ZONE_BRANCHES_MAP = {};
 Object.keys(BRANCH_ZONE_MAP).forEach(function(b){ var z=BRANCH_ZONE_MAP[b]; if(!ZONE_BRANCHES_MAP[z]) ZONE_BRANCHES_MAP[z]=[]; ZONE_BRANCHES_MAP[z].push(b); });
@@ -1940,8 +1937,6 @@ function getZones(){
   repsRaw.forEach(function(r){
     if (!seen[r.zone] && _excludeZones.indexOf(r.zone) === -1) { seen[r.zone] = true; zones.push(r.zone); }
   });
-  // Inject synthetic zones that have no mapping sheet entry
-  SYNTHETIC_ZONES.forEach(function(z){ if (!seen[z]) { seen[z]=true; zones.push(z); } });
   return sortZones(zones);
 }
 
@@ -1976,7 +1971,7 @@ function zoneEntity(zoneName){
     avatarBg: 'oklch(0.5 0.14 ' + zoneHue(zoneName) + ')',
     isZone: true, zone: zoneName,
     ship: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
-                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; var _zb=ZONE_BRANCHES_MAP[zoneName]||[]; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&_isCross?!r._zone:(r._zone===zoneName||(_zb.length>0&&!r._zone&&_zb.indexOf((r.location||'').trim())>-1)));}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
+                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; var _zb=ZONE_BRANCHES_MAP[zoneName]||[]; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(_isCross?(!r._zone&&!BRANCH_ZONE_MAP[(r.location||'').trim()]):(r._zone===zoneName||(_zb.length>0&&!r._zone&&_zb.indexOf((r.location||'').trim())>-1)));}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
     gp:   isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){var m=months26[i]; var _bgp=(_bIdx[m]&&_bIdx[m].gp)||0; return ((_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(zReps.map(function(r){return (r.gp&&r.gp[i])||0;})))+_bgp;}),
     tons: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
@@ -2157,7 +2152,7 @@ function entities(){
     if (_role !== 'sales rep') list.push(zoneEntity(z));
     var isCollapsed = state.zoneOpen[z] === false; // default open unless explicitly collapsed
     if (!isCollapsed) {
-      repsRaw.filter(function(r){ return r.zone === z; }).forEach(function(r){
+      repsRaw.filter(function(r){ return r.zone === z && !(r.isBranch && BRANCH_ZONE_MAP[r.name]); }).forEach(function(r){
         list.push(repEntity(r));
       });
       // Inject mapped branches as regular rep rows under this zone
@@ -7102,13 +7097,8 @@ function computeDrillResult(entity, metric, month){
       // Grand Total — apply zone/rep/RLS filter
       if (_spFilterSet && !_spFilterSet[row._sp]) continue;
     } else if (entity === 'Cross Sales'){
-      // Cross Sales = unmapped rows only
+      // Cross Sales = unmapped rows only (_zone is null for all Cross Sales reps)
       if (row._zone) continue;
-    } else if (ZONE_BRANCHES_MAP[entity]) {
-      // Synthetic zone (e.g. INAZ08 (Chennai)) — match by branch locations, unmapped only
-      var _szBranches = ZONE_BRANCHES_MAP[entity];
-      if (row._zone) continue;
-      if (_szBranches.indexOf((row.location || '').trim()) === -1) continue;
     } else {
       var isZoneEntity = repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; });
       if (isZoneEntity) {
