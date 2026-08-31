@@ -4253,6 +4253,26 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var salesZoneSet = {};
   salesZones.forEach(function(z){ salesZoneSet[z] = true; });
 
+  // Location -> month -> {pending,done} index, built directly from allPendencyDrillRows
+  // (same source + same location matching as the branch drill) so branch totals always
+  // equal what the drill shows — a rep can touch multiple locations, so summing rep-level
+  // totals (which span ALL their jobs) does not equal a location-filtered count.
+  var _branchLocIndex = {};
+  if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+    var _isOLPage = lockType === 'Operation Lock';
+    allPendencyDrillRows.forEach(function(r){
+      if (salesZoneSet[r._zone]) return; // mapped zone — not Cross Sales
+      var loc = (r.location || '').trim();
+      if (!loc || loc === '—') return;
+      var m = r._month;
+      if (!_branchLocIndex[loc]) _branchLocIndex[loc] = {};
+      if (!_branchLocIndex[loc][m]) _branchLocIndex[loc][m] = { pending: 0, done: 0 };
+      var isDone = _isOLPage ? r.olDone : r.flDone;
+      if (isDone) _branchLocIndex[loc][m].done++;
+      else _branchLocIndex[loc][m].pending++;
+    });
+  }
+
   // LOB filter using lobMonthData from server (pre-computed per LOB, no drill rows needed)
   var _flobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
   // _pendencyLobIndex: repName -> month -> {pending, done} filtered by active LOBs
@@ -4665,16 +4685,23 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         var branchKey = 'branch__Cross Sales__' + branch;
         var branchCollapsed = state.pendencyZoneOpen[branchKey] === false;
         var branchReps = branchMap[branch];
-        // Aggregate branch totals
-        var bPending = branchReps.reduce(function(s,r){ return s+r.totalPending; }, 0);
-        var bDone    = branchReps.reduce(function(s,r){ return s+r.totalDone;    }, 0);
-        var bTotal   = bPending + bDone;
+        // Aggregate branch totals -- prefer location-based drill index (matches drill exactly)
+        // for Monthly/Custom views; Yearly/Quarterly/Weekly keep the rep-sum fallback for now.
+        var _useLocIndex = !isYearly && !isQuarterly && !isWeekly && _branchLocIndex[branch];
         var bColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
+          if (_useLocIndex) {
+            var _m = activeCols[ci];
+            var _entry = _branchLocIndex[branch][_m];
+            return { pending: (_entry && _entry.pending) || 0, done: (_entry && _entry.done) || 0 };
+          }
           return {
             pending: branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
             done:    branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
           };
         });
+        var bPending = _useLocIndex ? bColData.reduce(function(s,c){ return s+c.pending; }, 0) : branchReps.reduce(function(s,r){ return s+r.totalPending; }, 0);
+        var bDone    = _useLocIndex ? bColData.reduce(function(s,c){ return s+c.done;    }, 0) : branchReps.reduce(function(s,r){ return s+r.totalDone;    }, 0);
+        var bTotal   = bPending + bDone;
         var bData = { colData: bColData, totalPending: bPending, totalDone: bDone, total: bTotal };
         var bHue = hue(branch);
         var bAvBg = 'oklch(0.52 0.10 '+bHue+')';
