@@ -2029,6 +2029,7 @@ function repEntity(r){
     var _bLoc = r.name;
     var _bfl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
     var _bRows = allDrillRows.filter(function(row){
+      if (row._zone) return false; // unmapped only — same as Cross Sales zone filter
       if ((row.location || '').trim() !== _bLoc) return false;
       if (_bfl && _bfl.indexOf(row.lob) === -1) return false;
       return true;
@@ -7065,7 +7066,8 @@ function computeDrillResult(entity, metric, month){
         // Zone: row._zone must match
         if (row._zone !== entity) continue;
       } else if (_isBranchEntity) {
-        // Branch under Cross Sales: match by location field (same as server)
+        // Branch under Cross Sales: match by location + unmapped (_zone null) — mirrors Ocean
+        if (row._zone) continue;
         if ((row.location || '').trim() !== entity) continue;
       } else {
         // Rep: row._dn must match display name
