@@ -7110,16 +7110,19 @@ function computeDrillResult(entity, metric, month){
       // Cross Sales = unmapped rows only, excluding branches now shown under their own zones
       if (row._zone) continue;
       if (BRANCH_ZONE_MAP[(row.location || '').trim()]) continue;
-    } else if (ZONE_BRANCHES_MAP[entity]) {
-      // Synthetic zone (e.g. INAZ08 (Chennai)) — match by branch locations, unmapped only
-      var _szBranches = ZONE_BRANCHES_MAP[entity];
+    } else if (SYNTHETIC_ZONES.indexOf(entity) > -1) {
+      // Synthetic zone (e.g. INAZ08 (Chennai)) — no mapped reps at all, match by branch locations only
+      var _szBranches = ZONE_BRANCHES_MAP[entity] || [];
       if (row._zone) continue;
       if (_szBranches.indexOf((row.location || '').trim()) === -1) continue;
     } else {
       var isZoneEntity = repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; });
       if (isZoneEntity) {
-        // Zone: row._zone must match
-        if (row._zone !== entity) continue;
+        // Zone: row._zone must match OR row belongs to a branch mapped to this zone
+        var _zoneOwnBranches = ZONE_BRANCHES_MAP[entity] || [];
+        var _matchesOwnZone = row._zone === entity;
+        var _matchesMappedBranch = _zoneOwnBranches.length > 0 && !row._zone && _zoneOwnBranches.indexOf((row.location || '').trim()) > -1;
+        if (!_matchesOwnZone && !_matchesMappedBranch) continue;
       } else if (_isBranchEntity) {
         // Branch under Cross Sales: match by location + unmapped (_zone null) — mirrors Ocean
         if (row._zone) continue;
