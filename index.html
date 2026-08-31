@@ -4339,6 +4339,25 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     return true;
   });
 
+  // Rep → location lookup for Cross Sales branch grouping (location-based, like Sales Performance)
+  // Falls back to the rep's raw zone code if location isn't available yet.
+  var _repLocationMap = {};
+  if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+    var _repLocCount = {}; // norm -> { location -> count }
+    allPendencyDrillRows.forEach(function(r){
+      var loc = (r.location || '').trim();
+      if (!loc || loc === '—') return;
+      if (!_repLocCount[r._norm]) _repLocCount[r._norm] = {};
+      _repLocCount[r._norm][loc] = (_repLocCount[r._norm][loc] || 0) + 1;
+    });
+    Object.keys(_repLocCount).forEach(function(norm){
+      var counts = _repLocCount[norm];
+      var best = null, bestN = 0;
+      Object.keys(counts).forEach(function(loc){ if (counts[loc] > bestN) { best = loc; bestN = counts[loc]; } });
+      if (best) _repLocationMap[norm] = best;
+    });
+  }
+
   var repsFiltered = _pendencyReps.map(function(rep){
     var colData;
     if (isYearly && _pFyGroups) {
@@ -4383,9 +4402,10 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     }
     var tp = colData.reduce(function(s,c){ return s+c.pending; }, 0);
     var td = colData.reduce(function(s,c){ return s+c.done;    }, 0);
-    // If zone not in Sales Performance → Cross Sales; keep originalZone as branch
-    var originalZone = rep.zone || 'Unspecified';
-    var zone = salesZoneSet[originalZone] ? originalZone : 'Cross Sales';
+    // If zone not in Sales Performance → Cross Sales; use location as branch name (like SP), fallback to raw zone code
+    var _rawZone = rep.zone || 'Unspecified';
+    var zone = salesZoneSet[_rawZone] ? _rawZone : 'Cross Sales';
+    var originalZone = (zone === 'Cross Sales') ? (_repLocationMap[normalizeName(rep.name)] || _rawZone) : _rawZone;
     return { name: rep.name, zone: zone, originalZone: originalZone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
   }).filter(function(r){ return r.total > 0; });
 
