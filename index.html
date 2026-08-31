@@ -6953,6 +6953,27 @@ function computeDrillResult(entity, metric, month){
     return _repsRawNorms;
   }
 
+  // Pre-build branch→_sp set for Cross Sales branch drill matching.
+  // Drill rows have _zone=null for ALL Cross Sales reps — the only way to scope
+  // to a specific branch is via the rep list from repsRawOriginal (originalZone = branch).
+  var _branchSpSet = null;
+  var _isBranchEntity = false;
+  if (entity && entity !== 'Cross Sales' && !repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; })) {
+    // entity is not a known zone — check if it matches any Cross Sales branch (originalZone)
+    var _branchReps = repsRawOriginal.filter(function(r){
+      return !r.isBranch && r.zone === 'Cross Sales' && (r.originalZone || 'Unspecified') === entity;
+    });
+    if (_branchReps.length > 0) {
+      _isBranchEntity = true;
+      _branchSpSet = {};
+      _branchReps.forEach(function(r){
+        var seg = r.name.split('|')[0].toLowerCase().replace(/\s+/g,' ').trim();
+        _branchSpSet[seg] = true;
+        _branchSpSet[normalizeName(r.name)] = true;
+      });
+    }
+  }
+
   var matched = [];
   for (var i=0; i<allDrillRows.length; i++){
     var row = allDrillRows[i];
@@ -6982,19 +7003,22 @@ function computeDrillResult(entity, metric, month){
       // Grand Total — apply zone/rep/RLS filter
       if (_spFilterSet && !_spFilterSet[row._sp]) continue;
     } else if (entity === 'Cross Sales'){
-      // Cross Sales = unmapped rows only
+      // Cross Sales = unmapped rows only (_zone is null for all Cross Sales reps)
       if (row._zone) continue;
     } else {
       var isZoneEntity = repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; });
       if (isZoneEntity) {
         // Zone: row._zone must match
         if (row._zone !== entity) continue;
+      } else if (_isBranchEntity) {
+        // Branch under Cross Sales: match by _sp belonging to this branch's reps
+        // (_zone is null for all Cross Sales reps so we can't use _zone here)
+        if (row._zone) continue; // skip mapped-zone rows
+        if (!_branchSpSet[row._sp]) continue;
       } else {
         // Rep: row._dn must match display name
         var repMatch = row._dn === entity;
-        // Branch: location must match AND row must be unmapped (no zone)
-        var branchMatch = !row._zone && (row.location || '').trim() === entity;
-        if (!repMatch && !branchMatch) continue;
+        if (!repMatch) continue;
       }
     }
 
