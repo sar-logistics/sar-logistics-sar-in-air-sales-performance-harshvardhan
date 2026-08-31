@@ -2022,6 +2022,48 @@ function repEntity(r){
   var wkeys = isWeekly ? filteredWeekKeys() : null;
   var ini = r.isBranch ? r.name.slice(0,2).toUpperCase() : initials(r.name);
   var wd = r.weekData || {};
+
+  // For branch reps: compute all metrics from allDrillRows filtered by location
+  // This matches drill-through which also uses location-based matching
+  if (r.isBranch && allDrillRows && allDrillRows.length > 0) {
+    var _bLoc = r.name;
+    var _bfl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
+    var _bRows = allDrillRows.filter(function(row){
+      if ((row.location || '').trim() !== _bLoc) return false;
+      if (_bfl && _bfl.indexOf(row.lob) === -1) return false;
+      return true;
+    });
+    // Build month-keyed index for fast lookup
+    var _bIdx = {};
+    _bRows.forEach(function(row){
+      var ml = row._ml;
+      if (!_bIdx[ml]) _bIdx[ml] = { ship:0, gp:0, gpProv:0, gpActual:0, rev:0, tons:0, teu:0, lcl:0 };
+      _bIdx[ml].ship++;
+      _bIdx[ml].gp      += row.g || 0;
+      _bIdx[ml].rev     += row.r || 0;
+      _bIdx[ml].tons    += row.tons || 0;
+      _bIdx[ml].teu     += row.t || 0;
+      if (row.prov === 1) _bIdx[ml].gpProv   += row.g || 0;
+      else                _bIdx[ml].gpActual  += row.g || 0;
+    });
+    return {
+      name: r.name, initials: ini,
+      avatarBg: 'oklch(0.6 0.12 ' + r.hue + ')',
+      isRep: true, isBranch: true, zone: r.zone,
+      ship:     isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].ship)||0;})     : idxs.map(function(i){ return (_bIdx[months26[i]] && _bIdx[months26[i]].ship)     || 0; }),
+      gp:       isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].gp)||0;})       : idxs.map(function(i){ return (_bIdx[months26[i]] && _bIdx[months26[i]].gp)       || 0; }),
+      gpProv:   isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].gpProv)||0;})   : idxs.map(function(i){ return (_bIdx[months26[i]] && _bIdx[months26[i]].gpProv)   || 0; }),
+      gpActual: isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].gpActual)||0;}) : idxs.map(function(i){ return (_bIdx[months26[i]] && _bIdx[months26[i]].gpActual) || 0; }),
+      rev:      isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].rev)||0;})      : idxs.map(function(i){ return (_bIdx[months26[i]] && _bIdx[months26[i]].rev)      || 0; }),
+      revBilled:isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].revBilled)||0;}): idxs.map(function(i){ return (_bIdx[months26[i]] && _bIdx[months26[i]].rev)      || 0; }),
+      revProv:  isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].revProv)||0;})  : idxs.map(function(i){ return 0; }),
+      tons:     isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].tons)||0;})     : idxs.map(function(i){ return (_bIdx[months26[i]] && _bIdx[months26[i]].tons)     || 0; }),
+      teu:      isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].teu)||0;})      : idxs.map(function(i){ return (_bIdx[months26[i]] && _bIdx[months26[i]].teu)      || 0; }),
+      lcl:      isWeekly ? wkeys.map(function(k){return (wd[k]&&wd[k].lcl)||0;})      : idxs.map(function(i){ return 0; }),
+      tank:     idxs.map(function(){ return 0; }),
+      tgt: 0, dailyTgt: 0, joinDate: null, exitDate: null
+    };
+  }
   return {
     name: r.name, initials: ini,
     avatarBg: 'oklch(0.6 0.12 ' + r.hue + ')',
