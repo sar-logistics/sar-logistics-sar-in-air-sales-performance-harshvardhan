@@ -4275,11 +4275,22 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   }
 
   // Build per-rep filtered data
-  // Only show zones that exist in Sales Performance (getZones()).
-  // Reps whose zone isn't in salesZones get bucketed under 'Cross Sales'.
-  var salesZones = getZones(); // zones from repsRaw (Sales Performance)
+  // Only show zones that exist in Sales Performance (getZones()) for the
+  // ZONE ROW LIST itself. But for deciding whether a rep is "mapped" vs
+  // "Cross Sales" (used by _branchLocIndex below), use the broader zone
+  // set from zonesRaw/repsRawOriginal directly — getZones() deliberately
+  // excludes 'Others' from the visible zone list, but 'Others' is still a
+  // real mapped zone, not Cross Sales. Using getZones() here caused reps
+  // mapped to 'Others' to be miscounted into Cross Sales branch totals.
+  var salesZones = getZones(); // zones from repsRaw (Sales Performance) — for zone row list
   var salesZoneSet = {};
   salesZones.forEach(function(z){ salesZoneSet[z] = true; });
+  var _fullZoneSet = {}; // for mapped-vs-Cross-Sales classification — matches the drill exactly
+  if (typeof zonesRaw !== 'undefined' && zonesRaw && zonesRaw.length) {
+    zonesRaw.forEach(function(z){ if (z.zone) _fullZoneSet[z.zone] = true; });
+  } else if (typeof repsRawOriginal !== 'undefined' && repsRawOriginal && repsRawOriginal.length) {
+    repsRawOriginal.forEach(function(r){ if (r.zone) _fullZoneSet[r.zone] = true; });
+  }
 
   // Location -> month -> {pending,done} index, built directly from allPendencyDrillRows
   // (same source + same location matching as the branch drill) so branch totals always
@@ -4291,7 +4302,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var _branchLocIndex = {};
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
     allPendencyDrillRows.forEach(function(r){
-      if (salesZoneSet[r._zone]) return; // mapped zone — not Cross Sales
+      if (_fullZoneSet[r._zone]) return; // mapped zone — not Cross Sales
       if (_blFl && _blFl.indexOf(r.lob) === -1) return; // LOB filter — was missing, inflated totals
       var loc = (r.location || '').trim();
       if (!loc || loc === '—') return;
@@ -4473,7 +4484,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var td = colData.reduce(function(s,c){ return s+c.done;    }, 0);
     // If zone not in Sales Performance → Cross Sales; use location as branch name (like SP), fallback to raw zone code
     var _rawZone = rep.zone || 'Unspecified';
-    var zone = salesZoneSet[_rawZone] ? _rawZone : 'Cross Sales';
+    var zone = _fullZoneSet[_rawZone] ? _rawZone : 'Cross Sales';
     var originalZone = (zone === 'Cross Sales') ? (_repLocationMap[normalizeName(rep.name)] || _rawZone) : _rawZone;
     return { name: rep.name, zone: zone, originalZone: originalZone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
   }).filter(function(r){ return r.total > 0; });
