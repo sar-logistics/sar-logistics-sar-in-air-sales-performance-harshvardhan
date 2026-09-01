@@ -2215,15 +2215,14 @@ async function computeBothPendency(db) {
       const nameParts = rawName.split("|").map(s => s.trim());
       const cleanName = nameParts[0] || rawName;
 
+      // Name-based lookup only — matches Sales Performance exactly.
+      // (Previously also fell back to matching a pipe-suffix INZ code against
+      // ANY other rep's INZ code in the mapping sheet — this produced false
+      // matches when two unrelated reps happened to share a legacy code,
+      // incorrectly pulling reps who are actually unmapped/Cross Sales into
+      // a real zone. Removed.)
       let zone = repZoneMap[norm] || "";
       let displayName = repDisplayMap[norm] || cleanName;
-      if (!zone) {
-        for (const part of nameParts.slice(1)) {
-          const trimmed = part.toUpperCase();
-          if (inzCodeZoneMap[trimmed]) { zone = inzCodeZoneMap[trimmed]; break; }
-          if (/^IN[A-Z]?\d+$/.test(trimmed)) { zone = zone || trimmed; }
-        }
-      }
       if (!zone) zone = "Unassigned";
 
       const jobOwner = String(job["Job Owner"] || "").trim().split("|")[0].trim() || "";
