@@ -4483,15 +4483,17 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var tp = colData.reduce(function(s,c){ return s+c.pending; }, 0);
     var td = colData.reduce(function(s,c){ return s+c.done;    }, 0);
     // If zone not in Sales Performance → Cross Sales; use location as branch name (like SP), fallback to raw zone code.
-    // If that branch is one of the ones relocated under a real zone on SP
-    // (BRANCH_ZONE_MAP), relocate it here too — zone becomes the target
-    // real zone so it naturally folds into that zone's totals, while
-    // originalZone keeps the branch name for grouping display.
+    // zone stays 'Cross Sales' for ALL unmapped reps (even ones whose branch
+    // is relocated on-screen) — do NOT reclassify here. zoneTotals sums each
+    // rep's own colData directly, which is per-rep monthData (not location-
+    // filtered) and would inflate a real zone's total with a relocated rep's
+    // FULL activity (any location), not just this branch's. Relocation is
+    // handled separately, after zoneTotals is built, using the accurate
+    // location-indexed _branchLocIndex total instead.
     var _rawZone = rep.zone || 'Unspecified';
     var _isMapped = !!_fullZoneSet[_rawZone];
     var _branchLoc = !_isMapped ? (_repLocationMap[normalizeName(rep.name)] || _rawZone) : null;
-    var _relocateTo = (!_isMapped && _branchLoc && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[_branchLoc]) ? BRANCH_ZONE_MAP[_branchLoc] : null;
-    var zone = _isMapped ? _rawZone : (_relocateTo || 'Cross Sales');
+    var zone = _isMapped ? _rawZone : 'Cross Sales';
     var originalZone = _isMapped ? _rawZone : (_branchLoc || _rawZone);
     return { name: rep.name, zone: zone, originalZone: originalZone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
   }).filter(function(r){ return r.total > 0; });
@@ -4525,6 +4527,79 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       zt.colData[ci].done    += cd.done||0;
     });
   });
+
+  // Relocate branches (BRANCH_ZONE_MAP) from Cross Sales into their real
+  // zone's totals — done here, surgically, AFTER zoneTotals is built from
+  // repsFiltered's own (per-rep, not location-filtered) sums, using the
+  // accurate location-indexed _branchLocIndex total instead of just moving
+  // each rep's full activity. Monthly/Custom views use the accurate index;
+  // Yearly/Quarterly/Weekly fall back to moving the rep-sum total as-is
+  // (same fallback already accepted for branch rows under Cross Sales).
+  if (typeof BRANCH_ZONE_MAP !== 'undefined') {
+    var _relocUseLocIdx = !isYearly && !isQuarterly && !isWeekly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
+    Object.keys(BRANCH_ZONE_MAP).forEach(function(branchName){
+      var targetZone = BRANCH_ZONE_MAP[branchName];
+      var branchReps = repsFiltered.filter(function(r){ return r.zone === 'Cross Sales' && r.originalZone === branchName; });
+      var hasLocData = _relocUseLocIdx && _branchLocIndex[branchName];
+      if (branchReps.length === 0 && !hasLocData) return; // nothing to relocate for this branch
+
+      var relColData, relPending, relDone;
+      if (_relocUseLocIdx) {
+        relColData = activeCols.map(function(col){
+          var entry = (_branchLocIndex[branchName] && _branchLocIndex[branchName][col]) || null;
+          return { pending: (entry && entry.pending) || 0, done: (entry && entry.done) || 0 };
+        });
+        relPending = relColData.reduce(function(s,c){ return s+c.pending; }, 0);
+        relDone    = relColData.reduce(function(s,c){ return s+c.done;    }, 0);
+      } else {
+        var _cols = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols);
+        relColData = _cols.map(function(){ return {pending:0, done:0}; });
+        branchReps.forEach(function(r){
+          r.colData.forEach(function(cd, ci){
+            relColData[ci].pending += cd.pending||0;
+            relColData[ci].done    += cd.done||0;
+          });
+        });
+        relPending = branchReps.reduce(function(s,r){ return s+r.totalPending; }, 0);
+        relDone    = branchReps.reduce(function(s,r){ return s+r.totalDone;    }, 0);
+      }
+
+      // Subtract this branch's (rep-sum-based, since that's what zoneTotals used)
+      // contribution from Cross Sales — branchReps' totals are exactly what
+      // zoneTotals['Cross Sales'] already counted for them.
+      if (zoneTotals['Cross Sales'] && branchReps.length > 0) {
+        var csz = zoneTotals['Cross Sales'];
+        branchReps.forEach(function(r){
+          csz.totalPending -= r.totalPending;
+          csz.totalDone    -= r.totalDone;
+          csz.total        -= r.total;
+          r.colData.forEach(function(cd, ci){
+            csz.colData[ci].pending -= cd.pending||0;
+            csz.colData[ci].done    -= cd.done||0;
+          });
+        });
+      }
+
+      // Add the (accurate, location-indexed where possible) branch total to the target zone
+      if (!zoneTotals[targetZone]) {
+        zoneTotals[targetZone] = {
+          totalPending: 0, totalDone: 0, total: 0,
+          colData: (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(){ return {pending:0, done:0}; })
+        };
+      }
+      var tzt = zoneTotals[targetZone];
+      tzt.totalPending += relPending;
+      tzt.totalDone    += relDone;
+      tzt.total        += relPending + relDone;
+      relColData.forEach(function(cd, ci){
+        if (tzt.colData[ci]) {
+          tzt.colData[ci].pending += cd.pending||0;
+          tzt.colData[ci].done    += cd.done||0;
+        }
+      });
+    });
+  }
+
   // Order zones: alphanumeric (INAZ01, INAZ02...), Cross Sales always last
   var CROSS_SALES_ZONE = 'Cross Sales';
   var zoneOrder = sortZones(Object.keys(zoneTotals));
@@ -4930,7 +5005,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     // but blended in as a regular sub-section (no purple BRANCH styling
     // difference vs its parent zone's own reps beyond the badge/label).
     _zoneOwnBranches.forEach(function(branch){
-      var branchReps = repsFiltered.filter(function(r){ return r.zone === zone && r.originalZone === branch; });
+      var branchReps = repsFiltered.filter(function(r){ return r.zone === 'Cross Sales' && r.originalZone === branch; });
       var branchKey = 'branch__' + zone + '__' + branch;
       var branchCollapsed = state.pendencyZoneOpen[branchKey] === false;
       var _useLocIndexZ = !isYearly && !isQuarterly && !isWeekly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
