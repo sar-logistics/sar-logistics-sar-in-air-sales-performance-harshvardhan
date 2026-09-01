@@ -1987,7 +1987,16 @@ function getZones(){
   var seen = {}, zones = [];
   var _excludeZones = ['Others'];
   repsRaw.forEach(function(r){
-    if (!seen[r.zone] && _excludeZones.indexOf(r.zone) === -1) { seen[r.zone] = true; zones.push(r.zone); }
+    if (seen[r.zone]) return;
+    if (_excludeZones.indexOf(r.zone) > -1) return;
+    // A rep with zone==='Cross Sales' only counts as genuine Cross Sales
+    // presence if it's NOT a relocated branch (isBranch + a BRANCH_ZONE_MAP
+    // entry) — a relocated branch's pseudo-rep can be present in repsRaw
+    // purely so its data is available for its TARGET zone's total (RLS/
+    // filter), without that meaning Cross Sales itself should show as a
+    // zone row.
+    if (r.zone === 'Cross Sales' && r.isBranch && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[r.name]) return;
+    seen[r.zone] = true; zones.push(r.zone);
   });
   // Inject synthetic zones that have no mapping sheet entry — but only when
   // no zone filter is active, or this synthetic zone is explicitly selected.
