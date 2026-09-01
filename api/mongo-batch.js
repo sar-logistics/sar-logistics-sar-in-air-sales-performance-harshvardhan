@@ -380,7 +380,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-08-31T-air-inz-fallback-removed-v2";
+const DEPLOY_TS = "2026-08-31T-air-no-rep-assigned-v3";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2200,8 +2200,9 @@ async function computeBothPendency(db) {
     ).toArray();
 
     for (const job of jobs) {
-      const rawName = String(job["Sales Person"] || "").trim();
-      if (!rawName) continue;
+      // Include jobs with a blank Sales Person too, matching Sales Performance
+      // (previously skipped entirely — those jobs were invisible on OP/FP)
+      const rawName = String(job["Sales Person"] || "").trim() || "No Rep Assigned";
       const norm = normalizeName(rawName);
 
       // Fallback chain: primary ETD/ETA -> leg -> Job Date
@@ -2682,8 +2683,7 @@ module.exports = async function handler(req, res) {
             'Carrier':1, 'Carrier Name':1 } }
         ).toArray();
         for (const job of jobs) {
-          const sp = normalizeName(job['Sales Person'] || '');
-          if (!sp) continue;
+          const sp = normalizeName(job['Sales Person'] || '') || 'no rep assigned';
           if (entityType === 'rep'  && sp !== normRep) continue;
           if (entityType === 'zone' && (repZoneMap[sp]||'') !== repName) continue;
 
