@@ -296,6 +296,25 @@ function getDateValueFor(job, cls) {
   return job["Job Date"] || null;
 }
 
+// Same fallback chain as getDateValueFor, for call sites that determine
+// direction from a simple collection-name check (isExportColl/isImportColl)
+// rather than a full classifyRow() result.
+function getDateValueForDirection(job, direction) {
+  if (direction === "EXPORT") {
+    return job["ETD Loading Port"]
+        || job["ETD First Leg of Origin"]
+        || job["Job Date"]
+        || null;
+  }
+  if (direction === "IMPORT") {
+    return job["ETA Discharge"]
+        || job["ETA Last Leg of Destination"]
+        || job["Job Date"]
+        || null;
+  }
+  return job["Job Date"] || null;
+}
+
 // Google Sheets exports dates such as 04/05/2026 in day/month/year format.
 // `new Date("04/05/2026")` treats that as April 5 in JavaScript, incorrectly
 // putting 4 May shipments into April. Parse date-only values explicitly and
@@ -1131,6 +1150,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1,
     "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+    "ETD First Leg of Origin": 1, "ETA Last Leg of Destination": 1,
   };
 
   await Promise.all(ALL_COLLS.map(async (collName) => {
@@ -1145,14 +1165,12 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
 
     const jobs = await db.collection(collName).find({}, { projection }).toArray();
 
-    const isExportColl = collName.includes("export");
-    const isImportColl = collName.includes("import");
-    const dateCol = isExportColl ? "ETD Loading Port" : isImportColl ? "ETA Discharge" : "Job Date";
-
     for (const job of jobs) {
       // Date filter — only include jobs within the selected month range
       if (activeMonthSet) {
-        const rawDate = job[dateCol]; // ETD/ETA only — no Job Date fallback (matches getDrillRows)
+        // Fallback chain: primary ETD/ETA -> origin/destination leg -> Job Date
+        // (matches Sales Performance — was ETD/ETA only, silently dropping jobs)
+        const rawDate = getDateValueFor(job, cls);
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj) continue;
@@ -1669,6 +1687,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     "Sales Person": 1, "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1, "Volume": 1, "Volume Unit": 1, "Cargo Type": 1,
     "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+    "ETD First Leg of Origin": 1, "ETA Last Leg of Destination": 1,
     "Consignee Country": 1, "Shipper Country": 1, "Trade Lane": 1,
     "Destination Country": 1, "Origin Port Country": 1,
     "Discharge Port": 1, "Loading Port": 1,
@@ -1688,9 +1707,9 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     const jobs = await db.collection(cfg.coll).find({}, { projection }).toArray();
 
     for (const job of jobs) {
-      // Date filter
+      // Date filter — fallback chain: primary ETD/ETA -> leg -> Job Date
       if (activeMonthSet) {
-        const rawDate = job[cfg.dateCol] || job["Job Date"];
+        const rawDate = getDateValueFor(job, cls);
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj) continue;
@@ -1911,6 +1930,7 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
     "Container TEU": 1,
     "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+    "ETD First Leg of Origin": 1, "ETA Last Leg of Destination": 1,
   };
 
   await Promise.all(ALL_COLLS.map(async (collName) => {
@@ -1924,7 +1944,6 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
       kind: isAir ? "AIR" : collName.includes("isotank") ? "ISOTANK" : "SEA",
       direction: isImport ? "IMPORT" : "EXPORT"
     };
-    const dateCol = isExport ? "ETD Loading Port" : isImport ? "ETA Discharge" : "Job Date";
     const lobLabel = lob === "Air"
       ? (isImport ? "Air Imp" : "Air Exp")
       : lob === "ISO Tank"
@@ -1934,9 +1953,9 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     const jobs = await db.collection(collName).find({}, { projection }).toArray();
 
     for (const job of jobs) {
-      // Date filter
+      // Date filter — fallback chain: primary ETD/ETA -> leg -> Job Date
       if (activeMonthSet) {
-        const rawDate = job[dateCol]; // ETD/ETA only — no Job Date fallback (matches getDrillRows)
+        const rawDate = getDateValueFor(job, cls);
         if (!rawDate) continue;
         const dObj = parseSheetDate(rawDate);
         if (!dObj) continue;
@@ -2167,13 +2186,15 @@ async function computeBothPendency(db) {
   await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
     const isExport = collName.includes("export");
     const isImport = collName.includes("import");
-    const dateField = isExport ? "ETD Loading Port" : isImport ? "ETA Discharge" : "Job Date";
+    const direction = isExport ? "EXPORT" : isImport ? "IMPORT" : "OTHER";
 
     const jobs = await db.collection(collName).find(
       {},
       { projection: { "Sales Person": 1, "Job Owner": 1, "Financial Lock": 1, "Operation Lock": 1,
-        [dateField]: 1, "Job Date": 1, "Shipment No": 1, "Customer": 1, "Location": 1,
-        "Carrier": 1, "Carrier Name": 1, "ETD Loading Port": 1, "ETA Discharge": 1, "LOB": 1 } }
+        "ETD Loading Port": 1, "ETA Discharge": 1, "Job Date": 1,
+        "ETD First Leg of Origin": 1, "ETA Last Leg of Destination": 1,
+        "Shipment No": 1, "Customer": 1, "Location": 1,
+        "Carrier": 1, "Carrier Name": 1, "LOB": 1 } }
     ).toArray();
 
     for (const job of jobs) {
@@ -2181,7 +2202,8 @@ async function computeBothPendency(db) {
       if (!rawName) continue;
       const norm = normalizeName(rawName);
 
-      const rawDate = job[dateField] || job["Job Date"];
+      // Fallback chain: primary ETD/ETA -> leg -> Job Date
+      const rawDate = getDateValueForDirection(job, direction);
       if (!rawDate) continue;
       const d = parseSheetDate(rawDate);
       if (!d) continue;
@@ -2632,15 +2654,17 @@ module.exports = async function handler(req, res) {
       await Promise.all(ALL_JOB_COLLS.map(async (collName) => {
         const isExp = collName.includes('export');
         const isImp = collName.includes('import');
-        const dateField = isExp ? 'ETD Loading Port' : isImp ? 'ETA Discharge' : 'Job Date';
+        const direction = isExp ? 'EXPORT' : isImp ? 'IMPORT' : 'OTHER';
 
         // No date filter on MongoDB — match computePendency exactly
         // Use lean projection to keep response small and avoid timeout
         const jobs = await db.collection(collName).find(
           {},
           { projection: { 'Sales Person':1, 'Job Owner':1, 'Financial Lock':1, 'Operation Lock':1,
-            [dateField]:1, 'Job Date':1, 'Shipment No':1, 'Customer':1, 'Location':1,
-            'Carrier':1, 'Carrier Name':1, 'ETD Loading Port':1, 'ETA Discharge':1 } }
+            'ETD Loading Port':1, 'ETA Discharge':1, 'Job Date':1,
+            'ETD First Leg of Origin':1, 'ETA Last Leg of Destination':1,
+            'Shipment No':1, 'Customer':1, 'Location':1,
+            'Carrier':1, 'Carrier Name':1 } }
         ).toArray();
         for (const job of jobs) {
           const sp = normalizeName(job['Sales Person'] || '');
@@ -2648,7 +2672,8 @@ module.exports = async function handler(req, res) {
           if (entityType === 'rep'  && sp !== normRep) continue;
           if (entityType === 'zone' && (repZoneMap[sp]||'') !== repName) continue;
 
-          const rawDate = job[dateField] || job['Job Date'];
+          // Fallback chain: primary ETD/ETA -> leg -> Job Date
+          const rawDate = getDateValueForDirection(job, direction);
           if (!rawDate) continue;
           const d = parseSheetDate(rawDate);
           if (!d) continue;
