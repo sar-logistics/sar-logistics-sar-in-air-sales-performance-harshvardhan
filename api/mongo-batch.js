@@ -380,7 +380,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-07-22T-air-rev-v3-pickone";
+const DEPLOY_TS = "2026-08-31T-air-date-fallback-v1";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2096,15 +2096,17 @@ async function computeUsageAnalytics(db) {
 
 let financeCache = null;
 let financeCacheTime = 0;
+let financeCacheDeployTs = null;
 
 let opCache = null;
 let opCacheTime = 0;
+let opCacheDeployTs = null;
 
 // In-flight promise guard — prevents two parallel computeBothPendency calls
 let _pendencyBuildPromise = null;
 
 async function getOpPendency(db, force) {
-  if (!force && opCache && (Date.now() - opCacheTime) < SALES_CACHE_TTL_MS) {
+  if (!force && opCache && opCacheDeployTs === DEPLOY_TS && (Date.now() - opCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...opCache, cached: true };
   }
   await _ensurePendencyCache(db, force);
@@ -2112,7 +2114,7 @@ async function getOpPendency(db, force) {
 }
 
 async function getFinancePendency(db, force) {
-  if (!force && financeCache && (Date.now() - financeCacheTime) < SALES_CACHE_TTL_MS) {
+  if (!force && financeCache && financeCacheDeployTs === DEPLOY_TS && (Date.now() - financeCacheTime) < SALES_CACHE_TTL_MS) {
     return { ...financeCache, cached: true };
   }
   await _ensurePendencyCache(db, force);
@@ -2124,8 +2126,8 @@ async function getFinancePendency(db, force) {
 async function _ensurePendencyCache(db, force) {
   if (!force && _pendencyBuildPromise) return _pendencyBuildPromise;
   _pendencyBuildPromise = computeBothPendency(db).then(({ op, finance }) => {
-    opCache = op;           opCacheTime = Date.now();
-    financeCache = finance; financeCacheTime = Date.now();
+    opCache = op;           opCacheTime = Date.now();      opCacheDeployTs = DEPLOY_TS;
+    financeCache = finance; financeCacheTime = Date.now(); financeCacheDeployTs = DEPLOY_TS;
     _pendencyBuildPromise = null;
   }).catch(e => { _pendencyBuildPromise = null; throw e; });
   return _pendencyBuildPromise;
