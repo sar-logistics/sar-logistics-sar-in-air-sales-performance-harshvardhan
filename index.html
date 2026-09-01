@@ -650,7 +650,15 @@ function computeFilteredRepsRaw(){
     } else if (role === 'zonal manager') {
       var userZone = (currentUser.zone || '').trim();
       if (userZone) {
-        base = base.filter(function(r){ return r.zone === userZone; });
+        // Include the zone's own reps, plus any Cross Sales branch
+        // (isBranch pseudo-rep) that's relocated under this zone via
+        // BRANCH_ZONE_MAP — e.g. Zone 2 (Mumbai) manager should also see
+        // the Mumbai branch that displays under their zone.
+        base = base.filter(function(r){
+          if (r.zone === userZone) return true;
+          if (r.isBranch && r.zone === 'Cross Sales' && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[r.name] === userZone) return true;
+          return false;
+        });
       }
     }
   }
@@ -4405,33 +4413,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     return jo.monthData[m] || { pending:0, done:0 };
   }
 
-  // RLS: filter pendency reps to only those visible in repsRaw (already RLS-filtered)
-  // This ensures Zonal Manager sees only their zone, Sales Rep sees only themselves
-  var _allowedRepNames = null;
-  if (currentUser) {
-    var _pRole = (currentUser.role || '').toLowerCase().trim();
-    if (_pRole === 'zonal manager' || _pRole === 'sales rep') {
-      // repsRaw is already filtered by computeFilteredRepsRaw() per role
-      _allowedRepNames = {};
-      repsRaw.forEach(function(r){ _allowedRepNames[normalizeName(r.name)] = true; });
-    }
-  }
-  // Zone filter for pendency
-  var _filterZonesP = state.filterZones || [];
-  var _pendencyZoneSet = null;
-  if (_filterZonesP.length > 0) {
-    _pendencyZoneSet = {};
-    _filterZonesP.forEach(function(z){ _pendencyZoneSet[z] = true; });
-  }
-
-  var _pendencyReps = (d.reps || []).filter(function(rep){
-    if (_allowedRepNames && !_allowedRepNames[normalizeName(rep.name)]) return false;
-    if (_pendencyZoneSet && !_pendencyZoneSet[rep.zone]) return false;
-    return true;
-  });
-
   // Rep → location lookup for Cross Sales branch grouping (location-based, like Sales Performance)
   // Falls back to the rep's raw zone code if location isn't available yet.
+  // Moved ahead of the RLS block below — a Zonal Manager whose zone has a
+  // relocated branch (BRANCH_ZONE_MAP) needs this to also unlock that
+  // branch's individual reps.
   var _repLocationMap = {};
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
     var _repLocCount = {}; // norm -> { location -> count }
@@ -4458,6 +4444,47 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       if (_cachedMap) _repLocationMap = (JSON.parse(_cachedMap).data) || {};
     } catch(e) {}
   }
+
+  // RLS: filter pendency reps to only those visible in repsRaw (already RLS-filtered)
+  // This ensures Zonal Manager sees only their zone, Sales Rep sees only themselves
+  var _allowedRepNames = null;
+  if (currentUser) {
+    var _pRole = (currentUser.role || '').toLowerCase().trim();
+    if (_pRole === 'zonal manager' || _pRole === 'sales rep') {
+      // repsRaw is already filtered by computeFilteredRepsRaw() per role
+      _allowedRepNames = {};
+      repsRaw.forEach(function(r){ _allowedRepNames[normalizeName(r.name)] = true; });
+      // A Zonal Manager whose zone has a relocated Cross Sales branch
+      // (BRANCH_ZONE_MAP) should also see that branch's individual reps —
+      // repsRaw only carries mapped reps + the branch's aggregate pseudo-rep
+      // (from computeFilteredRepsRaw's own equivalent extension), not each
+      // individual unmapped rep who belongs to that branch by location.
+      if (_pRole === 'zonal manager' && typeof BRANCH_ZONE_MAP !== 'undefined' && typeof ZONE_BRANCHES_MAP !== 'undefined') {
+        var _userZoneRLS = (currentUser.zone || '').trim();
+        var _ownBranches = ZONE_BRANCHES_MAP[_userZoneRLS] || [];
+        if (_ownBranches.length > 0 && allPendencyDrillRows) {
+          allPendencyDrillRows.forEach(function(r){
+            var loc = _repLocationMap[r._norm] || '';
+            if (_ownBranches.indexOf(loc) > -1) _allowedRepNames[r._norm] = true;
+          });
+        }
+      }
+    }
+  }
+  // Zone filter for pendency
+  var _filterZonesP = state.filterZones || [];
+  var _pendencyZoneSet = null;
+  if (_filterZonesP.length > 0) {
+    _pendencyZoneSet = {};
+    _filterZonesP.forEach(function(z){ _pendencyZoneSet[z] = true; });
+  }
+
+  var _pendencyReps = (d.reps || []).filter(function(rep){
+    if (_allowedRepNames && !_allowedRepNames[normalizeName(rep.name)]) return false;
+    if (_pendencyZoneSet && !_pendencyZoneSet[rep.zone]) return false;
+    return true;
+  });
+
 
   var repsFiltered = _pendencyReps.map(function(rep){
     var colData;
