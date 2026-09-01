@@ -1887,8 +1887,9 @@ function grandEntity(){
         if(_fz) {
           var _hasCross = _fz.indexOf('Cross Sales') > -1;
           // Cross Sales reps have _zone=null; other zones match by _zone value
-          if (_hasCross && !r._zone) { /* ok — Cross Sales */ }
+          if (_hasCross && !r._zone && !(typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[(r.location||'').trim()])) { /* ok — genuine Cross Sales, not a relocated branch */ }
           else if (r._zone && _fz.indexOf(r._zone) > -1) { /* ok — matched zone */ }
+          else if (!r._zone && typeof BRANCH_ZONE_MAP !== 'undefined' && _fz.indexOf(BRANCH_ZONE_MAP[(r.location||'').trim()]) > -1) { /* ok — relocated branch job, target zone selected */ }
           else return false;
         }
         if(_fr && (!r._sp  || _fr.indexOf(r._sp)===-1)) return false;
