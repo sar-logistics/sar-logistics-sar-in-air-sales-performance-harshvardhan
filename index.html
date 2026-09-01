@@ -4304,11 +4304,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     });
     // Cache instantly for next load — avoids showing wrong/fallback branch
     // totals for the few seconds before allPendencyDrillRows arrives.
-    try { localStorage.setItem(_blCacheKey, JSON.stringify(_branchLocIndex)); } catch(e) {}
+    try { localStorage.setItem(_blCacheKey, JSON.stringify({ _cachedAt: Date.now(), data: _branchLocIndex })); } catch(e) {}
   } else {
     try {
       var _cachedBl = localStorage.getItem(_blCacheKey);
-      if (_cachedBl) _branchLocIndex = JSON.parse(_cachedBl);
+      if (_cachedBl) _branchLocIndex = (JSON.parse(_cachedBl).data) || {};
     } catch(e) {}
   }
 
@@ -4418,12 +4418,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     // Cache instantly for next page load, so branches show correct city
     // names right away instead of falling back to raw zone codes (INZ02
     // etc) until allPendencyDrillRows finishes loading.
-    try { localStorage.setItem('sar_rep_location_map_' + CACHE_VERSION, JSON.stringify(_repLocationMap)); } catch(e) {}
+    try { localStorage.setItem('sar_rep_location_map_' + CACHE_VERSION, JSON.stringify({ _cachedAt: Date.now(), data: _repLocationMap })); } catch(e) {}
   } else {
     // Fast fallback: use cached map from previous session until live data arrives
     try {
       var _cachedMap = localStorage.getItem('sar_rep_location_map_' + CACHE_VERSION);
-      if (_cachedMap) _repLocationMap = JSON.parse(_cachedMap);
+      if (_cachedMap) _repLocationMap = (JSON.parse(_cachedMap).data) || {};
     } catch(e) {}
   }
 
