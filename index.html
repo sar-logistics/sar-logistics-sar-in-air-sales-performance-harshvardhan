@@ -666,7 +666,18 @@ function computeFilteredRepsRaw(){
   // Zone filter — expand selected zones to rep names, then intersect with rep filter
   var filterZones = state.filterZones || [];
   if (filterZones.length > 0) {
-    base = base.filter(function(r){ return filterZones.indexOf(r.zone) > -1; });
+    base = base.filter(function(r){
+      if (filterZones.indexOf(r.zone) > -1) return true;
+      // A selected synthetic zone (e.g. INAZ08 (Chennai)) never matches a
+      // rep's raw zone directly — its branch's reps still carry
+      // zone='Cross Sales'. Match via the isBranch pseudo-rep whose name
+      // maps to a selected zone through BRANCH_ZONE_MAP instead.
+      if (r.isBranch && r.zone === 'Cross Sales' && typeof BRANCH_ZONE_MAP !== 'undefined') {
+        var _tz = BRANCH_ZONE_MAP[r.name];
+        if (_tz && filterZones.indexOf(_tz) > -1) return true;
+      }
+      return false;
+    });
   }
 
   // Rep filter
@@ -1978,8 +1989,16 @@ function getZones(){
   repsRaw.forEach(function(r){
     if (!seen[r.zone] && _excludeZones.indexOf(r.zone) === -1) { seen[r.zone] = true; zones.push(r.zone); }
   });
-  // Inject synthetic zones that have no mapping sheet entry
-  SYNTHETIC_ZONES.forEach(function(z){ if (!seen[z]) { seen[z]=true; zones.push(z); } });
+  // Inject synthetic zones that have no mapping sheet entry — but only when
+  // no zone filter is active, or this synthetic zone is explicitly selected.
+  // Previously this ran unconditionally, so a synthetic zone (e.g. INAZ08
+  // (Chennai)) always appeared regardless of which zone(s) the user filtered to.
+  var _fzActive = state.filterZones && state.filterZones.length > 0 ? state.filterZones : null;
+  SYNTHETIC_ZONES.forEach(function(z){
+    if (seen[z]) return;
+    if (_fzActive && _fzActive.indexOf(z) === -1) return;
+    seen[z] = true; zones.push(z);
+  });
   return sortZones(zones);
 }
 
@@ -2613,6 +2632,13 @@ function topbar(){
           var allZoneNames = sortZones(Object.keys(function(){ var z={}; repsRawOriginal.forEach(function(r){
             if(r.zone && r.zone !== 'Others') z[r.zone]=true;
           }); return z; }()));
+          // Include synthetic zones (e.g. INAZ08 (Chennai)) so they're
+          // explicitly selectable — they never appear as a rep's raw zone
+          // value, so the loop above alone would never surface them.
+          if (typeof SYNTHETIC_ZONES !== 'undefined') {
+            SYNTHETIC_ZONES.forEach(function(z){ if (allZoneNames.indexOf(z) === -1) allZoneNames.push(z); });
+            allZoneNames = sortZones(allZoneNames);
+          }
           var zoneOpen = state.filterZoneDropOpen;
           var zoneSection = sectionHeader('Zones', (state.filterZones||[]).length, zoneOpen, 'toggleFilterZoneDrop')
             + (zoneOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'                + '<div id="zone-checklist" style="max-height:180px;overflow-y:auto;">'                  + checkRow('All Zones', (state.filterZones||[]).length===0, 'filterZoneAll', '')                  + allZoneNames.map(function(z){ return checkRow(z, (state.filterZones||[]).indexOf(z)>-1, 'toggleFilterZone', z); }).join('')                + '</div>'              + '</div>' : '');
@@ -4474,14 +4500,29 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // Zone filter for pendency
   var _filterZonesP = state.filterZones || [];
   var _pendencyZoneSet = null;
+  var _pendencySyntheticSelected = null; // synthetic zones selected -> their branch names
   if (_filterZonesP.length > 0) {
     _pendencyZoneSet = {};
     _filterZonesP.forEach(function(z){ _pendencyZoneSet[z] = true; });
+    if (typeof SYNTHETIC_ZONES !== 'undefined' && typeof ZONE_BRANCHES_MAP !== 'undefined') {
+      _filterZonesP.forEach(function(z){
+        if (SYNTHETIC_ZONES.indexOf(z) > -1 && ZONE_BRANCHES_MAP[z]) {
+          if (!_pendencySyntheticSelected) _pendencySyntheticSelected = {};
+          ZONE_BRANCHES_MAP[z].forEach(function(br){ _pendencySyntheticSelected[br] = true; });
+        }
+      });
+    }
   }
 
   var _pendencyReps = (d.reps || []).filter(function(rep){
     if (_allowedRepNames && !_allowedRepNames[normalizeName(rep.name)]) return false;
-    if (_pendencyZoneSet && !_pendencyZoneSet[rep.zone]) return false;
+    if (_pendencyZoneSet && !_pendencyZoneSet[rep.zone]) {
+      // A selected synthetic zone (e.g. INAZ08 (Chennai)) never matches a
+      // rep's raw zone directly — match via their derived branch location
+      // instead, same as the RLS extension above.
+      var _repBranch = _repLocationMap[normalizeName(rep.name)];
+      if (!(_pendencySyntheticSelected && _repBranch && _pendencySyntheticSelected[_repBranch])) return false;
+    }
     return true;
   });
 
