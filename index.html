@@ -4378,6 +4378,16 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       Object.keys(counts).forEach(function(loc){ if (counts[loc] > bestN) { best = loc; bestN = counts[loc]; } });
       if (best) _repLocationMap[norm] = best;
     });
+    // Cache instantly for next page load, so branches show correct city
+    // names right away instead of falling back to raw zone codes (INZ02
+    // etc) until allPendencyDrillRows finishes loading.
+    try { localStorage.setItem('sar_rep_location_map_' + CACHE_VERSION, JSON.stringify(_repLocationMap)); } catch(e) {}
+  } else {
+    // Fast fallback: use cached map from previous session until live data arrives
+    try {
+      var _cachedMap = localStorage.getItem('sar_rep_location_map_' + CACHE_VERSION);
+      if (_cachedMap) _repLocationMap = JSON.parse(_cachedMap);
+    } catch(e) {}
   }
 
   var repsFiltered = _pendencyReps.map(function(rep){
