@@ -7337,9 +7337,15 @@ function zoneToRawSPs(zones) {
 
   allDrillRows.forEach(function(r){
     if (!r._sp) return;
-    // Cross Sales = reps with no zone mapping (_zone null/empty)
-    if (hasCrossSales && !r._zone) { spSet[r._sp] = true; return; }
-    if (otherZones.length > 0 && r._zone && otherZones.indexOf(r._zone) > -1) { spSet[r._sp] = true; }
+    var _locBr = (r.location || '').trim();
+    var _relocTgt = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_locBr] : null;
+    // Cross Sales = reps with no zone mapping (_zone null/empty), excluding
+    // branches relocated under a real zone
+    if (hasCrossSales && !r._zone && !_relocTgt) { spSet[r._sp] = true; return; }
+    if (otherZones.length > 0 && r._zone && otherZones.indexOf(r._zone) > -1) { spSet[r._sp] = true; return; }
+    // A relocated branch's rows (r._zone=null) also belong to their target
+    // zone if that zone is in the selected list
+    if (otherZones.length > 0 && !r._zone && _relocTgt && otherZones.indexOf(_relocTgt) > -1) { spSet[r._sp] = true; }
   });
   var keys = Object.keys(spSet);
   return keys.length > 0 ? keys : [];
