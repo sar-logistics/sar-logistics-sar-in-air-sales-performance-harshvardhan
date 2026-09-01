@@ -943,14 +943,42 @@ function lsSet(key, data) {
     var serialized = JSON.stringify(data);
     localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, serialized);
   } catch(e) {
-    // Quota exceeded — try clearing old keys first then retry
+    // Quota exceeded — try clearing old-version keys first then retry
     try {
       Object.keys(localStorage).filter(function(k){
         return k.startsWith('sar_') && !k.includes('_' + CACHE_VERSION) && !k.includes('user_session');
       }).forEach(function(k){ localStorage.removeItem(k); });
       data._cachedAt = Date.now();
       localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, JSON.stringify(data));
-    } catch(e2) { console.warn('lsSet quota exceeded for key:', key, 'size:', JSON.stringify(data).length); }
+    } catch(e2) {
+      // Still over quota — same-version caches have accumulated too much
+      // (many date-range-specific keys: customers, agents, tradelane etc).
+      // Evict the oldest current-version caches one at a time (LRU) and
+      // retry until it fits or nothing's left to evict.
+      try {
+        var candidates = Object.keys(localStorage)
+          .filter(function(k){ return k.startsWith('sar_') && k.includes('_' + CACHE_VERSION) && !k.includes('user_session'); })
+          .map(function(k){
+            var age = 0;
+            try { age = JSON.parse(localStorage.getItem(k))._cachedAt || 0; } catch(e3) {}
+            return { k: k, age: age };
+          })
+          .sort(function(a,b){ return a.age - b.age; }); // oldest first
+
+        var saved = false;
+        for (var i = 0; i < candidates.length; i++) {
+          localStorage.removeItem(candidates[i].k);
+          try {
+            localStorage.setItem('sar_' + key + '_' + CACHE_VERSION, JSON.stringify(data));
+            saved = true;
+            break;
+          } catch(e4) { /* still too big, evict next oldest */ }
+        }
+        if (!saved) console.warn('lsSet quota exceeded for key:', key, 'size:', JSON.stringify(data).length, '— evicted all other caches, still too big');
+      } catch(e5) {
+        console.warn('lsSet quota exceeded for key:', key, 'size:', JSON.stringify(data).length);
+      }
+    }
   }
 }
 
@@ -4257,10 +4285,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // (same source + same location matching as the branch drill) so branch totals always
   // equal what the drill shows — a rep can touch multiple locations, so summing rep-level
   // totals (which span ALL their jobs) does not equal a location-filtered count.
+  var _isOLPage = lockType === 'Operation Lock';
+  var _blFl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
+  var _blCacheKey = 'sar_branch_loc_index_' + (_isOLPage ? 'ol' : 'fl') + '_' + (_blFl ? _blFl.slice().sort().join(',') : 'all') + '_' + CACHE_VERSION;
   var _branchLocIndex = {};
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
-    var _isOLPage = lockType === 'Operation Lock';
-    var _blFl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
     allPendencyDrillRows.forEach(function(r){
       if (salesZoneSet[r._zone]) return; // mapped zone — not Cross Sales
       if (_blFl && _blFl.indexOf(r.lob) === -1) return; // LOB filter — was missing, inflated totals
@@ -4273,6 +4302,14 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       if (isDone) _branchLocIndex[loc][m].done++;
       else _branchLocIndex[loc][m].pending++;
     });
+    // Cache instantly for next load — avoids showing wrong/fallback branch
+    // totals for the few seconds before allPendencyDrillRows arrives.
+    try { localStorage.setItem(_blCacheKey, JSON.stringify(_branchLocIndex)); } catch(e) {}
+  } else {
+    try {
+      var _cachedBl = localStorage.getItem(_blCacheKey);
+      if (_cachedBl) _branchLocIndex = JSON.parse(_cachedBl);
+    } catch(e) {}
   }
 
   // LOB filter using lobMonthData from server (pre-computed per LOB, no drill rows needed)
