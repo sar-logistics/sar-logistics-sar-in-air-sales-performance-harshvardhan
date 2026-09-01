@@ -4735,6 +4735,14 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // Cross Sales: 3-level hierarchy — Branch > Sales Rep > Job Owners
       // rep.zone for cross-sales reps is the branch name
       var branchMap = {};
+      // Seed with every branch SP knows about (isBranch pseudo-reps), even
+      // if it has zero activity in the currently active date range — SP
+      // still shows these as 0-value rows rather than hiding them entirely.
+      if (typeof repsRawOriginal !== 'undefined' && repsRawOriginal && repsRawOriginal.length) {
+        repsRawOriginal.forEach(function(r){
+          if (r.isBranch && r.zone === 'Cross Sales' && !branchMap[r.name]) branchMap[r.name] = [];
+        });
+      }
       repsFiltered.filter(function(r){ return r.zone === 'Cross Sales'; }).forEach(function(r){
         var branch = r.originalZone || 'Unspecified';
         if (!branchMap[branch]) branchMap[branch] = [];
