@@ -464,8 +464,8 @@ function _showDashboardBody() {
               }catch(e){} } }).catch(function(){});
         }
       }, 1100);
-      setTimeout(function(){ fetchFinanceData(null);  }, 1500);
-      setTimeout(function(){ fetchOpData(null);       }, 1900);
+      setTimeout(function(){ fetchFinanceData(function(){ if (state.page === 'finance' || state.page === 'op') render(); }); }, 1500);
+      setTimeout(function(){ fetchOpData(function(){ if (state.page === 'op' || state.page === 'finance') render(); }); }, 1900);
       // Prefetch org + usage immediately for admin users
   var _isAdminUser = currentUser && ['admin','hr'].indexOf((currentUser.role||'').toLowerCase()) > -1;
   if (_isAdminUser) {
