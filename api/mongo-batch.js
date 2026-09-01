@@ -380,7 +380,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-08-31T-air-date-fallback-v1";
+const DEPLOY_TS = "2026-08-31T-air-inz-fallback-removed-v2";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
