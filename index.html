@@ -4747,11 +4747,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         var branchReps = branchMap[branch];
         // Aggregate branch totals -- prefer location-based drill index (matches drill exactly)
         // for Monthly/Custom views; Yearly/Quarterly/Weekly keep the rep-sum fallback for now.
-        var _useLocIndex = !isYearly && !isQuarterly && !isWeekly && _branchLocIndex[branch];
+        var _useLocIndex = !isYearly && !isQuarterly && !isWeekly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
         var bColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
           if (_useLocIndex) {
             var _m = activeCols[ci];
-            var _entry = _branchLocIndex[branch][_m];
+            var _entry = (_branchLocIndex[branch] && _branchLocIndex[branch][_m]) || null;
             return { pending: (_entry && _entry.pending) || 0, done: (_entry && _entry.done) || 0 };
           }
           return {
