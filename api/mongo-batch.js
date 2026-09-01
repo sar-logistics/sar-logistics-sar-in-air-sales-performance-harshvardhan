@@ -1200,7 +1200,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
       }
 
       // Derive month label for this job
-      const rawDateForMl = job[dateCol];
+      const rawDateForMl = getDateValueFor(job, cls);
       let monthLabelForMd = "";
       if (rawDateForMl) {
         const dMl = parseSheetDate(rawDateForMl);
@@ -1780,7 +1780,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
           : (cfg.dir === "Import" ? "Sea Imp" : "Sea Exp");
 
       // Derive month label for this job
-      const rawDateM = job[cfg.dateCol] || job["Job Date"];
+      const rawDateM = getDateValueFor(job, cls);
       let monthLabel = "";
       if (rawDateM) {
         const dM = parseSheetDate(rawDateM);
