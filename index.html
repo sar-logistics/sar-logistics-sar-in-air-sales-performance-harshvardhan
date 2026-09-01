@@ -4323,6 +4323,27 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     } catch(e) {}
   }
 
+  // Zone -> month -> {pending,done} index, same construction as _branchLocIndex
+  // above but for MAPPED reps (keyed by their real _zone, not location). Used
+  // to compute a zone's own total independently of repsFiltered's per-rep
+  // monthData sums, so relocating a branch into this zone (below) can be done
+  // by simple addition — own (this index) + relocated branch (_branchLocIndex)
+  // — without touching or mutating zoneTotals' existing aggregation at all.
+  var _zoneOwnLocIndex = {};
+  if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+    allPendencyDrillRows.forEach(function(r){
+      if (!_fullZoneSet[r._zone]) return; // unmapped — not this zone's own rep
+      if (_blFl && _blFl.indexOf(r.lob) === -1) return;
+      var z = r._zone;
+      var m = r._month;
+      if (!_zoneOwnLocIndex[z]) _zoneOwnLocIndex[z] = {};
+      if (!_zoneOwnLocIndex[z][m]) _zoneOwnLocIndex[z][m] = { pending: 0, done: 0 };
+      var isDone2 = _isOLPage ? r.olDone : r.flDone;
+      if (isDone2) _zoneOwnLocIndex[z][m].done++;
+      else _zoneOwnLocIndex[z][m].pending++;
+    });
+  }
+
   // LOB filter using lobMonthData from server (pre-computed per LOB, no drill rows needed)
   var _flobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
   // _pendencyLobIndex: repName -> month -> {pending, done} filtered by active LOBs
@@ -4521,6 +4542,19 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // Order zones: alphanumeric (INAZ01, INAZ02...), Cross Sales always last
   var CROSS_SALES_ZONE = 'Cross Sales';
   var zoneOrder = sortZones(Object.keys(zoneTotals));
+  // Ensure every BRANCH_ZONE_MAP target zone appears in the list even if it
+  // has zero genuinely-mapped reps of its own (e.g. INAZ08 (Chennai), which
+  // only ever has a relocated branch, never its own mapped rep) — its header
+  // total is computed fresh below regardless of whether zoneTotals has an
+  // entry for it.
+  if (typeof BRANCH_ZONE_MAP !== 'undefined') {
+    var _targetZonesSeen = {};
+    Object.keys(BRANCH_ZONE_MAP).forEach(function(b){
+      var tz = BRANCH_ZONE_MAP[b];
+      if (zoneOrder.indexOf(tz) === -1 && !_targetZonesSeen[tz]) { _targetZonesSeen[tz] = true; zoneOrder.push(tz); }
+    });
+    zoneOrder = sortZones(zoneOrder);
+  }
 
   var BRAND = brandColor || '#1D5FCC';
   var _qRangeLabel = {'Q1':'Apr–Jun','Q2':'Jul–Sep','Q3':'Oct–Dec','Q4':'Jan–Mar'};
@@ -4614,6 +4648,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           : (entityName === 'Cross Sales') ? 'crosssales'
           : (zoneGroup === 'Cross Sales' && !repGroup) ? 'branch'
           : (zoneGroup && zoneGroup.startsWith('branch__')) ? 'branch'
+          : (!repGroup && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[entityName]) ? 'branch'
           : isZone ? 'zone' : 'rep';
         if (isYearly && _pFyGroups) {
           // Yearly: golden FY column, drillCol is RANGE of that FY group's months
@@ -4658,6 +4693,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         : (entityName === 'Cross Sales') ? 'crosssales'
         : (zoneGroup === 'Cross Sales' && !repGroup) ? 'branch'
         : (zoneGroup && zoneGroup.startsWith('branch__')) ? 'branch'
+        : (!repGroup && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[entityName]) ? 'branch'
         : isZone ? 'zone' : 'rep';
       // Use active column range for GT drill so it matches what the table shows
       var gtMonth = activeCols.length > 0
@@ -4688,8 +4724,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var bodyRows = '';
   var pageKey = title.replace(/\s+/g,'');
   zoneOrder.forEach(function(zone){
+    var _zoneOwnBranchesCheck = (typeof ZONE_BRANCHES_MAP !== 'undefined' && ZONE_BRANCHES_MAP[zone]) || [];
     var zt = zoneTotals[zone];
-    if (!zt || zt.total === 0) return;
+    // A zone with no genuinely-mapped reps (zt undefined) can still have a
+    // relocated branch (e.g. INAZ08 (Chennai)) — don't skip those.
+    if ((!zt || zt.total === 0) && _zoneOwnBranchesCheck.length === 0) return;
     var isCrossSales = zone === 'Cross Sales';
     var isCollapsed = state.pendencyZoneOpen[zone] === false; // default open
     var zHue = zoneHueVal(zone);
@@ -4726,7 +4765,50 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var zAccentColor = isCrossSales ? '#7C3AED' : BRAND;
     var zAccent = 'box-shadow:inset 3px 0 0 '+zAccentColor+', inset -1.5px 0 0 '+PBORDER_STRONG+';';
     var zoneBg   = isCrossSales ? '#F5F3FF' : '#F0F4FB';
-    var zoneData = { colData: zt.colData, totalPending: zt.totalPending, totalDone: zt.totalDone, total: zt.total };
+    var _useLocIndexForHeader = !isYearly && !isQuarterly && !isWeekly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
+    var zoneData;
+    if (isCrossSales && _useLocIndexForHeader) {
+      // Cross Sales total must exclude branches relocated elsewhere — computed
+      // fresh from _branchLocIndex for only the NON-relocated branches, since
+      // zt (from the untouched zoneTotals aggregation above) still includes
+      // every unmapped rep including relocated ones.
+      var _relocatedBranchNames = (typeof BRANCH_ZONE_MAP !== 'undefined') ? Object.keys(BRANCH_ZONE_MAP) : [];
+      var _csColData = activeCols.map(function(col){
+        var p = 0, d = 0;
+        Object.keys(_branchLocIndex).forEach(function(br){
+          if (_relocatedBranchNames.indexOf(br) > -1) return;
+          var entry = _branchLocIndex[br][col];
+          if (entry) { p += entry.pending||0; d += entry.done||0; }
+        });
+        return { pending: p, done: d };
+      });
+      var _csPending = _csColData.reduce(function(s,c){return s+c.pending;},0);
+      var _csDone = _csColData.reduce(function(s,c){return s+c.done;},0);
+      zoneData = { colData: _csColData, totalPending: _csPending, totalDone: _csDone, total: _csPending+_csDone };
+    } else if (!isCrossSales && _zoneOwnBranchesCheck.length > 0 && _useLocIndexForHeader) {
+      // Real zone with a relocated branch — own (from _zoneOwnLocIndex) +
+      // each relocated branch (from _branchLocIndex), computed fresh and
+      // independently of zoneTotals/repsFiltered's per-rep sums entirely.
+      var _zColData = activeCols.map(function(col){
+        var ownEntry = (_zoneOwnLocIndex[zone] && _zoneOwnLocIndex[zone][col]) || null;
+        var p = (ownEntry && ownEntry.pending) || 0;
+        var d = (ownEntry && ownEntry.done) || 0;
+        _zoneOwnBranchesCheck.forEach(function(br){
+          var brEntry = _branchLocIndex[br] && _branchLocIndex[br][col];
+          if (brEntry) { p += brEntry.pending||0; d += brEntry.done||0; }
+        });
+        return { pending: p, done: d };
+      });
+      var _zPending = _zColData.reduce(function(s,c){return s+c.pending;},0);
+      var _zDone = _zColData.reduce(function(s,c){return s+c.done;},0);
+      zoneData = { colData: _zColData, totalPending: _zPending, totalDone: _zDone, total: _zPending+_zDone };
+    } else {
+      // No relocation involved for this zone/view, or Yearly/Quarterly/Weekly
+      // (accepted limitation, same as branch rows) — original behavior.
+      zoneData = zt
+        ? { colData: zt.colData, totalPending: zt.totalPending, totalDone: zt.totalDone, total: zt.total }
+        : { colData: activeCols.map(function(){ return {pending:0,done:0}; }), totalPending: 0, totalDone: 0, total: 0 };
+    }
     bodyRows += metricRows(zoneData, null, zoneBg, true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';', null, zone, lockType);
 
     if (isCollapsed) return; // skip reps if zone collapsed
@@ -4740,11 +4822,13 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // still shows these as 0-value rows rather than hiding them entirely.
       if (typeof repsRawOriginal !== 'undefined' && repsRawOriginal && repsRawOriginal.length) {
         repsRawOriginal.forEach(function(r){
-          if (r.isBranch && r.zone === 'Cross Sales' && !branchMap[r.name]) branchMap[r.name] = [];
+          if (r.isBranch && r.zone === 'Cross Sales' && !branchMap[r.name]
+              && !(typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[r.name])) branchMap[r.name] = [];
         });
       }
       repsFiltered.filter(function(r){ return r.zone === 'Cross Sales'; }).forEach(function(r){
         var branch = r.originalZone || 'Unspecified';
+        if (typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[branch]) return; // relocated — rendered under its real zone instead
         if (!branchMap[branch]) branchMap[branch] = [];
         branchMap[branch].push(r);
       });
@@ -4907,6 +4991,100 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           bodyRows += metricRows(joFiltered, null, '#FAFBFD', false, zone, repKey, false, _jpId, joAvatar, joLabel, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';', _jpId, lockType);
         });
       }
+    });
+
+    // Branches relocated under this zone (BRANCH_ZONE_MAP) — same 3-level
+    // Branch > Sales Rep > Job Owners rendering used under Cross Sales,
+    // blended in as a regular sub-section. Reps stay matched by
+    // r.zone==='Cross Sales' && r.originalZone===branch (never reclassified);
+    // only the display location changes.
+    _zoneOwnBranchesCheck.forEach(function(branch){
+      var branchReps = repsFiltered.filter(function(r){ return r.zone === 'Cross Sales' && r.originalZone === branch; });
+      var branchKey = 'branch__' + zone + '__' + branch;
+      var branchCollapsed = state.pendencyZoneOpen[branchKey] === false;
+      var _useLocIndexZ = !isYearly && !isQuarterly && !isWeekly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
+      var zbColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
+        if (_useLocIndexZ) {
+          var _m = activeCols[ci];
+          var _entry = (_branchLocIndex[branch] && _branchLocIndex[branch][_m]) || null;
+          return { pending: (_entry && _entry.pending) || 0, done: (_entry && _entry.done) || 0 };
+        }
+        return {
+          pending: branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
+          done:    branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
+        };
+      });
+      var zbPending = _useLocIndexZ ? zbColData.reduce(function(s,c){ return s+c.pending; }, 0) : branchReps.reduce(function(s,r){ return s+r.totalPending; }, 0);
+      var zbDone    = _useLocIndexZ ? zbColData.reduce(function(s,c){ return s+c.done;    }, 0) : branchReps.reduce(function(s,r){ return s+r.totalDone;    }, 0);
+      var zbData = { colData: zbColData, totalPending: zbPending, totalDone: zbDone, total: zbPending+zbDone };
+      var zbAvBg = 'oklch(0.52 0.10 '+hue(branch)+')';
+      var zbAvatar = '<div style="width:26px;height:26px;border-radius:7px;background:'+zbAvBg+';color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 2px 5px rgba(0,0,0,0.12);">'+ini(branch)+'</div>';
+      var zbChevSvg = branchCollapsed
+        ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>'
+        : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>';
+      var zbToggle = '<div data-act="pendencyZoneToggle" data-zone="'+esc(branchKey)+'" style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,'+BRAND+',#0D2B5E);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'+zbChevSvg+'</div>';
+      var zbLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
+        +'<div style="font-size:11px;font-weight:600;color:#1E3A66;">'+esc(branch)+'</div>'
+        +'<div style="font-size:9.5px;color:#94A3B8;font-weight:500;">'+branchReps.length+' rep'+(branchReps.length===1?'':'s')+'</div>'
+      +'</div>';
+      var zbAccent = 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';';
+      bodyRows += metricRows(zbData, null, '#FFFFFF', false, zone, null, false, branch, zbAvatar, zbLabel, zbToggle, zbAccent, 'border-top:1.5px dashed #9AA6B8;', null, branch, lockType);
+
+      if (branchCollapsed) return;
+
+      branchReps.forEach(function(rep){
+        var repKeyZ = 'rep__' + zone + '__' + branch + '__' + rep.name;
+        var repCollapsedZ = state.pendencyZoneOpen[repKeyZ] === false;
+        var hasOwnersZ = showJobOwners && rep.jobOwners && rep.jobOwners.length > 0;
+        var repAvBgZ = 'oklch(0.6 0.12 '+hue(rep.name)+')';
+        var repAvatarZ = '<div style="width:22px;height:22px;border-radius:50%;background:'+repAvBgZ+';color:#fff;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+ini(rep.name)+'</div>';
+        var repLabelZ = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;">'
+          +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(rep.name)+'</div>'
+        +'</div>';
+        var repChevZ = hasOwnersZ
+          ? '<div data-act="pendencyZoneToggle" data-zone="'+esc(repKeyZ)+'" style="width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,'+BRAND+',#0D2B5E);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">'
+            +(repCollapsedZ ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>' : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>')
+            +'</div>'
+          : '';
+        bodyRows += metricRows(rep, null, '#FDFCFF', false, zone, branchKey, false, rep.name, repAvatarZ, repLabelZ, repChevZ, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #C4B5FD;', null, rep.name, lockType);
+
+        if (hasOwnersZ && !repCollapsedZ) {
+          rep.jobOwners.forEach(function(jo){
+            var joColDataZ;
+            if (isYearly && _pFyGroups) {
+              joColDataZ = _pFyGroups.map(function(g){
+                return g.idxs.reduce(function(acc,i){
+                  var src = _joGet(rep, jo, months26[i]);
+                  acc.pending += src.pending||0; acc.done += src.done||0; return acc;
+                }, { pending:0, done:0 });
+              });
+            } else if (isQuarterly && _qGroups) {
+              joColDataZ = _qGroups.map(function(g){
+                return g.months.reduce(function(acc,m){
+                  var src = _joGet(rep, jo, m);
+                  acc.pending += src.pending||0; acc.done += src.done||0; return acc;
+                }, { pending:0, done:0 });
+              });
+            } else {
+              joColDataZ = activeCols.map(function(col){
+                if (isWeekly) { var m = state.weeklyMonth || months26[months26.length-1]; return _joGet(rep, jo, m); }
+                return _joGet(rep, jo, col);
+              });
+            }
+            var joFilteredZ = { colData: joColDataZ, totalPending: joColDataZ.reduce(function(s,c){return s+c.pending;},0), totalDone: joColDataZ.reduce(function(s,c){return s+c.done;},0), total: 0 };
+            joFilteredZ.total = joFilteredZ.totalPending + joFilteredZ.totalDone;
+            if (joFilteredZ.total === 0) return;
+            var joAvBgZ = 'oklch(0.55 0.09 '+hue(jo.name)+')';
+            var joAvatarZ = '<div style="width:18px;height:18px;border-radius:50%;background:'+joAvBgZ+';color:#fff;font-size:7px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-left:12px;">'+ini(jo.name)+'</div>';
+            var joLabelZ = '<div style="min-width:0;flex:1;">'
+              +'<div style="font-size:10px;font-weight:500;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(jo.name)+'</div>'
+              +'<div style="font-size:8.5px;color:#94A3B8;font-weight:500;">Job Owner</div>'
+            +'</div>';
+            var _joParentIdZ = (rep._norm || rep.name);
+            bodyRows += metricRows(joFilteredZ, null, '#FAFBFD', false, zone, repKeyZ, false, jo.name+'||'+_joParentIdZ, joAvatarZ, joLabelZ, '', 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1px dotted #C8D3E0;', 'border-bottom:2px solid '+PBORDER_STRONG+';', jo.name+'||'+_joParentIdZ, lockType);
+          });
+        }
+      });
     });
   });
 
@@ -7656,16 +7834,24 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
         if (!_inZone) continue;
       }
     } else if (type === 'crosssales') {
-      // All Cross Sales rows (rep zone not in salesZoneSet)
+      // All Cross Sales rows (rep zone not in salesZoneSet), excluding
+      // branches relocated under a real zone (BRANCH_ZONE_MAP) — same
+      // exclusion applied to the displayed Cross Sales header total.
       if (!isCrossSalesRep(r)) continue;
+      if (typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[(r.location||'').trim()]) continue;
     } else if (type === 'branch') {
       // Branch under Cross Sales — server uses row.location === branch name
       // Only unmapped reps qualify (isCrossSalesRep)
       if (!isCrossSalesRep(r)) continue;
       if ((r.location || '').trim() !== rep) continue;
     } else if (type === 'zone') {
-      // Regular Sales Performance zone
-      if (r._zone !== rep) continue;
+      // Regular zone — match own reps by _zone, plus jobs from any branch
+      // relocated under this zone (BRANCH_ZONE_MAP), matched by location
+      // and unmapped status, same as the branch drill above.
+      var _zoneOwnBr = (typeof ZONE_BRANCHES_MAP !== 'undefined' && ZONE_BRANCHES_MAP[rep]) || [];
+      var _matchesOwnZ = r._zone === rep;
+      var _matchesBranchZ = _zoneOwnBr.length > 0 && isCrossSalesRep(r) && _zoneOwnBr.indexOf((r.location||'').trim()) > -1;
+      if (!_matchesOwnZ && !_matchesBranchZ) continue;
     } else if (type === 'rep') {
       // Match by any of: _norm, _displayNorm, normalized _repName, or normalized salesPerson
       var spNorm = normalizeName(r.salesPerson || '');
