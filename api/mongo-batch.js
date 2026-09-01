@@ -2401,13 +2401,27 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "mappingSearch"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
 
   try {
     const db = await getDB();
+
+    if (action === "mappingSearch") {
+      // Read-only diagnostic: search mapping_sales_targets by rep name substring
+      const q = String(req.query?.name || "").trim().toLowerCase();
+      if (!q) return res.status(400).json({ error: "name query param required" });
+      const rows = await db.collection("mapping_sales_targets").find(
+        {}, { projection: { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1, "_fy": 1 } }
+      ).toArray();
+      const matches = rows.filter(r =>
+        String(r["Sales Rep Name"] || "").toLowerCase().includes(q) ||
+        String(r["Display Name"] || "").toLowerCase().includes(q)
+      );
+      return res.status(200).json({ success: true, count: matches.length, matches });
+    }
 
     if (action === "salesDebug") {
       // Check what's actually in Apr-26 for air export
