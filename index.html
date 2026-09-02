@@ -7427,6 +7427,22 @@ function computeDrillResult(entity, metric, month){
   var _spFilterSet = _spFilter ? {} : null;
   if (_spFilter) _spFilter.forEach(function(sp){ _spFilterSet[sp] = true; });
 
+  // For Grand Total: when filtering is purely zone-driven (a plain zone
+  // filter, or Zonal Manager RLS — no rep filter combined), an UNMAPPED row
+  // (relocated Cross Sales branch) must be matched by its OWN row-level
+  // location, not by whether the rep's NAME appears anywhere in that zone.
+  // A rep touching multiple branches would otherwise get ALL their jobs
+  // counted once their name is "unlocked" via one matching branch job —
+  // over-counting Grand Total beyond the zone's actual displayed total.
+  // Mapped reps don't have this ambiguity (their zone is a fixed per-rep
+  // attribute, not per-job), so they keep using the existing name-set match.
+  var _gtZoneList = null;
+  if (_rlsZone) {
+    _gtZoneList = [_rlsZone];
+  } else if (_fz.length > 0 && _fr.length === 0) {
+    _gtZoneList = _fz;
+  }
+
   var _repsRawNorms = null; // built lazily only when needed
 
   function getRepsRawNorms() {
@@ -7490,7 +7506,14 @@ function computeDrillResult(entity, metric, month){
     var sp = row._sp; // normalizeName(rawSalesPersonName) from server
     if (isGT){
       // Grand Total — apply zone/rep/RLS filter
-      if (_spFilterSet && !_spFilterSet[row._sp]) continue;
+      if (_gtZoneList && !row._zone) {
+        // Unmapped row (Cross Sales / relocated branch) — match by THIS
+        // row's own location relocation, not by rep-name set membership.
+        var _rowBr = (row.location || '').trim();
+        var _rowTgt = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBr] : null;
+        var _matchesGtZone = _rowTgt ? (_gtZoneList.indexOf(_rowTgt) > -1) : (_gtZoneList.indexOf('Cross Sales') > -1);
+        if (!_matchesGtZone) continue;
+      } else if (_spFilterSet && !_spFilterSet[row._sp]) continue;
     } else if (entity === 'Cross Sales'){
       // Cross Sales = unmapped rows only, excluding branches now shown under their own zones
       if (row._zone) continue;
