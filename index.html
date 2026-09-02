@@ -3710,9 +3710,13 @@ function tradelanePage(){
       var _hasCrossTL = _filterZonesTL.indexOf('Cross Sales') > -1;
       allDrillRows.forEach(function(r){
         if (!r._sp) return;
-        // Cross Sales = reps with no zone mapping
-        if (_hasCrossTL && !r._zone) { _zoneSpSet[r._sp] = true; return; }
-        if (r._zone && _filterZonesTL.indexOf(r._zone) > -1) { _zoneSpSet[r._sp] = true; }
+        var _locBrTL = (r.location || '').trim();
+        var _relocTgtTL = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_locBrTL] : null;
+        // Cross Sales = reps with no zone mapping, excluding relocated branches
+        if (_hasCrossTL && !r._zone && !_relocTgtTL) { _zoneSpSet[r._sp] = true; return; }
+        if (r._zone && _filterZonesTL.indexOf(r._zone) > -1) { _zoneSpSet[r._sp] = true; return; }
+        // A relocated branch's rep also belongs to its target zone if selected
+        if (!r._zone && _relocTgtTL && _filterZonesTL.indexOf(_relocTgtTL) > -1) { _zoneSpSet[r._sp] = true; }
       });
     }
     var _selRepsNorm = _filterRepsTL.map(function(x){ return normalizeName(x); });
