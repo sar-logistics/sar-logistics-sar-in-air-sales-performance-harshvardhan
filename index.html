@@ -2012,16 +2012,22 @@ function getZones(){
     if (r.zone === 'Cross Sales' && r.isBranch && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[r.name]) return;
     seen[r.zone] = true; zones.push(r.zone);
   });
-  // Inject synthetic zones that have no mapping sheet entry — but only when
-  // no zone filter is active, or this synthetic zone is explicitly selected.
-  // Previously this ran unconditionally, so a synthetic zone (e.g. INAZ08
-  // (Chennai)) always appeared regardless of which zone(s) the user filtered to.
-  var _fzActive = state.filterZones && state.filterZones.length > 0 ? state.filterZones : null;
-  SYNTHETIC_ZONES.forEach(function(z){
-    if (seen[z]) return;
-    if (_fzActive && _fzActive.indexOf(z) === -1) return;
-    seen[z] = true; zones.push(z);
-  });
+  // Inject synthetic zones that have no mapping sheet entry — admin/HR only.
+  // Zonal Manager and Sales Rep never see a synthetic zone at all, since it's
+  // not a real zone they could ever be assigned to (it exists purely as a
+  // display grouping for an admin viewing the full picture) — regardless of
+  // which zone they're restricted to. Only apply the filter-selection check
+  // (below) for roles that are allowed to see synthetic zones in the first place.
+  var _role = currentUser ? (currentUser.role || '').toLowerCase().trim() : '';
+  var _syntheticAllowed = _role !== 'zonal manager' && _role !== 'sales rep';
+  if (_syntheticAllowed) {
+    var _fzActive = state.filterZones && state.filterZones.length > 0 ? state.filterZones : null;
+    SYNTHETIC_ZONES.forEach(function(z){
+      if (seen[z]) return;
+      if (_fzActive && _fzActive.indexOf(z) === -1) return;
+      seen[z] = true; zones.push(z);
+    });
+  }
   return sortZones(zones);
 }
 
@@ -4637,11 +4643,18 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // has zero genuinely-mapped reps of its own (e.g. INAZ08 (Chennai), which
   // only ever has a relocated branch, never its own mapped rep) — its header
   // total is computed fresh below regardless of whether zoneTotals has an
-  // entry for it.
+  // entry for it. RESTRICTED for Zonal Manager: only inject their own zone
+  // (if it happens to be a relocation target), never any other zone's —
+  // otherwise a Zone 1 manager would see empty placeholder rows for every
+  // other zone that has a relocated branch (INAZ02, INAZ08 etc), leaking
+  // the existence of zones they have no relationship to.
   if (typeof BRANCH_ZONE_MAP !== 'undefined') {
+    var _pzRole = currentUser ? (currentUser.role || '').toLowerCase().trim() : '';
+    var _pzUserZone = (_pzRole === 'zonal manager') ? (currentUser.zone || '').trim() : null;
     var _targetZonesSeen = {};
     Object.keys(BRANCH_ZONE_MAP).forEach(function(b){
       var tz = BRANCH_ZONE_MAP[b];
+      if (_pzUserZone && tz !== _pzUserZone) return; // not this manager's own zone — skip
       if (zoneOrder.indexOf(tz) === -1 && !_targetZonesSeen[tz]) { _targetZonesSeen[tz] = true; zoneOrder.push(tz); }
     });
     zoneOrder = sortZones(zoneOrder);
