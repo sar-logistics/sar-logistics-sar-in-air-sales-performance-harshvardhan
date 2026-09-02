@@ -2683,8 +2683,12 @@ function topbar(){
           var _isPendencyPage = state.page === 'op' || state.page === 'finance';
           var LOB_KEYS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'].concat(_isPendencyPage ? ['GENERAL'] : []);
           var LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','GENERAL':'General'};
-          // Always list from the FULL unfiltered dataset — otherwise once you filter
-          // down to a subset, you could never see/re-select the excluded reps again
+          // Always list from the FULL dataset the current user is entitled to
+          // see (repsRaw — already RLS-scoped by computeFilteredRepsRaw; equals
+          // the full unrestricted set for Admin/HR/Regional Manager) rather than
+          // repsRawOriginal directly — otherwise a Zonal Manager with no manual
+          // zone filter active (the normal case; RLS applies automatically) saw
+          // every rep company-wide in this picker regardless of their own zone.
           var _fzPanel = state.filterZones || [];
           // Use allDrillRows._zone for accurate zone→rep mapping in rep panel
           var _panelRepNames = null;
@@ -2696,7 +2700,7 @@ function topbar(){
             _panelRepNames = Object.keys(_panelRepSet);
           }
           var allRepEntries = Array.from(
-            new Map(repsRawOriginal
+            new Map(repsRaw
               .filter(function(r){
                 if (_fzPanel.length === 0) return true;
                 // A relocated Cross Sales branch (e.g. Mumbai) has no
