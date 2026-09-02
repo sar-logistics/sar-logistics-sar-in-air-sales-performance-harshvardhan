@@ -3098,6 +3098,12 @@ function customerPage(){
 
   var _rlsActiveC = _rlsReps && _rlsReps.length > 0;
   var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZones.length > 0 || _rlsActiveC;
+  // Same row-level precision needed here as the Grand Total drill fix
+  // earlier today: _frNorm is a rep-NAME set, which over-includes a
+  // relocated-branch rep's OTHER-location jobs once their name is unlocked
+  // by one matching job. Apply it only when the filter is purely zone-based
+  // (no rep filter combined, no RLS).
+  var _custPureZoneList = (_filterZones.length > 0 && (!state.filterReps || state.filterReps.length === 0) && !_rlsActiveC) ? _filterZones : null;
   if (hasFilters && lobData.allCustomers) {
     var _frNorm = _effectiveFilterReps || [];
     // Use allDrillRows for accurate counts when rep/zone/RLS filter active
@@ -3111,7 +3117,14 @@ function customerPage(){
       allDrillRows.forEach(function(r){
         if (_cLobFilter.indexOf(r.lob) === -1) return;
         if (!_cActiveMonsSet[r._ml]) return;
-        if (_frNorm.length > 0 && _frNorm.indexOf(r._sp) === -1) return;
+        if (_frNorm.length > 0) {
+          if (_custPureZoneList && !r._zone) {
+            var _rowBrC = (r.location || '').trim();
+            var _rowTgtC = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrC] : null;
+            var _matchesC = _rowTgtC ? (_custPureZoneList.indexOf(_rowTgtC) > -1) : (_custPureZoneList.indexOf('Cross Sales') > -1);
+            if (!_matchesC) return;
+          } else if (_frNorm.indexOf(r._sp) === -1) return;
+        }
         var cust = (r.customer||'').trim().toLowerCase();
         if (!cust || cust === '-' || cust === 'n/a') return;
         if (!_cCustCounts[cust]) _cCustCounts[cust] = {ships:0, gp:0, rev:0, tons:0, teu:0};
@@ -4041,9 +4054,26 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       _gtMD = {};
       var _gtActiveMonsSet = {};
       activeMons.forEach(function(m){ _gtActiveMonsSet[m] = true; });
+      // Same row-level precision needed here as the Grand Total drill fix
+      // earlier today: effectiveReps is a rep-NAME set, which over-includes
+      // a relocated-branch rep's OTHER-location jobs once their name is
+      // unlocked by one matching job. Apply it only when the filter is
+      // purely zone-based (no rep filter combined, no RLS) — self-contained
+      // here since this function doesn't receive _tlPureZoneList directly.
+      var _tlPureZoneListPT = null;
+      if (state.filterZones && state.filterZones.length > 0 && (!state.filterReps || state.filterReps.length === 0) && (typeof _getRLSReps !== 'function' || _getRLSReps().length === 0)) {
+        _tlPureZoneListPT = state.filterZones;
+      }
       allDrillRows.forEach(function(r){
         if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
-        if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
+        if (effectiveReps && effectiveReps.length > 0) {
+          if (_tlPureZoneListPT && !r._zone) {
+            var _rowBrPT = (r.location || '').trim();
+            var _rowTgtPT = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrPT] : null;
+            var _matchesPT = _rowTgtPT ? (_tlPureZoneListPT.indexOf(_rowTgtPT) > -1) : (_tlPureZoneListPT.indexOf('Cross Sales') > -1);
+            if (!_matchesPT) return;
+          } else if (effectiveReps.indexOf(r._sp) === -1) return;
+        }
         if (!_gtActiveMonsSet[r._ml]) return;
         var _eRev = effectiveRevenue(r);
         _gtGrand.shipments++; _gtGrand.gp += r.g||0; _gtGrand.revenue += _eRev; _gtGrand.tons += r.tons||0; _gtGrand.teu += r.t||0;
@@ -4100,7 +4130,14 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
     allDrillRows.forEach(function(r){
       if (!r._tg) { return; }
       if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
-      if (effectiveReps && effectiveReps.length > 0 && effectiveReps.indexOf(r._sp) === -1) return;
+      if (effectiveReps && effectiveReps.length > 0) {
+        if (_tlPureZoneListPT && !r._zone) {
+          var _rowBrPT2 = (r.location || '').trim();
+          var _rowTgtPT2 = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrPT2] : null;
+          var _matchesPT2 = _rowTgtPT2 ? (_tlPureZoneListPT.indexOf(_rowTgtPT2) > -1) : (_tlPureZoneListPT.indexOf('Cross Sales') > -1);
+          if (!_matchesPT2) return;
+        } else if (effectiveReps.indexOf(r._sp) === -1) return;
+      }
       var inActive = _fyGroups ? !!_tgFyMonsSet[r._ml] : !!_tgActiveMonsSet[r._ml];
       if (!inActive) return;
       var tg = r._tg;
