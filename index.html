@@ -685,6 +685,74 @@ function computeFilteredRepsRaw(){
     base = base.filter(function(r){ return filterReps.indexOf(r.name) > -1; });
   }
 
+  // Correct Cross Sales branch pseudo-reps' raw data (ship/gp/tons/rev/
+  // lobData) using accurate allDrillRows+location-based aggregation, same
+  // methodology already used by repEntity() for the table's branch row —
+  // but applied HERE, once, to repsRaw itself, so EVERY downstream consumer
+  // (KPI cards via filteredRepsForModel, the LOB-filter remap just below,
+  // zone totals, etc) sees the same accurate numbers consistently, instead
+  // of only the table's own branch row being correct while everything else
+  // still reads the branch's original, less-accurate raw fields.
+  // Single pass over allDrillRows (this runs on every render, so building
+  // one shared index is much cheaper than filtering per-branch) — cached
+  // and only rebuilt when allDrillRows itself has changed (reference check),
+  // since most renders don't actually change the underlying job data.
+  if (allDrillRows && allDrillRows.length > 0) {
+    if (window._brIndexSrc !== allDrillRows) {
+      var _brByMonth = {};    // location -> month -> {...}
+      var _brByLobMonth = {}; // location -> lob -> month -> {...}
+      for (var _bi = 0; _bi < allDrillRows.length; _bi++) {
+        var row = allDrillRows[_bi];
+        if (row._zone) continue;
+        var loc = (row.location || '').trim();
+        if (!loc) continue;
+        var m = row._ml;
+        var lob = row.lob || '';
+        if (!_brByMonth[loc]) _brByMonth[loc] = {};
+        if (!_brByMonth[loc][m]) _brByMonth[loc][m] = { ship:0, gp:0, gpProv:0, gpActual:0, tons:0, teu:0, rev:0 };
+        var e = _brByMonth[loc][m];
+        e.ship++; e.gp += row.g||0; e.tons += row.tons||0; e.teu += row.t||0; e.rev += row.r||0;
+        if (row.prov === 1) e.gpProv += row.g||0; else e.gpActual += row.g||0;
+
+        if (!_brByLobMonth[loc]) _brByLobMonth[loc] = {};
+        if (!_brByLobMonth[loc][lob]) _brByLobMonth[loc][lob] = {};
+        if (!_brByLobMonth[loc][lob][m]) _brByLobMonth[loc][lob][m] = { ship:0, gp:0, gpProv:0, gpActual:0, tons:0, teu:0, rev:0 };
+        var le = _brByLobMonth[loc][lob][m];
+        le.ship++; le.gp += row.g||0; le.tons += row.tons||0; le.teu += row.t||0; le.rev += row.r||0;
+        if (row.prov === 1) le.gpProv += row.g||0; else le.gpActual += row.g||0;
+      }
+      window._brByMonth = _brByMonth;
+      window._brByLobMonth = _brByLobMonth;
+      window._brIndexSrc = allDrillRows;
+    }
+    base = base.map(function(r) {
+      if (!r.isBranch) return r;
+      var _byMonth = window._brByMonth[r.name] || {};
+      var _byLobMonth = window._brByLobMonth[r.name] || {};
+      var _r2 = Object.assign({}, r);
+      _r2.ship      = months26.map(function(mm){ return (_byMonth[mm]&&_byMonth[mm].ship)      || 0; });
+      _r2.gp        = months26.map(function(mm){ return (_byMonth[mm]&&_byMonth[mm].gp)        || 0; });
+      _r2.gpProv    = months26.map(function(mm){ return (_byMonth[mm]&&_byMonth[mm].gpProv)    || 0; });
+      _r2.gpActual  = months26.map(function(mm){ return (_byMonth[mm]&&_byMonth[mm].gpActual)  || 0; });
+      _r2.tons      = months26.map(function(mm){ return (_byMonth[mm]&&_byMonth[mm].tons)      || 0; });
+      _r2.teu       = months26.map(function(mm){ return (_byMonth[mm]&&_byMonth[mm].teu)       || 0; });
+      _r2.lcl       = months26.map(function(mm){ return 0; });
+      _r2.rev       = months26.map(function(mm){ return (_byMonth[mm]&&_byMonth[mm].rev)       || 0; });
+      _r2.revBilled = months26.map(function(mm){ return (_byMonth[mm]&&_byMonth[mm].rev)       || 0; });
+      _r2.revProv   = months26.map(function(mm){ return 0; });
+      var _lobData2 = {};
+      Object.keys(_byLobMonth).forEach(function(lob){
+        _lobData2[lob] = {};
+        Object.keys(_byLobMonth[lob]).forEach(function(mm){
+          var le = _byLobMonth[lob][mm];
+          _lobData2[lob][mm] = { ship: le.ship, gp: le.gp, gpProv: le.gpProv, gpActual: le.gpActual, tons: le.tons, teu: le.teu, lcl: 0, rev: le.rev, revBilled: le.rev, revProv: 0 };
+        });
+      });
+      _r2.lobData = _lobData2;
+      return _r2;
+    });
+  }
+
   // LOB filter — use lobData (fetched via includeLob=1) to recompute monthly arrays
   var filterLobs = state.filterLobs || [];
   if (filterLobs.length > 0 && _lobDataFetched) {
