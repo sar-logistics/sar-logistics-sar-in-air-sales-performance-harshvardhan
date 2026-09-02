@@ -1812,7 +1812,14 @@ function model(){
   var _frNorm = _fr ? _fr.map(function(x){ return normalizeName(x); }) : null;
   // Filtered reps for GP/ship/tons sums (repsRaw already RLS-filtered)
   var filteredRepsForModel = repsRaw.filter(function(r){
-    if (_fz && _fz.indexOf(r.zone) === -1) return false;
+    if (_fz && _fz.indexOf(r.zone) === -1) {
+      // Not a direct zone match — still include if this is a relocated
+      // branch pseudo-rep whose target zone IS selected (repsRaw already
+      // includes it for exactly this reason; this second filter pass was
+      // re-excluding it with the same naive check).
+      var _isRelocatedMatch = r.isBranch && r.zone === 'Cross Sales' && typeof BRANCH_ZONE_MAP !== 'undefined' && _fz.indexOf(BRANCH_ZONE_MAP[r.name]) > -1;
+      if (!_isRelocatedMatch) return false;
+    }
     if (_frNorm && _frNorm.indexOf(normalizeName(r.name)) === -1) return false;
     return true;
   });
