@@ -2168,9 +2168,9 @@ function zoneEntity(zoneName){
     gp:   isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){var m=months26[i]; var _bgp=(_bIdx[m]&&_bIdx[m].gp)||0; return ((_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(zReps.map(function(r){return (r.gp&&r.gp[i])||0;})))+_bgp;}),
     tons: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
-                   : idxs.map(function(i){return sum(zReps.map(function(r){return (r.tons&&r.tons[i])||0;}));}),
+                   : idxs.map(function(i){var m=months26[i]; var _btons=(_bIdx[m]&&_bIdx[m].tons)||0; return sum(zReps.map(function(r){return (r.tons&&r.tons[i])||0;}))+_btons;}),
     teu:  isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].teu)||0);},0);})
-                   : idxs.map(function(i){return sum(zReps.map(function(r){return (r.teu&&r.teu[i])||0;}));}),
+                   : idxs.map(function(i){var m=months26[i]; var _bteu=(_bIdx[m]&&_bIdx[m].teu)||0; return sum(zReps.map(function(r){return (r.teu&&r.teu[i])||0;}))+_bteu;}),
     lcl:  isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].lcl)||0);},0);})
                    : idxs.map(function(i){return sum(zReps.map(function(r){return (r.lcl&&r.lcl[i])||0;}));}),
     gpProv:   isWeekly ? wkeys.map(function(k){return sum(zReps.map(function(r){return (r.weekData&&r.weekData[k]&&r.weekData[k].gpProv)||0;}));}) : idxs.map(function(i){var m=months26[i]; return (_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gpProv)||0);},0);})) : sum(zReps.map(function(r){return (r.gpProv&&r.gpProv[i])||0;}));}),
