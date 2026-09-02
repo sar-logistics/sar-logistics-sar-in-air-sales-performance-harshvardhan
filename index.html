@@ -1917,19 +1917,33 @@ function model(){
   var _fl_sg = state.filterLobs&&state.filterLobs.length>0 ? state.filterLobs : null;
   var _fz_sg = state.filterZones&&state.filterZones.length>0 ? state.filterZones : null;
   var _fr_sg = state.filterReps&&state.filterReps.length>0 ? state.filterReps.map(function(x){return normalizeName(x);}) : null;
+  // RLS must be enforced directly here too — this path reads allDrillRows
+  // (the full, unrestricted dataset) and previously only respected a
+  // manually-set state.filterZones, which a real Zonal Manager login never
+  // sets. Without this, shipGrand/tonsGrand would show the full company
+  // total to a restricted user regardless of the table below being correct.
+  var _rlsZone_sg = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager') ? (currentUser.zone||'').trim() : '';
+  var _rlsName_sg = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(currentUser.name||'') : '';
   var shipGrand;
   if (allDrillRows&&allDrillRows.length>0) {
     shipGrand = allDrillRows.filter(function(r){
       var _locBr = (r.location||'').trim();
       var _relocTgt = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_locBr] : null;
-      return idxs.some(function(i){return months26[i]===r._ml;})
-        && (!_fl_sg||_fl_sg.indexOf(r.lob)>-1)
-        && (!_fz_sg||(
+      if (!(idxs.some(function(i){return months26[i]===r._ml;}))) return false;
+      if (_fl_sg && _fl_sg.indexOf(r.lob)===-1) return false;
+      if (_rlsName_sg) { if (r._sp !== _rlsName_sg) return false; }
+      else if (_rlsZone_sg) {
+        var _matchesRlsOwn = r._zone === _rlsZone_sg;
+        var _matchesRlsBranch = !r._zone && _relocTgt === _rlsZone_sg;
+        if (!_matchesRlsOwn && !_matchesRlsBranch) return false;
+      }
+      if (_fz_sg && !(
              (_fz_sg.indexOf('Cross Sales')>-1&&!r._zone&&!_relocTgt)
              ||(_fz_sg.indexOf(r._zone)>-1)
              ||(!r._zone&&_relocTgt&&_fz_sg.indexOf(_relocTgt)>-1)
-           ))
-        && (!_fr_sg||(_fr_sg.indexOf(r._sp)>-1));
+           )) return false;
+      if (_fr_sg && (!r._sp || _fr_sg.indexOf(r._sp)===-1)) return false;
+      return true;
     }).length;
   } else if (_fl_sg) {
     // lobData available instantly from localStorage — use as fast fallback
