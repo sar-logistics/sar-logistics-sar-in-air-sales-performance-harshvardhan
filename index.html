@@ -2699,6 +2699,12 @@ function topbar(){
             new Map(repsRawOriginal
               .filter(function(r){
                 if (_fzPanel.length === 0) return true;
+                // A relocated Cross Sales branch (e.g. Mumbai) has no
+                // individual rep records in repsRawOriginal at all — only
+                // this one aggregate isBranch entry — so match it directly
+                // against its target zone, regardless of _panelRepNames'
+                // DN-based mechanism (which only ever applies to mapped reps).
+                if (r.isBranch && r.zone === 'Cross Sales' && typeof BRANCH_ZONE_MAP !== 'undefined' && _fzPanel.indexOf(BRANCH_ZONE_MAP[r.name]) > -1) return true;
                 if (_panelRepNames) return _panelRepNames.some(function(n){ return normalizeName(n) === normalizeName(r.name); });
                 return _fzPanel.indexOf(r.zone) > -1;
               })
