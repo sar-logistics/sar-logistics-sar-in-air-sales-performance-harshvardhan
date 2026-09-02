@@ -2683,12 +2683,27 @@ function topbar(){
           var _isPendencyPage = state.page === 'op' || state.page === 'finance';
           var LOB_KEYS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'].concat(_isPendencyPage ? ['GENERAL'] : []);
           var LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','GENERAL':'General'};
-          // Always list from the FULL dataset the current user is entitled to
-          // see (repsRaw — already RLS-scoped by computeFilteredRepsRaw; equals
-          // the full unrestricted set for Admin/HR/Regional Manager) rather than
-          // repsRawOriginal directly — otherwise a Zonal Manager with no manual
-          // zone filter active (the normal case; RLS applies automatically) saw
-          // every rep company-wide in this picker regardless of their own zone.
+          // RLS-only base (not the manual rep-filter narrowing that repsRaw
+          // ALSO carries) — repsRaw gets narrowed by BOTH RLS and the
+          // currently-selected rep filter (computeFilteredRepsRaw applies
+          // both), so using it directly here meant selecting one rep shrank
+          // this very picker down to just that rep, hiding the others you'd
+          // want to add to the selection. Compute RLS restriction inline
+          // instead, matching computeFilteredRepsRaw's own zonal manager
+          // check, so the picker always shows every rep the viewer is
+          // entitled to see regardless of what's currently checked.
+          var _pickerRole = currentUser ? (currentUser.role || '').toLowerCase().trim() : '';
+          var _pickerBase = repsRawOriginal;
+          if (_pickerRole === 'sales rep') {
+            _pickerBase = repsRawOriginal.filter(function(r){ return normalizeName(r.name) === normalizeName(currentUser.name || ''); });
+          } else if (_pickerRole === 'zonal manager') {
+            var _pickerUserZone = (currentUser.zone || '').trim();
+            _pickerBase = repsRawOriginal.filter(function(r){
+              if (r.zone === _pickerUserZone) return true;
+              if (r.isBranch && r.zone === 'Cross Sales' && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[r.name] === _pickerUserZone) return true;
+              return false;
+            });
+          }
           var _fzPanel = state.filterZones || [];
           // Use allDrillRows._zone for accurate zone→rep mapping in rep panel
           var _panelRepNames = null;
@@ -2700,7 +2715,7 @@ function topbar(){
             _panelRepNames = Object.keys(_panelRepSet);
           }
           var allRepEntries = Array.from(
-            new Map(repsRaw
+            new Map(_pickerBase
               .filter(function(r){
                 if (_fzPanel.length === 0) return true;
                 // A relocated Cross Sales branch (e.g. Mumbai) has no
