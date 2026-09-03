@@ -4184,9 +4184,16 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       // leaked 100+ unrelated reps company-wide — see today's security fix).
       // Add it back here via precise ROW-LEVEL location matching instead —
       // additive to whatever effectiveReps/_tlPureZoneListPT already allow.
+      // Only when NOT narrowed by a manual rep filter that excludes the
+      // branch — same as everywhere else today (e.g. SP's zoneEntity/_bIdx):
+      // selecting one specific person should not still pull in the whole
+      // branch regardless of what was picked.
       var _rlsOwnBranchesPT = null;
       if (typeof _getRLSReps === 'function' && currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager' && typeof ZONE_BRANCHES_MAP !== 'undefined') {
-        _rlsOwnBranchesPT = ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()] || null;
+        var _selRepsNormPT = (state.filterReps||[]).length > 0 ? (state.filterReps||[]).map(function(x){return normalizeName(x);}) : null;
+        if (!_selRepsNormPT || (ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()]||[]).some(function(b){ return _selRepsNormPT.indexOf(normalizeName(b)) > -1; })) {
+          _rlsOwnBranchesPT = ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()] || null;
+        }
       }
       allDrillRows.forEach(function(r){
         if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
@@ -8018,10 +8025,14 @@ function openInsightDrill(drillType, name, drillMonth) {
       var _tlEffReps = null;
       // A Zonal Manager's own relocated branch is NOT in _getRLSReps()'s
       // name set (see today's security fix) — add it back via row-level
-      // location matching in the filter below instead.
+      // location matching in the filter below instead. Only when NOT
+      // narrowed by a manual rep filter that excludes the branch.
       var _rlsOwnBranchesTL3 = null;
       if (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager' && typeof ZONE_BRANCHES_MAP !== 'undefined') {
-        _rlsOwnBranchesTL3 = ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()] || null;
+        var _selRepsNormTL3 = (state.filterReps||[]).length > 0 ? (state.filterReps||[]).map(function(x){return normalizeName(x);}) : null;
+        if (!_selRepsNormTL3 || (ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()]||[]).some(function(b){ return _selRepsNormTL3.indexOf(normalizeName(b)) > -1; })) {
+          _rlsOwnBranchesTL3 = ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()] || null;
+        }
       }
       if (_tlRLSReps.length > 0) {
         var _tlRlsNorm = _tlRLSReps.map(function(x){return normalizeName(x);});
