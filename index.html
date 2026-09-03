@@ -5513,8 +5513,14 @@ function financePage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading finance pendency…</div>'
       +'</div>';
   }
-  // Weekly view needs allPendencyDrillRows — show loading if not ready yet
-  if (state.reportView === 'Weekly' && !allPendencyDrillRows) {
+  // Weekly view needs allPendencyDrillRows — show loading if not ready yet.
+  // Also needed for a Zonal Manager whose zone has a relocated branch — RLS
+  // can't correctly compute the branch's individual reps without it, and
+  // waiting for the (unrelated) one-time boot-time background fetch was
+  // unreliable for this specific case.
+  var _fpZmNeedsDrill = currentUser && (currentUser.role||'').toLowerCase().trim()==='zonal manager'
+    && typeof ZONE_BRANCHES_MAP !== 'undefined' && (ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()]||[]).length > 0;
+  if ((state.reportView === 'Weekly' || _fpZmNeedsDrill) && !allPendencyDrillRows) {
     if (!_pendencyDrillLoading) {
       _pendencyDrillLoading = true;
       fetch('/api/mongo-batch?action=op').then(function(r){return r.json();}).then(function(d){
@@ -5543,8 +5549,12 @@ function opPage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading operation pendency…</div>'
       +'</div>';
   }
-  // Weekly view needs allPendencyDrillRows — fetch directly (bypasses makeFetcher sync trap)
-  if (state.reportView === 'Weekly' && !allPendencyDrillRows) {
+  // Weekly view needs allPendencyDrillRows — fetch directly (bypasses makeFetcher sync trap).
+  // Also needed for a Zonal Manager whose zone has a relocated branch — same
+  // reasoning as financePage() above.
+  var _opZmNeedsDrill = currentUser && (currentUser.role||'').toLowerCase().trim()==='zonal manager'
+    && typeof ZONE_BRANCHES_MAP !== 'undefined' && (ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()]||[]).length > 0;
+  if ((state.reportView === 'Weekly' || _opZmNeedsDrill) && !allPendencyDrillRows) {
     if (!_pendencyDrillLoading) {
       _pendencyDrillLoading = true;
       fetch('/api/mongo-batch?action=op').then(function(r){return r.json();}).then(function(d){
