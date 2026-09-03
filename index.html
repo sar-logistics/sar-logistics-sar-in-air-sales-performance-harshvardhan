@@ -1938,6 +1938,10 @@ function model(){
       var _glocBr = (_gr.location||'').trim();
       var _grelocTgt = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_glocBr] : null;
       var _grDn = _gr._dn ? normalizeName(_gr._dn) : null;
+      if (_gr.location === 'Mumbai' && !_gr._zone && window._debugTonsOnce !== false) {
+        console.log('[DEBUG Mumbai row]', 'sp:', _gr._sp, '| zone:', _gr._zone, '| relocTgt:', _grelocTgt, '| rlsZone_sg:', _rlsZone_sg, '| matchesBranch would be:', (!_gr._zone && _grelocTgt === _rlsZone_sg), '| ml:', _gr._ml, '| inActiveMonths:', idxs.some(function(i){return months26[i]===_gr._ml;}), '| lob:', _gr.lob, '| flPasses:', (!_fl_sg || _fl_sg.indexOf(_gr.lob)>-1));
+        window._debugTonsOnce = false;
+      }
       if (_rlsName_sg) { if (_gr._sp !== _rlsName_sg && _grDn !== _rlsName_sg) continue; }
       else if (_rlsZone_sg) {
         var _gMatchesOwn = _gr._zone === _rlsZone_sg;
