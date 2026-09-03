@@ -1937,7 +1937,8 @@ function model(){
       if (_fl_sg && _fl_sg.indexOf(_gr.lob)===-1) continue;
       var _glocBr = (_gr.location||'').trim();
       var _grelocTgt = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_glocBr] : null;
-      if (_rlsName_sg) { if (_gr._sp !== _rlsName_sg) continue; }
+      var _grDn = _gr._dn ? normalizeName(_gr._dn) : null;
+      if (_rlsName_sg) { if (_gr._sp !== _rlsName_sg && _grDn !== _rlsName_sg) continue; }
       else if (_rlsZone_sg) {
         var _gMatchesOwn = _gr._zone === _rlsZone_sg;
         var _gMatchesBranch = !_gr._zone && _grelocTgt === _rlsZone_sg;
@@ -1948,7 +1949,11 @@ function model(){
              ||(_fz_sg.indexOf(_gr._zone)>-1)
              ||(!_gr._zone&&_grelocTgt&&_fz_sg.indexOf(_grelocTgt)>-1)
            )) continue;
-      if (_fr_sg && (!_gr._sp || _fr_sg.indexOf(_gr._sp)===-1)) continue;
+      // Match by _sp (raw normalized Sales Person name) OR _dn (mapping
+      // sheet's Display Name) — state.filterReps/currentUser.name hold
+      // Display Names, which can differ from the raw name (e.g. a
+      // shortened display name vs a longer full name in job records).
+      if (_fr_sg && !((_gr._sp && _fr_sg.indexOf(_gr._sp)>-1) || (_grDn && _fr_sg.indexOf(_grDn)>-1))) continue;
       shipGrand++;
       gpGrand   += _gr.g||0;
       tonsGrand += _gr.tons||0;
@@ -2164,7 +2169,7 @@ function zoneEntity(zoneName){
     avatarBg: 'oklch(0.5 0.14 ' + zoneHue(zoneName) + ')',
     isZone: true, zone: zoneName,
     ship: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
-                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; var _zb=ZONE_BRANCHES_MAP[zoneName]||[]; var _frZE=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; return allDrillRows.filter(function(r){return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(!_frZE||_frZE.indexOf(r._sp)>-1)&&(_isCross?(!r._zone&&!BRANCH_ZONE_MAP[(r.location||'').trim()]):(r._zone===zoneName||(_zb.length>0&&!r._zone&&_zb.indexOf((r.location||'').trim())>-1)));}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
+                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; var _zb=ZONE_BRANCHES_MAP[zoneName]||[]; var _frZE=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; return allDrillRows.filter(function(r){var _rDn=r._dn?normalizeName(r._dn):null; return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(!_frZE||(_frZE.indexOf(r._sp)>-1)||(_rDn&&_frZE.indexOf(_rDn)>-1))&&(_isCross?(!r._zone&&!BRANCH_ZONE_MAP[(r.location||'').trim()]):(r._zone===zoneName||(_zb.length>0&&!r._zone&&_zb.indexOf((r.location||'').trim())>-1)));}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
     gp:   isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){var m=months26[i]; var _bgp=(_bIdx[m]&&_bIdx[m].gp)||0; return ((_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(zReps.map(function(r){return (r.gp&&r.gp[i])||0;})))+_bgp;}),
     tons: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
@@ -3142,7 +3147,10 @@ function customerPage(){
             var _rowTgtC = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrC] : null;
             var _matchesC = _rowTgtC ? (_custPureZoneList.indexOf(_rowTgtC) > -1) : (_custPureZoneList.indexOf('Cross Sales') > -1);
             if (!_matchesC) return;
-          } else if (_frNorm.indexOf(r._sp) === -1) return;
+          } else {
+            var _rDnC = r._dn ? normalizeName(r._dn) : null;
+            if (_frNorm.indexOf(r._sp) === -1 && !(_rDnC && _frNorm.indexOf(_rDnC) > -1)) return;
+          }
         }
         var cust = (r.customer||'').trim().toLowerCase();
         if (!cust || cust === '-' || cust === 'n/a') return;
@@ -4091,7 +4099,10 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
             var _rowTgtPT = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrPT] : null;
             var _matchesPT = _rowTgtPT ? (_tlPureZoneListPT.indexOf(_rowTgtPT) > -1) : (_tlPureZoneListPT.indexOf('Cross Sales') > -1);
             if (!_matchesPT) return;
-          } else if (effectiveReps.indexOf(r._sp) === -1) return;
+          } else {
+            var _rDnPT = r._dn ? normalizeName(r._dn) : null;
+            if (effectiveReps.indexOf(r._sp) === -1 && !(_rDnPT && effectiveReps.indexOf(_rDnPT) > -1)) return;
+          }
         }
         if (!_gtActiveMonsSet[r._ml]) return;
         var _eRev = effectiveRevenue(r);
@@ -4155,7 +4166,10 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
           var _rowTgtPT2 = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrPT2] : null;
           var _matchesPT2 = _rowTgtPT2 ? (_tlPureZoneListPT.indexOf(_rowTgtPT2) > -1) : (_tlPureZoneListPT.indexOf('Cross Sales') > -1);
           if (!_matchesPT2) return;
-        } else if (effectiveReps.indexOf(r._sp) === -1) return;
+        } else {
+          var _rDnPT2 = r._dn ? normalizeName(r._dn) : null;
+          if (effectiveReps.indexOf(r._sp) === -1 && !(_rDnPT2 && effectiveReps.indexOf(_rDnPT2) > -1)) return;
+        }
       }
       var inActive = _fyGroups ? !!_tgFyMonsSet[r._ml] : !!_tgActiveMonsSet[r._ml];
       if (!inActive) return;
@@ -7715,7 +7729,10 @@ function computeDrillResult(entity, metric, month){
         var _rowTgt = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBr] : null;
         var _matchesGtZone = _rowTgt ? (_gtZoneList.indexOf(_rowTgt) > -1) : (_gtZoneList.indexOf('Cross Sales') > -1);
         if (!_matchesGtZone) continue;
-      } else if (_spFilterSet && !_spFilterSet[row._sp]) continue;
+      } else if (_spFilterSet) {
+        var _rowDn = row._dn ? normalizeName(row._dn) : null;
+        if (!_spFilterSet[row._sp] && !(_rowDn && _spFilterSet[_rowDn])) continue;
+      }
     } else if (entity === 'Cross Sales'){
       // Cross Sales = unmapped rows only, excluding branches now shown under their own zones
       if (row._zone) continue;
