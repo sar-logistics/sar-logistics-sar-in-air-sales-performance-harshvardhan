@@ -8351,16 +8351,44 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
   var _pRlsZone = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager') ? (currentUser.zone||'') : '';
   var _pRlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(currentUser.name||'') : '';
   if (_pRlsZone) {
-    _pSpFilter = zoneToRawSPs([_pRlsZone]);
+    // Direct zone match only (no zoneToRawSPs — that leaked 100+ unrelated
+    // reps company-wide via its relocated-branch handling, same root cause
+    // as today's _getRLSReps() security fix). A relocated branch is added
+    // back via row-level location matching further down for type==='grand'.
+    _pSpFilter = [];
+    if (allPendencyDrillRows) {
+      var _pRlsSeen = {};
+      allPendencyDrillRows.forEach(function(r){ if (r._norm && r._zone === _pRlsZone && !_pRlsSeen[r._norm]) { _pRlsSeen[r._norm]=true; _pSpFilter.push(r._norm); } });
+    }
+    // Intersect with a manual rep filter instead of ignoring it
+    if ((state.filterReps||[]).length > 0) {
+      var _pManualNorm = (state.filterReps||[]).map(function(n){ return normalizeName(n); });
+      _pSpFilter = _pSpFilter.filter(function(sp){ return _pManualNorm.indexOf(sp) > -1; });
+    }
   } else if (_pRlsName) {
     _pSpFilter = [_pRlsName];
   } else if ((state.filterZones||[]).length > 0) {
     _pSpFilter = zoneToRawSPs(state.filterZones);
+    if ((state.filterReps||[]).length > 0) {
+      var _pManualNorm2 = (state.filterReps||[]).map(function(n){ return normalizeName(n); });
+      _pSpFilter = _pSpFilter ? _pSpFilter.filter(function(sp){ return _pManualNorm2.indexOf(sp) > -1; }) : _pManualNorm2;
+    }
   } else if ((state.filterReps||[]).length > 0) {
     _pSpFilter = (state.filterReps||[]).map(function(n){ return normalizeName(n); });
   }
   var _pSpFilterSet = _pSpFilter ? {} : null;
   if (_pSpFilter) _pSpFilter.forEach(function(sp){ _pSpFilterSet[sp] = true; });
+  // A Zonal Manager's own relocated branch, added back via row-level
+  // location matching (not name-set) — same pattern as Tradelane's fix.
+  // Respects a manual rep filter that excludes the branch, same as
+  // everywhere else today.
+  var _pOwnBranchesGrand = null;
+  if (_pRlsZone && typeof ZONE_BRANCHES_MAP !== 'undefined') {
+    var _pSelRepsNorm = (state.filterReps||[]).length > 0 ? (state.filterReps||[]).map(function(x){return normalizeName(x);}) : null;
+    if (!_pSelRepsNorm || (ZONE_BRANCHES_MAP[_pRlsZone]||[]).some(function(b){ return _pSelRepsNorm.indexOf(normalizeName(b)) > -1; })) {
+      _pOwnBranchesGrand = ZONE_BRANCHES_MAP[_pRlsZone] || null;
+    }
+  }
   // Also build zone set from filterZones for _zone matching (SRR zone field)
   var _pZoneSet = null;
   var _pFz = state.filterZones||[];
@@ -8385,7 +8413,8 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       // Use _zone to match against visible zones (same source as zone rows = SRR)
       if (_pSpFilterSet) {
         // Check both _norm and _zone for zone-based filtering
-        var _inZone = _pSpFilterSet[r._norm] || (_pZoneSet && _pZoneSet[r._zone]);
+        var _matchesOwnBranchGrand = _pOwnBranchesGrand && _pOwnBranchesGrand.length > 0 && !r._zone && _pOwnBranchesGrand.indexOf((r.location||'').trim()) > -1;
+        var _inZone = _matchesOwnBranchGrand || _pSpFilterSet[r._norm] || (_pZoneSet && _pZoneSet[r._zone]);
         if (!_inZone) continue;
       }
     } else if (type === 'crosssales') {
@@ -8399,6 +8428,12 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       // Only unmapped reps qualify (isCrossSalesRep)
       if (!isCrossSalesRep(r)) continue;
       if ((r.location || '').trim() !== rep) continue;
+      // A manual rep filter narrows a branch drill too — only when it
+      // excludes THIS branch itself (matches the row-visibility fix above).
+      if ((state.filterReps||[]).length > 0) {
+        var _pManualBr = (state.filterReps||[]).map(function(n){return normalizeName(n);});
+        if (_pManualBr.indexOf(normalizeName(rep)) === -1) continue;
+      }
     } else if (type === 'zone') {
       // Regular zone — match own reps by _zone, plus jobs from any branch
       // relocated under this zone (BRANCH_ZONE_MAP), matched by location
@@ -8407,6 +8442,12 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       var _matchesOwnZ = r._zone === rep;
       var _matchesBranchZ = _zoneOwnBr.length > 0 && isCrossSalesRep(r) && _zoneOwnBr.indexOf((r.location||'').trim()) > -1;
       if (!_matchesOwnZ && !_matchesBranchZ) continue;
+      // Manual rep filter — same additive logic used for the header total.
+      if ((state.filterReps||[]).length > 0) {
+        var _pManualZ = (state.filterReps||[]).map(function(n){return normalizeName(n);});
+        var _matchesBranchNameZ = _matchesBranchZ && _pManualZ.indexOf(normalizeName((r.location||'').trim())) > -1;
+        if (!_matchesBranchNameZ && _pManualZ.indexOf(r._norm||'') === -1) continue;
+      }
     } else if (type === 'rep') {
       // Match by any of: _norm, _displayNorm, normalized _repName, or normalized salesPerson
       var spNorm = normalizeName(r.salesPerson || '');
