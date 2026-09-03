@@ -1938,10 +1938,6 @@ function model(){
       var _glocBr = (_gr.location||'').trim();
       var _grelocTgt = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_glocBr] : null;
       var _grDn = _gr._dn ? normalizeName(_gr._dn) : null;
-      if (_gr.location === 'Mumbai' && !_gr._zone && window._debugTonsOnce !== false) {
-        console.log('[DEBUG Mumbai row]', 'sp:', _gr._sp, '| zone:', _gr._zone, '| relocTgt:', _grelocTgt, '| rlsZone_sg:', _rlsZone_sg, '| matchesBranch would be:', (!_gr._zone && _grelocTgt === _rlsZone_sg), '| ml:', _gr._ml, '| inActiveMonths:', idxs.some(function(i){return months26[i]===_gr._ml;}), '| lob:', _gr.lob, '| flPasses:', (!_fl_sg || _fl_sg.indexOf(_gr.lob)>-1));
-        window._debugTonsOnce = false;
-      }
       if (_rlsName_sg) { if (_gr._sp !== _rlsName_sg && _grDn !== _rlsName_sg) continue; }
       else if (_rlsZone_sg) {
         var _gMatchesOwn = _gr._zone === _rlsZone_sg;
@@ -2163,11 +2159,20 @@ function zoneEntity(zoneName){
   // Pre-build branch row index for gp/rev (allDrillRows, location-based)
   var _bIdx = {};
   if (_zb.length > 0 && allDrillRows && allDrillRows.length > 0) {
+    var _frBidx = state.filterReps && state.filterReps.length > 0 ? state.filterReps.map(function(x){return normalizeName(x);}) : null;
     allDrillRows.forEach(function(row){
       if (row._zone) return; // unmapped only
       var loc = (row.location || '').trim();
       if (_zb.indexOf(loc) === -1) return;
       if (_fl && _fl.indexOf(row.lob) === -1) return;
+      // Rep filter: match individual person (_sp/_dn) OR the branch itself
+      // being selected by name/location (same handling as ship's fix).
+      if (_frBidx) {
+        var _rDnB = row._dn ? normalizeName(row._dn) : null;
+        var _rLocB = normalizeName(loc);
+        var _matchesRep = _frBidx.indexOf(row._sp) > -1 || (_rDnB && _frBidx.indexOf(_rDnB) > -1) || _frBidx.indexOf(_rLocB) > -1;
+        if (!_matchesRep) return;
+      }
       var ml = row._ml;
       if (!_bIdx[ml]) _bIdx[ml] = { gp:0, rev:0, tons:0, teu:0 };
       _bIdx[ml].gp   += row.g || 0;
