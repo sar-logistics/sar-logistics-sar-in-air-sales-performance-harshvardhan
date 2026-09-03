@@ -4661,13 +4661,20 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     repsRawOriginal.forEach(function(r){ if (r.zone) _fullZoneSet[r.zone] = true; });
   }
 
+  // Manual rep filter (global Filters panel) — completely separate from
+  // RLS/_allowedRepNames, additive on top of it. A selected 'rep' can also
+  // be a relocated branch name (e.g. 'Mumbai') rather than an individual
+  // person — matched via row location for the two indexes below, and via
+  // the rep's own derived branch location further down for repsFiltered.
+  var _pendencyManualReps = (state.filterReps && state.filterReps.length > 0) ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
+
   // Location -> month -> {pending,done} index, built directly from allPendencyDrillRows
   // (same source + same location matching as the branch drill) so branch totals always
   // equal what the drill shows — a rep can touch multiple locations, so summing rep-level
   // totals (which span ALL their jobs) does not equal a location-filtered count.
   var _isOLPage = lockType === 'Operation Lock';
   var _blFl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
-  var _blCacheKey = 'sar_branch_loc_index_' + (_isOLPage ? 'ol' : 'fl') + '_' + (_blFl ? _blFl.slice().sort().join(',') : 'all') + '_' + CACHE_VERSION;
+  var _blCacheKey = 'sar_branch_loc_index_' + (_isOLPage ? 'ol' : 'fl') + '_' + (_blFl ? _blFl.slice().sort().join(',') : 'all') + '_' + (_pendencyManualReps ? _pendencyManualReps.slice().sort().join(',') : 'all') + '_' + CACHE_VERSION;
   var _branchLocIndex = {};
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
     allPendencyDrillRows.forEach(function(r){
@@ -4675,6 +4682,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       if (_blFl && _blFl.indexOf(r.lob) === -1) return; // LOB filter — was missing, inflated totals
       var loc = (r.location || '').trim();
       if (!loc || loc === '—') return;
+      if (_pendencyManualReps) {
+        var _rNormBL = r._norm || (r._sp || '');
+        var _matchesBL = _pendencyManualReps.indexOf(_rNormBL) > -1 || _pendencyManualReps.indexOf(normalizeName(loc)) > -1;
+        if (!_matchesBL) return;
+      }
       var m = r._month;
       if (!_branchLocIndex[loc]) _branchLocIndex[loc] = {};
       if (!_branchLocIndex[loc][m]) _branchLocIndex[loc][m] = { pending: 0, done: 0 };
@@ -4703,6 +4715,10 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     allPendencyDrillRows.forEach(function(r){
       if (!_fullZoneSet[r._zone]) return; // unmapped — not this zone's own rep
       if (_blFl && _blFl.indexOf(r.lob) === -1) return;
+      if (_pendencyManualReps) {
+        var _rNormZL = r._norm || (r._sp || '');
+        if (_pendencyManualReps.indexOf(_rNormZL) === -1) return;
+      }
       var z = r._zone;
       var m = r._month;
       if (!_zoneOwnLocIndex[z]) _zoneOwnLocIndex[z] = {};
@@ -4870,13 +4886,6 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       });
     }
   }
-
-  // Manual rep filter (global Filters panel) — completely separate from
-  // RLS/_allowedRepNames above, additive on top of it. A selected 'rep'
-  // can also be a relocated branch name (e.g. 'Mumbai') rather than an
-  // individual person — match via the rep's own derived branch location
-  // in that case too.
-  var _pendencyManualReps = (state.filterReps && state.filterReps.length > 0) ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
 
   var _pendencyReps = (d.reps || []).filter(function(rep){
     if (_allowedRepNames && !_allowedRepNames[normalizeName(rep.name)]) return false;
