@@ -3128,6 +3128,7 @@ function customerPage(){
   // by one matching job. Apply it only when the filter is purely zone-based
   // (no rep filter combined, no RLS).
   var _custPureZoneList = (_filterZones.length > 0 && (!state.filterReps || state.filterReps.length === 0) && !_rlsActiveC) ? _filterZones : null;
+  console.log('[DEBUG customerPage] hasFilters:', hasFilters, '| state.filterReps:', state.filterReps, '| _effectiveFilterReps:', _effectiveFilterReps, '| lobData.allCustomers exists:', !!lobData.allCustomers);
   if (hasFilters && lobData.allCustomers) {
     var _frNorm = _effectiveFilterReps || [];
     // Use allDrillRows for accurate counts when rep/zone/RLS filter active
