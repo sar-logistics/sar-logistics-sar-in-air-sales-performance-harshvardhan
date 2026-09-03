@@ -4786,11 +4786,14 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       if (_pRole === 'zonal manager' && typeof BRANCH_ZONE_MAP !== 'undefined' && typeof ZONE_BRANCHES_MAP !== 'undefined') {
         var _userZoneRLS = (currentUser.zone || '').trim();
         var _ownBranches = ZONE_BRANCHES_MAP[_userZoneRLS] || [];
+        console.log('[DEBUG mumbai-rls] _userZoneRLS:', _userZoneRLS, '| _ownBranches:', _ownBranches, '| allPendencyDrillRows:', allPendencyDrillRows && allPendencyDrillRows.length, '| _repLocationMap keys sample:', Object.keys(_repLocationMap).slice(0,5), '| _repLocationMap size:', Object.keys(_repLocationMap).length);
         if (_ownBranches.length > 0 && allPendencyDrillRows) {
+          var _addedCount = 0;
           allPendencyDrillRows.forEach(function(r){
             var loc = _repLocationMap[r._norm] || '';
-            if (_ownBranches.indexOf(loc) > -1) _allowedRepNames[r._norm] = true;
+            if (_ownBranches.indexOf(loc) > -1) { _allowedRepNames[r._norm] = true; _addedCount++; }
           });
+          console.log('[DEBUG mumbai-rls] individual reps added:', _addedCount);
         }
       }
     }
