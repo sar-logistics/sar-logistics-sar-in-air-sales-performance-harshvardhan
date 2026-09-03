@@ -4786,14 +4786,17 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       if (_pRole === 'zonal manager' && typeof BRANCH_ZONE_MAP !== 'undefined' && typeof ZONE_BRANCHES_MAP !== 'undefined') {
         var _userZoneRLS = (currentUser.zone || '').trim();
         var _ownBranches = ZONE_BRANCHES_MAP[_userZoneRLS] || [];
-        console.log('[DEBUG mumbai-rls] _userZoneRLS:', _userZoneRLS, '| _ownBranches:', _ownBranches, '| allPendencyDrillRows:', allPendencyDrillRows && allPendencyDrillRows.length, '| _repLocationMap keys sample:', Object.keys(_repLocationMap).slice(0,5), '| _repLocationMap size:', Object.keys(_repLocationMap).length);
-        if (_ownBranches.length > 0 && allPendencyDrillRows) {
-          var _addedCount = 0;
-          allPendencyDrillRows.forEach(function(r){
-            var loc = _repLocationMap[r._norm] || '';
-            if (_ownBranches.indexOf(loc) > -1) { _allowedRepNames[r._norm] = true; _addedCount++; }
+        // Use _repLocationMap directly rather than iterating
+        // allPendencyDrillRows — _repLocationMap is already populated at
+        // this point either way (live data, or the localStorage cache
+        // fallback for instant-load before allPendencyDrillRows finishes
+        // fetching), so requiring allPendencyDrillRows here meant this
+        // silently found zero individual branch reps whenever the page
+        // rendered before the live fetch completed.
+        if (_ownBranches.length > 0) {
+          Object.keys(_repLocationMap).forEach(function(norm){
+            if (_ownBranches.indexOf(_repLocationMap[norm]) > -1) _allowedRepNames[norm] = true;
           });
-          console.log('[DEBUG mumbai-rls] individual reps added:', _addedCount);
         }
       }
     }
@@ -4826,8 +4829,6 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     }
     return true;
   });
-  console.log('[DEBUG pendency] currentUser.role:', currentUser && currentUser.role, '| _allowedRepNames:', _allowedRepNames ? Object.keys(_allowedRepNames) : null, '| _pendencyReps.length:', _pendencyReps.length, '| _pendencyReps zones:', _pendencyReps.map(function(r){return r.zone;}));
-
 
   var repsFiltered = _pendencyReps.map(function(rep){
     var colData;
