@@ -3485,7 +3485,10 @@ function agentPage(){
       allDrillRows.forEach(function(r){
         if (_aLobFilter.indexOf(r.lob) === -1) return;
         if (!_aActiveMonsSet[r._ml]) return;
-        if (_frNormA.length > 0 && _frNormA.indexOf(r._sp) === -1) return;
+        if (_frNormA.length > 0) {
+          var _rDnA = r._dn ? normalizeName(r._dn) : null;
+          if (_frNormA.indexOf(r._sp) === -1 && !(_rDnA && _frNormA.indexOf(_rDnA) > -1)) return;
+        }
         var agents = [];
         if (r.destAgent) agents.push((r.destAgent||'').trim().toLowerCase());
         if (r.originAgent && r.originAgent !== r.destAgent) agents.push((r.originAgent||'').trim().toLowerCase());
@@ -7927,12 +7930,25 @@ function openInsightDrill(drillType, name, drillMonth) {
       var _tlRLSReps = _getRLSReps();
       var _tlEffReps = null;
       if (_tlRLSReps.length > 0) {
-        _tlEffReps = _tlRLSReps.map(function(x){return normalizeName(x);});
+        var _tlRlsNorm = _tlRLSReps.map(function(x){return normalizeName(x);});
+        var _tlSelNorm = (state.filterReps||[]).length > 0 ? (state.filterReps||[]).map(function(x){return normalizeName(x);}) : null;
+        // Intersect with manual selection instead of ignoring it — same
+        // fix as Customer/Agent Insights. Also check display-name
+        // correspondence (rawNameToDisplayNorm), not just direct match.
+        _tlEffReps = _tlSelNorm ? _tlRlsNorm.filter(function(sp){
+          if (_tlSelNorm.indexOf(sp) > -1) return true;
+          var dn = rawNameToDisplayNorm(sp);
+          return dn && _tlSelNorm.indexOf(dn) > -1;
+        }) : _tlRlsNorm;
       } else if ((state.filterZones||[]).length > 0 || (state.filterReps||[]).length > 0) {
         _tlEffReps = zoneToRawSPs(state.filterZones||[]);
         if ((state.filterReps||[]).length > 0) {
           var _frn = (state.filterReps||[]).map(function(x){return normalizeName(x);});
-          _tlEffReps = _tlEffReps ? _tlEffReps.filter(function(sp){return _frn.indexOf(sp)>-1;}) : _frn;
+          _tlEffReps = _tlEffReps ? _tlEffReps.filter(function(sp){
+            if (_frn.indexOf(sp)>-1) return true;
+            var dn = rawNameToDisplayNorm(sp);
+            return dn && _frn.indexOf(dn) > -1;
+          }) : _frn;
         }
       }
 
