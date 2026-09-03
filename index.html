@@ -4829,6 +4829,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     }
     return true;
   });
+  console.log('[DEBUG2 pendency]', 'currentUser:', currentUser && currentUser.role, currentUser && currentUser.zone, '| _allowedRepNames:', _allowedRepNames ? Object.keys(_allowedRepNames) : null, '| d.reps.length:', (d.reps||[]).length, '| _pendencyReps.length:', _pendencyReps.length, '| _pendencyReps zones:', _pendencyReps.map(function(r){return r.zone;}));
 
   var repsFiltered = _pendencyReps.map(function(rep){
     var colData;
