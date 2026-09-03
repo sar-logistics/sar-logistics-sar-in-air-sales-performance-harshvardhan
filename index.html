@@ -4925,6 +4925,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // Grand totals — sum from repsFiltered (already LOB-filtered via _pendencyLobIndex)
   var gtPending = repsFiltered.reduce(function(s,r){ return s+r.totalPending; }, 0);
   var gtDone    = repsFiltered.reduce(function(s,r){ return s+r.totalDone;    }, 0);
+  console.log('[DEBUG3]', 'repsFiltered.length:', repsFiltered.length, '| repsFiltered names:', repsFiltered.map(function(r){return r.name+'('+r.zone+')';}), '| gtPending:', gtPending, '| gtDone:', gtDone, '| state.filterReps:', state.filterReps);
   var gtTotal   = gtPending + gtDone;
   var gtColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
     return {
