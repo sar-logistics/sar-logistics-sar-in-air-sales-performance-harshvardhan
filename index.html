@@ -4898,7 +4898,13 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     }
     if (_pendencyManualReps) {
       var _repNormP = normalizeName(rep.name);
-      var _repBranchP = _repLocationMap[_repNormP];
+      // Only apply the branch-location fallback for genuinely UNMAPPED
+      // reps (rep.zone not in _fullZoneSet) — a MAPPED rep can also have
+      // Mumbai as their most-frequent derived location (they're physically
+      // based there) despite officially belonging to a different zone;
+      // applying the branch fallback to them too incorrectly matched
+      // Aniket (mapped to INAZ02) when only 'Mumbai' branch was selected.
+      var _repBranchP = !_fullZoneSet[rep.zone] ? _repLocationMap[_repNormP] : null;
       var _matchesManual = _pendencyManualReps.indexOf(_repNormP) > -1 || (_repBranchP && _pendencyManualReps.indexOf(normalizeName(_repBranchP)) > -1);
       if (!_matchesManual) return false;
     }
