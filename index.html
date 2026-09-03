@@ -2353,10 +2353,14 @@ function entities(){
       repsRaw.filter(function(r){ return r.zone === z && !(r.isBranch && BRANCH_ZONE_MAP[r.name]); }).forEach(function(r){
         list.push(repEntity(r));
       });
-      // Inject mapped branches as regular rep rows under this zone
+      // Inject mapped branches as regular rep rows under this zone — only
+      // if the branch survived the rep filter (repsRaw), not unconditionally
+      // from repsRawOriginal. Previously this always showed the branch
+      // regardless of state.filterReps, even when a specific individual rep
+      // was selected and the branch itself wasn't.
       var _zoneBranches = ZONE_BRANCHES_MAP[z] || [];
       _zoneBranches.forEach(function(bName){
-        var bRep = repsRawOriginal.find(function(r){ return r.isBranch && r.name === bName; });
+        var bRep = repsRaw.find(function(r){ return r.isBranch && r.name === bName; });
         if (bRep) list.push(repEntity(bRep));
       });
     }
