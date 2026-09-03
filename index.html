@@ -4823,6 +4823,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     }
     return true;
   });
+  console.log('[DEBUG pendency] currentUser.role:', currentUser && currentUser.role, '| _allowedRepNames:', _allowedRepNames ? Object.keys(_allowedRepNames) : null, '| _pendencyReps.length:', _pendencyReps.length, '| _pendencyReps zones:', _pendencyReps.map(function(r){return r.zone;}));
 
 
   var repsFiltered = _pendencyReps.map(function(rep){
