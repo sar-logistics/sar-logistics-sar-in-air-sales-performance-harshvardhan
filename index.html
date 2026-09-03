@@ -4179,17 +4179,29 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       if (state.filterZones && state.filterZones.length > 0 && (!state.filterReps || state.filterReps.length === 0) && (typeof _getRLSReps !== 'function' || _getRLSReps().length === 0)) {
         _tlPureZoneListPT = state.filterZones;
       }
+      // A Zonal Manager's own relocated branch (e.g. Mumbai under INAZ02) is
+      // deliberately NOT included in _getRLSReps()'s name set (that approach
+      // leaked 100+ unrelated reps company-wide — see today's security fix).
+      // Add it back here via precise ROW-LEVEL location matching instead —
+      // additive to whatever effectiveReps/_tlPureZoneListPT already allow.
+      var _rlsOwnBranchesPT = null;
+      if (typeof _getRLSReps === 'function' && currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager' && typeof ZONE_BRANCHES_MAP !== 'undefined') {
+        _rlsOwnBranchesPT = ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()] || null;
+      }
       allDrillRows.forEach(function(r){
         if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
         if (effectiveReps && effectiveReps.length > 0) {
-          if (_tlPureZoneListPT && !r._zone) {
-            var _rowBrPT = (r.location || '').trim();
-            var _rowTgtPT = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrPT] : null;
-            var _matchesPT = _rowTgtPT ? (_tlPureZoneListPT.indexOf(_rowTgtPT) > -1) : (_tlPureZoneListPT.indexOf('Cross Sales') > -1);
-            if (!_matchesPT) return;
-          } else {
-            var _rDnPT = r._dn ? normalizeName(r._dn) : null;
-            if (effectiveReps.indexOf(r._sp) === -1 && !(_rDnPT && effectiveReps.indexOf(_rDnPT) > -1)) return;
+          var _matchesOwnBranchPT = _rlsOwnBranchesPT && _rlsOwnBranchesPT.length > 0 && !r._zone && _rlsOwnBranchesPT.indexOf((r.location||'').trim()) > -1;
+          if (!_matchesOwnBranchPT) {
+            if (_tlPureZoneListPT && !r._zone) {
+              var _rowBrPT = (r.location || '').trim();
+              var _rowTgtPT = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrPT] : null;
+              var _matchesPT = _rowTgtPT ? (_tlPureZoneListPT.indexOf(_rowTgtPT) > -1) : (_tlPureZoneListPT.indexOf('Cross Sales') > -1);
+              if (!_matchesPT) return;
+            } else {
+              var _rDnPT = r._dn ? normalizeName(r._dn) : null;
+              if (effectiveReps.indexOf(r._sp) === -1 && !(_rDnPT && effectiveReps.indexOf(_rDnPT) > -1)) return;
+            }
           }
         }
         if (!_gtActiveMonsSet[r._ml]) return;
@@ -4249,14 +4261,17 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       if (!r._tg) { return; }
       if (filterLobs && filterLobs.length > 0 && filterLobs.indexOf(r.lob) === -1) return;
       if (effectiveReps && effectiveReps.length > 0) {
-        if (_tlPureZoneListPT && !r._zone) {
-          var _rowBrPT2 = (r.location || '').trim();
-          var _rowTgtPT2 = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrPT2] : null;
-          var _matchesPT2 = _rowTgtPT2 ? (_tlPureZoneListPT.indexOf(_rowTgtPT2) > -1) : (_tlPureZoneListPT.indexOf('Cross Sales') > -1);
-          if (!_matchesPT2) return;
-        } else {
-          var _rDnPT2 = r._dn ? normalizeName(r._dn) : null;
-          if (effectiveReps.indexOf(r._sp) === -1 && !(_rDnPT2 && effectiveReps.indexOf(_rDnPT2) > -1)) return;
+        var _matchesOwnBranchPT2 = _rlsOwnBranchesPT && _rlsOwnBranchesPT.length > 0 && !r._zone && _rlsOwnBranchesPT.indexOf((r.location||'').trim()) > -1;
+        if (!_matchesOwnBranchPT2) {
+          if (_tlPureZoneListPT && !r._zone) {
+            var _rowBrPT2 = (r.location || '').trim();
+            var _rowTgtPT2 = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrPT2] : null;
+            var _matchesPT2 = _rowTgtPT2 ? (_tlPureZoneListPT.indexOf(_rowTgtPT2) > -1) : (_tlPureZoneListPT.indexOf('Cross Sales') > -1);
+            if (!_matchesPT2) return;
+          } else {
+            var _rDnPT2 = r._dn ? normalizeName(r._dn) : null;
+            if (effectiveReps.indexOf(r._sp) === -1 && !(_rDnPT2 && effectiveReps.indexOf(_rDnPT2) > -1)) return;
+          }
         }
       }
       var inActive = _fyGroups ? !!_tgFyMonsSet[r._ml] : !!_tgActiveMonsSet[r._ml];
@@ -8001,6 +8016,13 @@ function openInsightDrill(drillType, name, drillMonth) {
       // Build repFilter from RLS + zone/rep filters
       var _tlRLSReps = _getRLSReps();
       var _tlEffReps = null;
+      // A Zonal Manager's own relocated branch is NOT in _getRLSReps()'s
+      // name set (see today's security fix) — add it back via row-level
+      // location matching in the filter below instead.
+      var _rlsOwnBranchesTL3 = null;
+      if (currentUser && (currentUser.role||'').toLowerCase().trim() === 'zonal manager' && typeof ZONE_BRANCHES_MAP !== 'undefined') {
+        _rlsOwnBranchesTL3 = ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()] || null;
+      }
       if (_tlRLSReps.length > 0) {
         var _tlRlsNorm = _tlRLSReps.map(function(x){return normalizeName(x);});
         var _tlSelNorm = (state.filterReps||[]).length > 0 ? (state.filterReps||[]).map(function(x){return normalizeName(x);}) : null;
@@ -8035,8 +8057,12 @@ function openInsightDrill(drillType, name, drillMonth) {
         if (name !== 'Grand Total') {
           if (row._tg !== name) return false;
         }
-        // Rep/zone filter
-        if (_tlEffReps && _tlEffReps.indexOf(row._sp) === -1) return false;
+        // Rep/zone filter — additive: own branch (row-level location match)
+        // OR the effective name set
+        if (_tlEffReps) {
+          var _matchesOwnBranchTL3 = _rlsOwnBranchesTL3 && _rlsOwnBranchesTL3.length > 0 && !row._zone && _rlsOwnBranchesTL3.indexOf((row.location||'').trim()) > -1;
+          if (!_matchesOwnBranchTL3 && _tlEffReps.indexOf(row._sp) === -1) return false;
+        }
         // Deduplicate
         if (_tlSeenSno[row.shipmentNo]) return false;
         _tlSeenSno[row.shipmentNo] = true;
