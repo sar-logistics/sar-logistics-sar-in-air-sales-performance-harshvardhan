@@ -4871,6 +4871,13 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     }
   }
 
+  // Manual rep filter (global Filters panel) — completely separate from
+  // RLS/_allowedRepNames above, additive on top of it. A selected 'rep'
+  // can also be a relocated branch name (e.g. 'Mumbai') rather than an
+  // individual person — match via the rep's own derived branch location
+  // in that case too.
+  var _pendencyManualReps = (state.filterReps && state.filterReps.length > 0) ? state.filterReps.map(function(x){ return normalizeName(x); }) : null;
+
   var _pendencyReps = (d.reps || []).filter(function(rep){
     if (_allowedRepNames && !_allowedRepNames[normalizeName(rep.name)]) return false;
     if (_pendencyZoneSet && !_pendencyZoneSet[rep.zone]) {
@@ -4879,6 +4886,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // instead, same as the RLS extension above.
       var _repBranch = _repLocationMap[normalizeName(rep.name)];
       if (!(_pendencySyntheticSelected && _repBranch && _pendencySyntheticSelected[_repBranch])) return false;
+    }
+    if (_pendencyManualReps) {
+      var _repNormP = normalizeName(rep.name);
+      var _repBranchP = _repLocationMap[_repNormP];
+      var _matchesManual = _pendencyManualReps.indexOf(_repNormP) > -1 || (_repBranchP && _pendencyManualReps.indexOf(normalizeName(_repBranchP)) > -1);
+      if (!_matchesManual) return false;
     }
     return true;
   });
