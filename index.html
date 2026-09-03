@@ -4965,6 +4965,28 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // Grand totals — sum from repsFiltered (already LOB-filtered via _pendencyLobIndex)
   var gtPending = repsFiltered.reduce(function(s,r){ return s+r.totalPending; }, 0);
   var gtDone    = repsFiltered.reduce(function(s,r){ return s+r.totalDone;    }, 0);
+  // Override with a fresh, row-level computation when allPendencyDrillRows is
+  // available — repsFiltered only reflects reps present in d.reps, but a
+  // relocated branch's individual unmapped reps may not have loaded into
+  // d.reps yet even when allPendencyDrillRows has (same class of gap fixed
+  // for the zone/branch headers above): this keeps the KPI cards consistent
+  // with what the table itself shows, rather than going to zero.
+  if (allPendencyDrillRows && allPendencyDrillRows.length > 0 && !isYearly && !isQuarterly && !isWeekly) {
+    var _gtFreshP = 0, _gtFreshD = 0;
+    allPendencyDrillRows.forEach(function(r){
+      if (_allowedRepNames && !_allowedRepNames[r._norm]) return;
+      if (_flobs && _flobs.indexOf(r.lob) === -1) return;
+      if (_pendencyManualReps) {
+        var _rNormGT = r._norm || (r._sp || '');
+        var _matchesGT = _pendencyManualReps.indexOf(_rNormGT) > -1 || _pendencyManualReps.indexOf(normalizeName((r.location||'').trim())) > -1;
+        if (!_matchesGT) return;
+      }
+      var isDoneGT = _isOLPage ? r.olDone : r.flDone;
+      if (isDoneGT) _gtFreshD++; else _gtFreshP++;
+    });
+    gtPending = _gtFreshP;
+    gtDone = _gtFreshD;
+  }
   var gtTotal   = gtPending + gtDone;
   var gtColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
     return {
