@@ -611,11 +611,26 @@ function _getRLSReps() {
   if (role === 'zonal manager') {
     var userZone = (currentUser.zone || '').trim();
     if (!userZone) return [];
-    // Use zoneToRawSPs to get exact _sp values matching allDrillRows
-    // (display names like "Radha Singh" ≠ raw SP "radha arunkumar singh")
-    var zoneSPs = zoneToRawSPs([userZone]);
-    if (zoneSPs && zoneSPs.length > 0) return zoneSPs;
-    // Fallback to display names if zoneToRawSPs not available
+    // IMPORTANT: only the zone's own directly-mapped reps — deliberately
+    // NOT using zoneToRawSPs' relocated-branch handling here. That logic
+    // tags a person's entire raw name into the set if even ONE of their
+    // jobs, ever, was located in a relocated branch (e.g. Mumbai) — since
+    // Mumbai is a major hub, this pulled in 100+ unrelated cross-sales
+    // people company-wide who happened to touch a single Mumbai job,
+    // a real RLS leak (confirmed live: Zone 2 manager got 123 names
+    // instead of ~5). SP/OP/FP already handle a Zonal Manager's relocated
+    // branch correctly via proper row-level location matching; Tradelane/
+    // Customer/Agent Insights don't see the branch's data via RLS for now
+    // — a known, accepted limitation, safer than the leak.
+    var _rlsDirectSPs = {};
+    if (allDrillRows) {
+      allDrillRows.forEach(function(r){
+        if (r._sp && r._zone === userZone) _rlsDirectSPs[r._sp] = true;
+      });
+    }
+    var _rlsDirectKeys = Object.keys(_rlsDirectSPs);
+    if (_rlsDirectKeys.length > 0) return _rlsDirectKeys;
+    // Fallback to display names if allDrillRows not available
     return repsRawOriginal
       .filter(function(r){ return !r.isBranch && r.zone === userZone; })
       .map(function(r){ return r.name; });
