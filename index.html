@@ -5452,6 +5452,10 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     // r.zone==='Cross Sales' && r.originalZone===branch (never reclassified);
     // only the display location changes.
     _zoneOwnBranchesCheck.forEach(function(branch){
+      // Skip rendering this branch entirely when a manual rep filter is
+      // active and doesn't include it — matches the same "hide, don't just
+      // zero out" behavior used elsewhere today (SP's entities()).
+      if (_pendencyManualReps && _pendencyManualReps.indexOf(normalizeName(branch)) === -1) return;
       var branchReps = repsFiltered.filter(function(r){ return r.zone === 'Cross Sales' && r.originalZone === branch; });
       var branchKey = 'branch__' + zone + '__' + branch;
       var branchCollapsed = state.pendencyZoneOpen[branchKey] === false;
