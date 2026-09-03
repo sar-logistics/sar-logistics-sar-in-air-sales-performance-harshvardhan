@@ -2783,7 +2783,15 @@ function topbar(){
                   + checkRow('All Reps', state.filterReps.length===0, 'filterRepAll', '')
                   + allRepEntries.map(function(entry){
                       var name = entry[0], isBranch = entry[1];
-                      var label = isBranch ? name + ' (Cross Sales)' : name;
+                      // A relocated branch (BRANCH_ZONE_MAP) now displays
+                      // under its real zone, not Cross Sales — labeling it
+                      // '(Cross Sales)' here is misleading (looks like
+                      // selecting Mumbai also pulls in a separate Cross
+                      // Sales section, when it doesn't). Only genuinely
+                      // remaining Cross Sales branches (Tuticorin, Jaipur
+                      // etc) keep that label.
+                      var _isRelocated = isBranch && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[name];
+                      var label = isBranch ? (name + (_isRelocated ? ' (Branch)' : ' (Cross Sales)')) : name;
                       return checkRow(label, state.filterReps.indexOf(name)>-1, 'toggleFilterRep', name, name);
                     }).join('')
                   + '<div class="filter-no-match" style="display:none;padding:14px 10px;text-align:center;font-size:11.5px;color:#9AAFC8;">No matching reps</div>'
