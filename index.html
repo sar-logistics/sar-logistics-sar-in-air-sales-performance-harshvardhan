@@ -2111,7 +2111,15 @@ function getZones(){
     // purely so its data is available for its TARGET zone's total (RLS/
     // filter), without that meaning Cross Sales itself should show as a
     // zone row.
-    if (r.zone === 'Cross Sales' && r.isBranch && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[r.name]) return;
+    if (r.zone === 'Cross Sales' && r.isBranch && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[r.name]) {
+      // It still counts as presence of its TARGET zone, though — otherwise
+      // filtering to ONLY this branch (no other rep of that zone selected)
+      // leaves zero zones present at all, and the whole page goes blank
+      // even though the branch itself should still render under its zone.
+      var _tgtZ = BRANCH_ZONE_MAP[r.name];
+      if (_tgtZ && !seen[_tgtZ]) { seen[_tgtZ] = true; zones.push(_tgtZ); }
+      return;
+    }
     seen[r.zone] = true; zones.push(r.zone);
   });
   // Inject synthetic zones that have no mapping sheet entry — admin/HR only.
@@ -2169,7 +2177,7 @@ function zoneEntity(zoneName){
     avatarBg: 'oklch(0.5 0.14 ' + zoneHue(zoneName) + ')',
     isZone: true, zone: zoneName,
     ship: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].ship)||0);},0);})
-                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; var _zb=ZONE_BRANCHES_MAP[zoneName]||[]; var _frZE=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; return allDrillRows.filter(function(r){var _rDn=r._dn?normalizeName(r._dn):null; return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&(!_frZE||(_frZE.indexOf(r._sp)>-1)||(_rDn&&_frZE.indexOf(_rDn)>-1))&&(_isCross?(!r._zone&&!BRANCH_ZONE_MAP[(r.location||'').trim()]):(r._zone===zoneName||(_zb.length>0&&!r._zone&&_zb.indexOf((r.location||'').trim())>-1)));}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
+                   : idxs.map(function(i){ var _ml=months26[i]; if(allDrillRows&&allDrillRows.length>0){var _fl=state.filterLobs&&state.filterLobs.length>0?state.filterLobs:null; var _isCross=zoneName==='Cross Sales'; var _zb=ZONE_BRANCHES_MAP[zoneName]||[]; var _frZE=state.filterReps&&state.filterReps.length>0?state.filterReps.map(function(x){return normalizeName(x);}):null; var _frBranches=_frZE?_frZE.filter(function(nm){return typeof BRANCH_ZONE_MAP!=='undefined'&&Object.keys(BRANCH_ZONE_MAP).some(function(bn){return normalizeName(bn)===nm;});}):null; return allDrillRows.filter(function(r){var _rDn=r._dn?normalizeName(r._dn):null; var _rLoc=r.location?normalizeName(r.location):null; var _repMatch=!_frZE||(_frZE.indexOf(r._sp)>-1)||(_rDn&&_frZE.indexOf(_rDn)>-1)||(_frBranches&&_frBranches.length>0&&!r._zone&&_rLoc&&_frBranches.indexOf(_rLoc)>-1); return r._ml===_ml&&(!_fl||_fl.indexOf(r.lob)>-1)&&_repMatch&&(_isCross?(!r._zone&&!BRANCH_ZONE_MAP[(r.location||'').trim()]):(r._zone===zoneName||(_zb.length>0&&!r._zone&&_zb.indexOf((r.location||'').trim())>-1)));}).length;} return sum(zReps.map(function(r){return r.ship[i]||0;})); }),
     gp:   isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].gp)||0);},0);})
                    : idxs.map(function(i){var m=months26[i]; var _bgp=(_bIdx[m]&&_bIdx[m].gp)||0; return ((_lobDataFetched&&state.filterLobs&&state.filterLobs.length>0) ? sum(zReps.map(function(r){return state.filterLobs.reduce(function(s,lob){return s+((r.lobData&&r.lobData[lob]&&r.lobData[lob][m]&&r.lobData[lob][m].gp)||0);},0);})) : sum(zReps.map(function(r){return (r.gp&&r.gp[i])||0;})))+_bgp;}),
     tons: isWeekly ? wkeys.map(function(k){return zReps.reduce(function(s,r){return s+((r.weekData&&r.weekData[k]&&r.weekData[k].tons)||0);},0);})
