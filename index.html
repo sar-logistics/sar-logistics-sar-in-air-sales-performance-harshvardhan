@@ -1953,7 +1953,16 @@ function model(){
       // sheet's Display Name) — state.filterReps/currentUser.name hold
       // Display Names, which can differ from the raw name (e.g. a
       // shortened display name vs a longer full name in job records).
-      if (_fr_sg && !((_gr._sp && _fr_sg.indexOf(_gr._sp)>-1) || (_grDn && _fr_sg.indexOf(_grDn)>-1))) continue;
+      // Match by individual rep (_sp/_dn) OR the branch itself being
+      // selected by name/location (when a relocated branch — e.g. Mumbai —
+      // is chosen directly in the rep picker, its underlying job rows never
+      // have a matching _sp/_dn, since those belong to the branch's own
+      // individual salespeople, not the branch name itself).
+      if (_fr_sg) {
+        var _grLoc = _glocBr ? normalizeName(_glocBr) : null;
+        var _matchesRepOrBranch = (_gr._sp && _fr_sg.indexOf(_gr._sp)>-1) || (_grDn && _fr_sg.indexOf(_grDn)>-1) || (!_gr._zone && _grLoc && _fr_sg.indexOf(_grLoc)>-1);
+        if (!_matchesRepOrBranch) continue;
+      }
       shipGrand++;
       gpGrand   += _gr.g||0;
       tonsGrand += _gr.tons||0;
