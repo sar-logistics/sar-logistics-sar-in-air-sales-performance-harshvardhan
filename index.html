@@ -4786,16 +4786,20 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       if (_pRole === 'zonal manager' && typeof BRANCH_ZONE_MAP !== 'undefined' && typeof ZONE_BRANCHES_MAP !== 'undefined') {
         var _userZoneRLS = (currentUser.zone || '').trim();
         var _ownBranches = ZONE_BRANCHES_MAP[_userZoneRLS] || [];
-        // Use _repLocationMap directly rather than iterating
-        // allPendencyDrillRows — _repLocationMap is already populated at
-        // this point either way (live data, or the localStorage cache
-        // fallback for instant-load before allPendencyDrillRows finishes
-        // fetching), so requiring allPendencyDrillRows here meant this
-        // silently found zero individual branch reps whenever the page
-        // rendered before the live fetch completed.
-        if (_ownBranches.length > 0) {
-          Object.keys(_repLocationMap).forEach(function(norm){
-            if (_ownBranches.indexOf(_repLocationMap[norm]) > -1) _allowedRepNames[norm] = true;
+        // IMPORTANT: match by each individual JOB ROW's own location
+        // (row.location === branch), NOT by _repLocationMap's 'most
+        // frequent location per rep' — that map is built for a different
+        // purpose (deciding which branch bucket an aggregate rep row
+        // displays under) and is far too broad here: since Mumbai is a
+        // major hub, dozens of unrelated reps across the whole company
+        // have Mumbai as their single most common location even though
+        // they have nothing to do with Zone 2 — using it directly leaked
+        // ~90 unrelated names into RLS. Confirmed live before this fix.
+        if (_ownBranches.length > 0 && allPendencyDrillRows) {
+          allPendencyDrillRows.forEach(function(r){
+            if (r._zone) return; // mapped — not a branch/unmapped row
+            var loc = (r.location || '').trim();
+            if (_ownBranches.indexOf(loc) > -1) _allowedRepNames[r._norm] = true;
           });
         }
       }
@@ -4829,7 +4833,6 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     }
     return true;
   });
-  console.log('[DEBUG2 pendency]', 'currentUser:', currentUser && currentUser.role, currentUser && currentUser.zone, '| _allowedRepNames:', _allowedRepNames ? Object.keys(_allowedRepNames) : null, '| d.reps.length:', (d.reps||[]).length, '| _pendencyReps.length:', _pendencyReps.length, '| _pendencyReps zones:', _pendencyReps.map(function(r){return r.zone;}));
 
   var repsFiltered = _pendencyReps.map(function(rep){
     var colData;
