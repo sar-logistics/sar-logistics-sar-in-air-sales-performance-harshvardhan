@@ -4899,7 +4899,13 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // A selected synthetic zone (e.g. INAZ08 (Chennai)) never matches a
       // rep's raw zone directly — match via their derived branch location
       // instead, same as the RLS extension above.
-      var _repBranch = _repLocationMap[normalizeName(rep.name)];
+      // Only for genuinely UNMAPPED reps (same fix as the manual-rep-filter
+      // branch check below) — _repLocationMap doesn't distinguish mapped
+      // from unmapped, so a MAPPED rep from a totally different zone (e.g.
+      // an INAZ01 rep whose jobs happen to be filed from Mumbai most often)
+      // could incorrectly pass this check once Mumbai's branch was pulled
+      // in by selecting INAZ02 — a real leak, confirmed live.
+      var _repBranch = !_fullZoneSet[rep.zone] ? _repLocationMap[normalizeName(rep.name)] : null;
       if (!(_pendencySyntheticSelected && _repBranch && _pendencySyntheticSelected[_repBranch])) return false;
     }
     if (_pendencyManualReps) {
