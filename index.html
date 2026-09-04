@@ -5670,14 +5670,13 @@ function financePage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading finance pendency…</div>'
       +'</div>';
   }
-  // Weekly view needs allPendencyDrillRows — show loading if not ready yet.
-  // Also needed for a Zonal Manager whose zone has a relocated branch — RLS
-  // can't correctly compute the branch's individual reps without it, and
-  // waiting for the (unrelated) one-time boot-time background fetch was
-  // unreliable for this specific case.
-  var _fpZmNeedsDrill = currentUser && (currentUser.role||'').toLowerCase().trim()==='zonal manager'
-    && typeof ZONE_BRANCHES_MAP !== 'undefined' && (ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()]||[]).length > 0;
-  if ((state.reportView === 'Weekly' || _fpZmNeedsDrill) && !allPendencyDrillRows) {
+  // allPendencyDrillRows is needed unconditionally now — the zone/branch
+  // header totals, Grand Total, and RLS branch reps all depend on it for
+  // correct numbers (today's fixes), not just Weekly view or a Zonal
+  // Manager's own branch. Previously this only proactively fetched for
+  // those two narrow cases, so admin/Monthly view stayed stale until
+  // something else (like a drill click) happened to trigger a fetch.
+  if (!allPendencyDrillRows) {
     if (!_pendencyDrillLoading) {
       _pendencyDrillLoading = true;
       fetch('/api/mongo-batch?action=op').then(function(r){return r.json();}).then(function(d){
@@ -5688,7 +5687,7 @@ function financePage(){
         _pendencyDrillLoading = false; render();
       }).catch(function(){ _pendencyDrillLoading = false; });
     }
-    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading weekly data…</div>'      +'</div>';
+    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #1D5FCC;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading job data…</div>'      +'</div>';
   }
   return pendencyPage(financeData, 'Finance Pendency', 'FL Pending Jobs', 'FL Done Jobs', '#1D5FCC', false, 'Financial Lock');
 }
@@ -5706,12 +5705,9 @@ function opPage(){
       +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading operation pendency…</div>'
       +'</div>';
   }
-  // Weekly view needs allPendencyDrillRows — fetch directly (bypasses makeFetcher sync trap).
-  // Also needed for a Zonal Manager whose zone has a relocated branch — same
-  // reasoning as financePage() above.
-  var _opZmNeedsDrill = currentUser && (currentUser.role||'').toLowerCase().trim()==='zonal manager'
-    && typeof ZONE_BRANCHES_MAP !== 'undefined' && (ZONE_BRANCHES_MAP[(currentUser.zone||'').trim()]||[]).length > 0;
-  if ((state.reportView === 'Weekly' || _opZmNeedsDrill) && !allPendencyDrillRows) {
+  // allPendencyDrillRows is needed unconditionally now — same reasoning as
+  // financePage() above.
+  if (!allPendencyDrillRows) {
     if (!_pendencyDrillLoading) {
       _pendencyDrillLoading = true;
       fetch('/api/mongo-batch?action=op').then(function(r){return r.json();}).then(function(d){
@@ -5720,7 +5716,7 @@ function opPage(){
         render();
       }).catch(function(){ _pendencyDrillLoading = false; });
     }
-    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #7C3AED;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading weekly data…</div>'      +'</div>';
+    return '<div style="display:flex;align-items:center;justify-content:center;height:260px;gap:12px;">'      +'<div style="width:18px;height:18px;border:2.5px solid #7C3AED;border-top-color:transparent;border-radius:50%;animation:spin 0.7s linear infinite;"></div>'      +'<div style="font-size:12px;color:#64748B;font-weight:600;">Loading job data…</div>'      +'</div>';
   }
   return pendencyPage(opData, 'Operation Pendency', 'OL Pending Jobs', 'OL Done Jobs', '#7C3AED', true, 'Operation Lock');
 }
