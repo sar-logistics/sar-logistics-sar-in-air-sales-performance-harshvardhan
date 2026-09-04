@@ -5023,6 +5023,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       var isDoneGT = _isOLPage ? r.olDone : r.flDone;
       if (isDoneGT) _gtFreshD++; else _gtFreshP++;
     });
+    console.log('[DEBUG-GT]', 'zoneSet:', _pendencyZoneSet, '| manualReps:', _pendencyManualReps, '| fresh P/D:', _gtFreshP, _gtFreshD);
     gtPending = _gtFreshP;
     gtDone = _gtFreshD;
   }
