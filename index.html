@@ -5028,10 +5028,16 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   if (typeof BRANCH_ZONE_MAP !== 'undefined') {
     var _pzRole = currentUser ? (currentUser.role || '').toLowerCase().trim() : '';
     var _pzUserZone = (_pzRole === 'zonal manager') ? (currentUser.zone || '').trim() : null;
+    // Also respect the admin's own manual zone filter — previously this
+    // only checked RLS (_pzUserZone), so an admin selecting just one zone
+    // (e.g. INAZ01) still saw every OTHER zone that has a relocated branch
+    // injected back in unconditionally, regardless of their selection.
+    var _pzManualZones = (state.filterZones||[]).length > 0 ? state.filterZones : null;
     var _targetZonesSeen = {};
     Object.keys(BRANCH_ZONE_MAP).forEach(function(b){
       var tz = BRANCH_ZONE_MAP[b];
       if (_pzUserZone && tz !== _pzUserZone) return; // not this manager's own zone — skip
+      if (_pzManualZones && _pzManualZones.indexOf(tz) === -1) return; // not in admin's zone filter — skip
       if (zoneOrder.indexOf(tz) === -1 && !_targetZonesSeen[tz]) { _targetZonesSeen[tz] = true; zoneOrder.push(tz); }
     });
     zoneOrder = sortZones(zoneOrder);
