@@ -4877,9 +4877,15 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   if (_filterZonesP.length > 0) {
     _pendencyZoneSet = {};
     _filterZonesP.forEach(function(z){ _pendencyZoneSet[z] = true; });
-    if (typeof SYNTHETIC_ZONES !== 'undefined' && typeof ZONE_BRANCHES_MAP !== 'undefined') {
+    // Any selected zone with a relocated branch (ZONE_BRANCHES_MAP) should
+    // also pull in that branch's individual reps — not just SYNTHETIC_ZONES
+    // (pure virtual zones like INAZ08). A REAL, mapped zone like INAZ02 also
+    // has a relocated branch (Mumbai) and previously never got this
+    // treatment, so selecting INAZ02 alone showed empty data whenever
+    // Mumbai was also selected as a rep.
+    if (typeof ZONE_BRANCHES_MAP !== 'undefined') {
       _filterZonesP.forEach(function(z){
-        if (SYNTHETIC_ZONES.indexOf(z) > -1 && ZONE_BRANCHES_MAP[z]) {
+        if (ZONE_BRANCHES_MAP[z]) {
           if (!_pendencySyntheticSelected) _pendencySyntheticSelected = {};
           ZONE_BRANCHES_MAP[z].forEach(function(br){ _pendencySyntheticSelected[br] = true; });
         }
