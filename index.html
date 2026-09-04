@@ -5010,6 +5010,15 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // Build zone aggregates purely from repsFiltered (filtered period only)
   var zoneTotals = {};
   repsFiltered.forEach(function(r){
+    // A relocated-branch rep (zone==='Cross Sales', originalZone is a known
+    // BRANCH_ZONE_MAP target) should only ever appear nested under its
+    // target zone's branch section (handled separately below) — grouping
+    // it here by the raw 'Cross Sales' zone creates a phantom, unwanted
+    // 'Cross Sales' zone row alongside the real zone whenever such a rep
+    // passes any filter (zone, rep, or RLS). Skip zoneTotals grouping for
+    // these — their numbers are already counted via the branch section.
+    var _isRelocatedBranchRep = r.zone === 'Cross Sales' && typeof BRANCH_ZONE_MAP !== 'undefined' && r.originalZone && !!BRANCH_ZONE_MAP[r.originalZone];
+    if (_isRelocatedBranchRep) return;
     if (!zoneTotals[r.zone]) {
       zoneTotals[r.zone] = {
         totalPending: 0, totalDone: 0, total: 0,
