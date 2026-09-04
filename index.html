@@ -8506,7 +8506,15 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
         // triggered this branch-inclusion at all (same bug just fixed for
         // gtPending/gtDone above).
         var _matchesOwnBranchGrand = _pOwnBranchesGrand && _pOwnBranchesGrand.length > 0 && isCrossSalesRep(r) && _pOwnBranchesGrand.indexOf((r.location||'').trim()) > -1;
-        var _inZone = _matchesOwnBranchGrand || _pSpFilterSet[r._norm] || (_pZoneSet && _pZoneSet[r._zone]);
+        // The standalone _pZoneSet[r._zone] check bypasses the rep-filter
+        // intersection entirely (any row in the zone matches, regardless of
+        // which rep was selected) — only use it when there's no manual rep
+        // filter to intersect with; _pSpFilterSet already correctly reflects
+        // the zone∩rep intersection when one is active. Confirmed live:
+        // selecting INAZ02 + Mumbai still returned the full 1023 (whole
+        // zone) instead of just Mumbai's 237.
+        var _pZoneOnlyOk = (state.filterReps||[]).length === 0;
+        var _inZone = _matchesOwnBranchGrand || _pSpFilterSet[r._norm] || (_pZoneOnlyOk && _pZoneSet && _pZoneSet[r._zone]);
         if (!_inZone) continue;
       }
     } else if (type === 'crosssales') {
