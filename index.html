@@ -4996,8 +4996,13 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // allPendencyDrillRows loaded, ignoring the admin's zone selection.
       if (_pendencyZoneSet) {
         var _rZoneGT = r._zone;
-        var _matchesZoneGT = _rZoneGT ? !!_pendencyZoneSet[_rZoneGT] : false;
-        if (!_matchesZoneGT && !_rZoneGT) {
+        // Use _fullZoneSet membership (not a falsy check) to detect
+        // "unmapped" — unmapped rows here carry _zone: 'Unassigned' (a
+        // truthy string), not null, so the earlier falsy check never
+        // triggered the branch-fallback match at all. Confirmed live.
+        var _isMappedGT = _fullZoneSet[_rZoneGT];
+        var _matchesZoneGT = _isMappedGT ? !!_pendencyZoneSet[_rZoneGT] : false;
+        if (!_matchesZoneGT && !_isMappedGT) {
           // Unmapped row — match via relocated-branch target zone
           var _rLocGT = (r.location||'').trim();
           var _tgtGT = typeof BRANCH_ZONE_MAP !== 'undefined' ? BRANCH_ZONE_MAP[_rLocGT] : null;
@@ -8479,7 +8484,11 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
       // Use _zone to match against visible zones (same source as zone rows = SRR)
       if (_pSpFilterSet) {
         // Check both _norm and _zone for zone-based filtering
-        var _matchesOwnBranchGrand = _pOwnBranchesGrand && _pOwnBranchesGrand.length > 0 && !r._zone && _pOwnBranchesGrand.indexOf((r.location||'').trim()) > -1;
+        // isCrossSalesRep(r) — not !r._zone — since unmapped rows here carry
+        // _zone: 'Unassigned' (truthy), not null; a falsy check never
+        // triggered this branch-inclusion at all (same bug just fixed for
+        // gtPending/gtDone above).
+        var _matchesOwnBranchGrand = _pOwnBranchesGrand && _pOwnBranchesGrand.length > 0 && isCrossSalesRep(r) && _pOwnBranchesGrand.indexOf((r.location||'').trim()) > -1;
         var _inZone = _matchesOwnBranchGrand || _pSpFilterSet[r._norm] || (_pZoneSet && _pZoneSet[r._zone]);
         if (!_inZone) continue;
       }
