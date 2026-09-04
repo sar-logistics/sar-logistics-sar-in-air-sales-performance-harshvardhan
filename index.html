@@ -4988,6 +4988,20 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     allPendencyDrillRows.forEach(function(r){
       if (_allowedRepNames && !_allowedRepNames[r._norm]) return;
       if (_flobs && _flobs.indexOf(r.lob) === -1) return;
+      // Zone filter — was missing entirely, causing this override to
+      // always show the full unfiltered-by-zone total once
+      // allPendencyDrillRows loaded, ignoring the admin's zone selection.
+      if (_pendencyZoneSet) {
+        var _rZoneGT = r._zone;
+        var _matchesZoneGT = _rZoneGT ? !!_pendencyZoneSet[_rZoneGT] : false;
+        if (!_matchesZoneGT && !_rZoneGT) {
+          // Unmapped row — match via relocated-branch target zone
+          var _rLocGT = (r.location||'').trim();
+          var _tgtGT = typeof BRANCH_ZONE_MAP !== 'undefined' ? BRANCH_ZONE_MAP[_rLocGT] : null;
+          _matchesZoneGT = _tgtGT ? !!_pendencyZoneSet[_tgtGT] : false;
+        }
+        if (!_matchesZoneGT) return;
+      }
       if (_pendencyManualReps) {
         var _rNormGT = r._norm || (r._sp || '');
         var _matchesGT = _pendencyManualReps.indexOf(_rNormGT) > -1 || _pendencyManualReps.indexOf(normalizeName((r.location||'').trim())) > -1;
