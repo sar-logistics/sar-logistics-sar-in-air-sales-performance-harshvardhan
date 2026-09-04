@@ -4985,7 +4985,10 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // with what the table itself shows, rather than going to zero.
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0 && !isYearly && !isQuarterly && !isWeekly) {
     var _gtFreshP = 0, _gtFreshD = 0;
+    var _gtActiveMonsSet = {};
+    activeCols.forEach(function(m){ _gtActiveMonsSet[m] = true; });
     allPendencyDrillRows.forEach(function(r){
+      if (!_gtActiveMonsSet[r._month]) return; // date range — was missing entirely, counted all-time data
       if (_allowedRepNames && !_allowedRepNames[r._norm]) return;
       if (_flobs && _flobs.indexOf(r.lob) === -1) return;
       // Zone filter — was missing entirely, causing this override to
