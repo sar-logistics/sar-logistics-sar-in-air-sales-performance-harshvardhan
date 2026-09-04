@@ -4862,7 +4862,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         // ~90 unrelated names into RLS. Confirmed live before this fix.
         if (_ownBranches.length > 0 && allPendencyDrillRows) {
           allPendencyDrillRows.forEach(function(r){
-            if (r._zone) return; // mapped — not a branch/unmapped row
+            // Use _fullZoneSet membership, not a falsy check — unmapped rows
+            // here carry _zone: 'Unassigned' (truthy), not null, so this
+            // check was skipping EVERY unmapped row including genuine
+            // branch reps — the actual root cause of 'Mumbai | 0 reps'
+            // appearing throughout today's testing, confirmed live.
+            if (_fullZoneSet[r._zone]) return; // mapped — not a branch/unmapped row
             var loc = (r.location || '').trim();
             if (_ownBranches.indexOf(loc) > -1) _allowedRepNames[r._norm] = true;
           });
