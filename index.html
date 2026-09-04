@@ -8440,10 +8440,23 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
   } else if (_pRlsName) {
     _pSpFilter = [_pRlsName];
   } else if ((state.filterZones||[]).length > 0) {
-    _pSpFilter = zoneToRawSPs(state.filterZones);
+    // Build directly from allPendencyDrillRows (OP/FP's own dataset) —
+    // zoneToRawSPs() operates on allDrillRows (SP's dataset), a completely
+    // different dataset with different rep-name coverage. Using it here
+    // silently returned the wrong (or empty/null) set, which meant the
+    // zone filter didn't restrict the Grand Total drill at all — confirmed
+    // live: drill returned 1160 rows (full company) instead of 1023
+    // (INAZ02's own total) despite only INAZ02 being selected.
+    var _pZoneFilterSet = {};
+    (state.filterZones||[]).forEach(function(z){ _pZoneFilterSet[z] = true; });
+    _pSpFilter = [];
+    if (allPendencyDrillRows) {
+      var _pZfSeen = {};
+      allPendencyDrillRows.forEach(function(r){ if (r._norm && r._zone && _pZoneFilterSet[r._zone] && !_pZfSeen[r._norm]) { _pZfSeen[r._norm]=true; _pSpFilter.push(r._norm); } });
+    }
     if ((state.filterReps||[]).length > 0) {
       var _pManualNorm2 = (state.filterReps||[]).map(function(n){ return normalizeName(n); });
-      _pSpFilter = _pSpFilter ? _pSpFilter.filter(function(sp){ return _pManualNorm2.indexOf(sp) > -1; }) : _pManualNorm2;
+      _pSpFilter = _pSpFilter.filter(function(sp){ return _pManualNorm2.indexOf(sp) > -1; });
     }
   } else if ((state.filterReps||[]).length > 0) {
     _pSpFilter = (state.filterReps||[]).map(function(n){ return normalizeName(n); });
@@ -8453,12 +8466,15 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
   // A Zonal Manager's own relocated branch, added back via row-level
   // location matching (not name-set) — same pattern as Tradelane's fix.
   // Respects a manual rep filter that excludes the branch, same as
-  // everywhere else today.
+  // everywhere else today. Also applies to the admin's own manual zone
+  // filter (not just RLS) — an admin filtering to INAZ02 should also see
+  // Mumbai's branch data included.
   var _pOwnBranchesGrand = null;
-  if (_pRlsZone && typeof ZONE_BRANCHES_MAP !== 'undefined') {
+  var _pBranchSourceZone = _pRlsZone || ((state.filterZones||[]).length === 1 ? state.filterZones[0] : '');
+  if (_pBranchSourceZone && typeof ZONE_BRANCHES_MAP !== 'undefined') {
     var _pSelRepsNorm = (state.filterReps||[]).length > 0 ? (state.filterReps||[]).map(function(x){return normalizeName(x);}) : null;
-    if (!_pSelRepsNorm || (ZONE_BRANCHES_MAP[_pRlsZone]||[]).some(function(b){ return _pSelRepsNorm.indexOf(normalizeName(b)) > -1; })) {
-      _pOwnBranchesGrand = ZONE_BRANCHES_MAP[_pRlsZone] || null;
+    if (!_pSelRepsNorm || (ZONE_BRANCHES_MAP[_pBranchSourceZone]||[]).some(function(b){ return _pSelRepsNorm.indexOf(normalizeName(b)) > -1; })) {
+      _pOwnBranchesGrand = ZONE_BRANCHES_MAP[_pBranchSourceZone] || null;
     }
   }
   // Also build zone set from filterZones for _zone matching (SRR zone field)
