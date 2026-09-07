@@ -380,7 +380,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-08-31T-air-no-rep-assigned-v3";
+const DEPLOY_TS = "2026-09-07T-drillrows-cache-sync-fix";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
