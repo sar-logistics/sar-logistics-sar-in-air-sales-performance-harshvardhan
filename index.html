@@ -3866,6 +3866,7 @@ function tradelanePage(){
   // Build effective rep set from zone + rep filters using allDrillRows
   var _effectiveFilterRepsTL = null;
   var _tlPureZoneList = null; // set only when filtering is PURELY zone-based (no combined rep filter) — used below for row-level precision on relocated branches, avoiding the 'rep touches multiple locations' over-count a name-based set alone would cause
+  var _tlBranchOnly = null; // set when a selected rep is itself a relocated branch name matching the zone filter — restricts _tlPureZoneList-style matching to just that branch's location, not the whole zone
   if (allDrillRows && _needsDrill) {
     var _zoneSpSet = {};
     if (_filterZonesTL.length > 0) {
@@ -3905,6 +3906,32 @@ function tradelanePage(){
       }
     } else if (_filterZonesTL.length > 0 && _selRepsNorm.length > 0) {
       _effectiveFilterRepsTL = Object.keys(_zoneSpSet).filter(function(sp){ return _selRepsNorm.indexOf(sp) > -1; });
+      // A selected rep can be a relocated branch name itself (e.g.
+      // 'Mumbai') rather than an individual person — the name
+      // intersection above can never match a branch name directly
+      // (_zoneSpSet holds individual people only), leaving
+      // _effectiveFilterRepsTL empty and _needsDrill's gate skipped
+      // downstream even though the branch's data should show. Confirmed
+      // live. When this happens, fall back to _tlPureZoneList-style
+      // row-level location matching (same precision mechanism already
+      // used for the plain-zone case just below) restricted to the
+      // selected branch(es) only, rather than adding names to the set —
+      // that would reopen the 'rep touches multiple locations' over-count
+      // this mechanism exists to prevent.
+      if (_effectiveFilterRepsTL.length === 0) {
+        var _tlSelBranches = _selRepsNorm.filter(function(rn){
+          return typeof BRANCH_ZONE_MAP !== 'undefined' && Object.keys(BRANCH_ZONE_MAP).some(function(b){ return normalizeName(b) === rn && _filterZonesTL.indexOf(BRANCH_ZONE_MAP[b]) > -1; });
+        });
+        if (_tlSelBranches.length > 0) {
+          _tlPureZoneList = _filterZonesTL;
+          _tlBranchOnly = _tlSelBranches;
+          // Sentinel — keeps the 'effectiveReps.length > 0' gate open
+          // downstream without matching any real row by name; actual
+          // matching for this case happens entirely through
+          // _tlPureZoneList + _tlBranchOnly's row-level location check.
+          _effectiveFilterRepsTL = ['__branch_only__'];
+        }
+      }
     } else if (_filterZonesTL.length > 0) {
       _effectiveFilterRepsTL = Object.keys(_zoneSpSet);
       _tlPureZoneList = _filterZonesTL;
@@ -4098,7 +4125,7 @@ function tradelanePage(){
     var _tlRLSKey = currentUser ? (currentUser.email||currentUser.name||'') : '';
     var _tlPivotKey = activeLob+'|'+state.reportView+'|'+(state.yearType||'Financial')+'|'+(state.selectedQuarter||'')+'|'+(state.weeklyMonth||'')+'|'+(_tlDR.dateFrom||'')+'|'+(_tlDR.dateTo||'')+'|'+JSON.stringify(state.filterZones||[])+'|'+JSON.stringify(state.filterReps||[])+'|'+_openKeys+'|'+state.currency+'|'+_tlRLSKey;
     if (!_tradelanePivotCache[_tlPivotKey]) {
-      _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterRepsTL);
+      _tradelanePivotCache[_tlPivotKey] = tradelanePivotTable(lobData, activeLob, brandC, filterLobs, _effectiveFilterRepsTL, _tlBranchOnly);
     }
     return '<div style="padding:24px 28px 32px;">' + header + _tradelanePivotCache[_tlPivotKey] + '</div>';
   }
@@ -4116,7 +4143,7 @@ function tradelanePage(){
   +'</div></div>';
 }
 
-function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps) {
+function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps, branchOnly) {
   var rows = (lobData.allCountries || []).slice().sort(function(a,b){ return b.gp - a.gp; });
 
   // Effective revenue per drill row:
@@ -4214,6 +4241,16 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
       if (state.filterZones && state.filterZones.length > 0 && (!state.filterReps || state.filterReps.length === 0) && (typeof _getRLSReps !== 'function' || _getRLSReps().length === 0)) {
         _tlPureZoneListPT = state.filterZones;
       }
+      // Admin selected a zone AND a rep filter that's actually a branch
+      // name (e.g. INAZ02 zone + 'Mumbai' rep) — effectiveReps' name-set
+      // approach can't match a branch name, so the caller passes this
+      // sentinel + branchOnly instead. Reuse the same row-level zone-list
+      // precision mechanism, restricted to just the named branch(es).
+      var _adminBranchOnlyPT = null;
+      if (branchOnly && branchOnly.length > 0 && state.filterZones && state.filterZones.length > 0) {
+        _tlPureZoneListPT = state.filterZones;
+        _adminBranchOnlyPT = branchOnly;
+      }
       // A Zonal Manager's own relocated branch (e.g. Mumbai under INAZ02) is
       // deliberately NOT included in _getRLSReps()'s name set (that approach
       // leaked 100+ unrelated reps company-wide — see today's security fix).
@@ -4239,6 +4276,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
               var _rowBrPT = (r.location || '').trim();
               var _rowTgtPT = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrPT] : null;
               var _matchesPT = _rowTgtPT ? (_tlPureZoneListPT.indexOf(_rowTgtPT) > -1) : (_tlPureZoneListPT.indexOf('Cross Sales') > -1);
+              if (_matchesPT && _adminBranchOnlyPT) { _matchesPT = _adminBranchOnlyPT.indexOf(normalizeName(_rowBrPT)) > -1; }
               if (!_matchesPT) return;
             } else {
               var _rDnPT = r._dn ? normalizeName(r._dn) : null;
@@ -4309,6 +4347,7 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
             var _rowBrPT2 = (r.location || '').trim();
             var _rowTgtPT2 = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrPT2] : null;
             var _matchesPT2 = _rowTgtPT2 ? (_tlPureZoneListPT.indexOf(_rowTgtPT2) > -1) : (_tlPureZoneListPT.indexOf('Cross Sales') > -1);
+            if (_matchesPT2 && _adminBranchOnlyPT) { _matchesPT2 = _adminBranchOnlyPT.indexOf(normalizeName(_rowBrPT2)) > -1; }
             if (!_matchesPT2) return;
           } else {
             var _rDnPT2 = r._dn ? normalizeName(r._dn) : null;
