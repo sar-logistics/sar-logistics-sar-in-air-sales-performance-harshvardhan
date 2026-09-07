@@ -2823,7 +2823,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (action === "srr") {
-      const { collectionName, records, fy } = req.body || {};
+      const { collectionName, records, fy, justWiped } = req.body || {};
       const ALLOWED_SRR = new Set(["srr_sea_export","srr_sea_import","srr_air_export","srr_air_import"]);
       if (!collectionName || !ALLOWED_SRR.has(collectionName)) {
         return res.status(400).json({ error: "collectionName must be one of: " + [...ALLOWED_SRR].join(", ") });
@@ -2848,6 +2848,26 @@ module.exports = async function handler(req, res) {
         return s;
       });
 
+      let inserted = 0, updated = 0;
+      const CHUNK = 200;
+
+      // justWiped: caller already ran wipeCollection right before this push
+      // (e.g. wipeAndSyncBothFY), so the collection is guaranteed empty —
+      // every upsert below would ALWAYS insert, never update, but MongoDB
+      // still has to look each record up by keyField first to confirm that.
+      // Skip the lookup entirely and insertMany directly, same fast path
+      // batchInsertJobs (JPA) already uses. No duplicate risk: the wipe
+      // just happened, so there's nothing to duplicate against.
+      if (justWiped) {
+        for (let i = 0; i < sanitizedRecords.length; i += CHUNK) {
+          const chunk = sanitizedRecords.slice(i, i + CHUNK);
+          await col.insertMany(chunk, { ordered: false });
+          inserted += chunk.length;
+        }
+        Object.keys(tradelaneCacheMap).forEach(k => delete tradelaneCacheMap[k]);
+        return res.status(200).json({ success: true, collection: collectionName, inserted, updated: 0, keyField: null, fastPath: true });
+      }
+
       // Upsert by shipment number so FY26 + FY27 can both push without wiping each other
       const KEY_CANDIDATES = ["Shipment No", "Shipment No\uFF0E", "Shipment No.", "Job No", "Job No.", "House No", "House No.", "Shipment Number", "Job Number"];
       let keyField = null;
@@ -2857,8 +2877,6 @@ module.exports = async function handler(req, res) {
         }
       }
 
-      let inserted = 0, updated = 0;
-      const CHUNK = 200;
       for (let i = 0; i < sanitizedRecords.length; i += CHUNK) {
         const chunk = sanitizedRecords.slice(i, i + CHUNK);
         if (keyField) {
