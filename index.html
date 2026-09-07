@@ -2226,21 +2226,14 @@ function zoneEntity(zoneName){
   var wkeys = isWeekly ? filteredWeekKeys() : null;
   var zReps = repsRaw.filter(function(r){
     if (r.zone !== zoneName) return false;
-    // Exclude a relocated branch from Cross Sales' own total ONLY if its
-    // target zone is ALSO going to be displayed (avoiding double-counting
-    // when both are shown) — either no zone filter is active at all (every
-    // zone, including the target, is visible), or the target zone is
-    // explicitly also in state.filterZones. If the target zone ISN'T
-    // visible anywhere (e.g. user selected ONLY 'Cross Sales'), the branch
-    // must count here instead, or its data disappears entirely. Confirmed
-    // live: selecting only 'Cross Sales' showed 5.14 tons instead of the
-    // correct 354.51 (Mumbai/Delhi/Ahmedabad/Bangalore's branch data was
-    // silently dropped, assumed to be shown under zones that weren't
-    // actually on the page).
-    if (zoneName === 'Cross Sales' && r.isBranch && BRANCH_ZONE_MAP[r.name]) {
-      var _tgtZoneVisible = !state.filterZones || state.filterZones.length === 0 || state.filterZones.indexOf(BRANCH_ZONE_MAP[r.name]) > -1;
-      if (_tgtZoneVisible) return false;
-    }
+    // A relocated branch (isBranch + a BRANCH_ZONE_MAP entry) never counts
+    // toward Cross Sales' own total — it only ever belongs to its target
+    // zone's total, regardless of whether that target zone happens to be
+    // visible on the current page or not. Confirmed live: Grand Total (via
+    // grandEntity, same exclusion rule) matches the drill-through exactly;
+    // an earlier attempt to conditionally include it when the target zone
+    // wasn't visible was itself the bug, not a fix — reverted.
+    if (zoneName === 'Cross Sales' && r.isBranch && BRANCH_ZONE_MAP[r.name]) return false;
     return true;
   });
   var zData = zonesRaw.find(function(z){ return z.zone === zoneName; }) || {};
