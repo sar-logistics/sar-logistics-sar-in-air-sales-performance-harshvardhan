@@ -8256,6 +8256,8 @@ function openInsightDrill(drillType, name, drillMonth) {
       // Build repFilter from RLS + zone/rep filters
       var _tlRLSReps = _getRLSReps();
       var _tlEffReps = null;
+      var _tlPureZoneList3 = null;
+      var _tlBranchOnly3 = null;
       // A Zonal Manager's own relocated branch is NOT in _getRLSReps()'s
       // name set (see today's security fix) — add it back via row-level
       // location matching in the filter below instead. Only when NOT
@@ -8287,6 +8289,22 @@ function openInsightDrill(drillType, name, drillMonth) {
             var dn = rawNameToDisplayNorm(sp);
             return dn && _frn.indexOf(dn) > -1;
           }) : _frn;
+          // A selected rep can be a relocated branch name itself (e.g.
+          // 'Mumbai') — the name-intersection above can never match a
+          // branch name directly (zoneToRawSPs returns individual people
+          // only), leaving _tlEffReps empty even though the branch's data
+          // should show. Same gap as the main Tradelane table fix — mirror
+          // it here via the same row-level, zone-restricted branch match.
+          if (_tlEffReps.length === 0 && (state.filterZones||[]).length > 0) {
+            var _tl3SelBranches = _frn.filter(function(rn){
+              return typeof BRANCH_ZONE_MAP !== 'undefined' && Object.keys(BRANCH_ZONE_MAP).some(function(b){ return normalizeName(b) === rn && (state.filterZones||[]).indexOf(BRANCH_ZONE_MAP[b]) > -1; });
+            });
+            if (_tl3SelBranches.length > 0) {
+              _tlPureZoneList3 = state.filterZones;
+              _tlBranchOnly3 = _tl3SelBranches;
+              _tlEffReps = ['__branch_only__'];
+            }
+          }
         }
       }
 
@@ -8305,7 +8323,17 @@ function openInsightDrill(drillType, name, drillMonth) {
         // OR the effective name set
         if (_tlEffReps) {
           var _matchesOwnBranchTL3 = _rlsOwnBranchesTL3 && _rlsOwnBranchesTL3.length > 0 && !row._zone && _rlsOwnBranchesTL3.indexOf((row.location||'').trim()) > -1;
-          if (!_matchesOwnBranchTL3 && _tlEffReps.indexOf(row._sp) === -1) return false;
+          // Admin selected a zone + a branch name as the rep filter — same
+          // gap as elsewhere today. Match by row-level location, restricted
+          // to just the named branch(es), not the whole zone.
+          var _matchesAdminBranchTL3 = false;
+          if (!_matchesOwnBranchTL3 && _tlPureZoneList3 && !row._zone) {
+            var _rowBrTL3 = (row.location||'').trim();
+            var _rowTgtTL3 = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrTL3] : null;
+            var _zoneOkTL3 = _rowTgtTL3 ? (_tlPureZoneList3.indexOf(_rowTgtTL3) > -1) : (_tlPureZoneList3.indexOf('Cross Sales') > -1);
+            _matchesAdminBranchTL3 = _zoneOkTL3 && (!_tlBranchOnly3 || _tlBranchOnly3.indexOf(normalizeName(_rowBrTL3)) > -1);
+          }
+          if (!_matchesOwnBranchTL3 && !_matchesAdminBranchTL3 && _tlEffReps.indexOf(row._sp) === -1) return false;
         }
         // Deduplicate
         if (_tlSeenSno[row.shipmentNo]) return false;
