@@ -3971,6 +3971,7 @@ function tradelanePage(){
           var _rowBrTL = (r.location || '').trim();
           var _rowTgtTL = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrTL] : null;
           var _matchesTlZone = _rowTgtTL ? (_tlPureZoneList.indexOf(_rowTgtTL) > -1) : (_tlPureZoneList.indexOf('Cross Sales') > -1);
+          if (_matchesTlZone && _tlBranchOnly) { _matchesTlZone = _tlBranchOnly.indexOf(normalizeName(_rowBrTL)) > -1; }
           if (!_matchesTlZone) return;
         } else if (!_effSet[r._sp]) return;
       }
