@@ -7962,7 +7962,7 @@ function computeDrillResult(entity, metric, month){
   // to a specific branch is via the rep list from repsRawOriginal (originalZone = branch).
   var _branchSpSet = null;
   var _isBranchEntity = false;
-  if (entity && entity !== 'Cross Sales' && !repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; })) {
+  if (entity && entity !== 'Cross Sales' && !repsRawOriginal.some(function(r){ return !r.isBranch && r.zone === entity; })) {
     // Check if entity matches a Cross Sales branch — branches are isBranch:true reps with name=branch
     var _isBranch = repsRawOriginal.some(function(r){
       return r.isBranch && r.zone === 'Cross Sales' && r.name === entity;
@@ -8028,7 +8028,14 @@ function computeDrillResult(entity, metric, month){
       if (row._zone) continue;
       if (_szBranches.indexOf((row.location || '').trim()) === -1) continue;
     } else {
-      var isZoneEntity = repsRaw.some(function(r){ return !r.isBranch && r.zone === entity; });
+      // Use repsRawOriginal (unaffected by the manual rep filter), not
+      // repsRaw — repsRaw gets narrowed by state.filterReps too, so
+      // selecting a specific rep/branch (e.g. 'Mumbai') left repsRaw with
+      // no regular zone rep at all, making this incorrectly evaluate to
+      // false and fall through to the wrong entity-type branch entirely.
+      // Confirmed live: INAZ02 zone drill returned 0 rows with Mumbai
+      // selected as the rep filter.
+      var isZoneEntity = repsRawOriginal.some(function(r){ return !r.isBranch && r.zone === entity; });
       if (isZoneEntity) {
         // Zone: row._zone must match OR row belongs to a branch mapped to this zone
         var _zoneOwnBranches = ZONE_BRANCHES_MAP[entity] || [];
