@@ -7915,27 +7915,6 @@ function computeDrillResult(entity, metric, month){
     var _zsp = zoneToRawSPs(_fz) || [];
     var _frn = _fr.map(function(n){ return normalizeName(n); });
     _spFilter = _zsp.filter(function(sp){ return _frn.indexOf(sp) > -1; });
-    // A selected rep can be a relocated branch name itself (e.g. 'Mumbai')
-    // rather than an individual person — _zsp holds raw individual names
-    // only, so the name-intersection above can never match a branch name
-    // directly, leaving _spFilter empty even though the branch's data
-    // should be included. Confirmed live: 'No jobs found' for INAZ02 zone
-    // + Mumbai rep together. Add the branch's individual raw names in
-    // directly when the branch belongs to one of the selected zones.
-    var _selectedBranches = _frn.filter(function(rn){
-      return typeof BRANCH_ZONE_MAP !== 'undefined' && Object.keys(BRANCH_ZONE_MAP).some(function(b){
-        return normalizeName(b) === rn && _fz.indexOf(BRANCH_ZONE_MAP[b]) > -1;
-      });
-    });
-    if (_selectedBranches.length > 0 && allDrillRows) {
-      var _branchSpAdd = {};
-      allDrillRows.forEach(function(r){
-        if (r._zone || !r._sp) return;
-        var rl = normalizeName((r.location||'').trim());
-        if (_selectedBranches.indexOf(rl) > -1) _branchSpAdd[r._sp] = true;
-      });
-      Object.keys(_branchSpAdd).forEach(function(sp){ if (_spFilter.indexOf(sp) === -1) _spFilter.push(sp); });
-    }
   } else if (_fz.length > 0) {
     _spFilter = zoneToRawSPs(_fz);
   } else if (_fr.length > 0) {
@@ -7943,6 +7922,7 @@ function computeDrillResult(entity, metric, month){
   }
   var _spFilterSet = _spFilter ? {} : null;
   if (_spFilter) _spFilter.forEach(function(sp){ _spFilterSet[sp] = true; });
+  var _frNormGT = _fr.map(function(n){ return normalizeName(n); });
 
   // For Grand Total: when filtering is purely zone-driven (a plain zone
   // filter, or Zonal Manager RLS — no rep filter combined), an UNMAPPED row
@@ -8036,10 +8016,9 @@ function computeDrillResult(entity, metric, month){
         // Grand Total drill showed 'No jobs found' with INAZ02 zone +
         // Mumbai rep both selected.
         if (_fr.length > 0) {
-          var _frnGT2 = _fr.map(function(n){ return normalizeName(n); });
           var _rowDnGT2 = row._dn ? normalizeName(row._dn) : null;
           var _rowLocGT2 = normalizeName(_rowBr);
-          var _matchesRepGT2 = _frnGT2.indexOf(row._sp) > -1 || (_rowDnGT2 && _frnGT2.indexOf(_rowDnGT2) > -1) || _frnGT2.indexOf(_rowLocGT2) > -1;
+          var _matchesRepGT2 = _frNormGT.indexOf(row._sp) > -1 || (_rowDnGT2 && _frNormGT.indexOf(_rowDnGT2) > -1) || _frNormGT.indexOf(_rowLocGT2) > -1;
           if (!_matchesRepGT2) continue;
         }
       } else if (_spFilterSet) {
@@ -8047,8 +8026,15 @@ function computeDrillResult(entity, metric, month){
         // A selected 'rep' can also be a relocated branch name (e.g.
         // 'Mumbai') — match unmapped rows by their own location in that
         // case too, same pattern used in grandEntity()/zoneEntity() etc.
+        // Compare against _fr (the ORIGINAL rep-filter selection) directly
+        // here, not _spFilterSet — _spFilterSet only ever holds individual
+        // raw people-names from the zone∩rep intersection, never the
+        // literal branch name itself, so checking it for 'mumbai' always
+        // failed. Comparing row-by-row against _fr keeps this precise
+        // (unlike adding names to _spFilter, which let a multi-location
+        // rep's OTHER-location jobs through too once unlocked).
         var _rowLocGT = !row._zone ? normalizeName((row.location||'').trim()) : null;
-        var _matchesBranchGT = _rowLocGT && _spFilterSet[_rowLocGT];
+        var _matchesBranchGT = _rowLocGT && _frNormGT.indexOf(_rowLocGT) > -1;
         if (!_matchesBranchGT && !_spFilterSet[row._sp] && !(_rowDn && _spFilterSet[_rowDn])) continue;
       }
     } else if (entity === 'Cross Sales'){
@@ -8080,10 +8066,9 @@ function computeDrillResult(entity, metric, month){
         // number while a specific rep/branch was also selected showed the
         // whole zone instead of just the selected rep's/branch's subset.
         if (_fr.length > 0) {
-          var _frnZE = _fr.map(function(n){ return normalizeName(n); });
           var _rowDnZE = row._dn ? normalizeName(row._dn) : null;
           var _rowLocZE = !row._zone ? normalizeName((row.location||'').trim()) : null;
-          var _matchesRepZE = _frnZE.indexOf(row._sp) > -1 || (_rowDnZE && _frnZE.indexOf(_rowDnZE) > -1) || (_rowLocZE && _frnZE.indexOf(_rowLocZE) > -1);
+          var _matchesRepZE = _frNormGT.indexOf(row._sp) > -1 || (_rowDnZE && _frNormGT.indexOf(_rowDnZE) > -1) || (_rowLocZE && _frNormGT.indexOf(_rowLocZE) > -1);
           if (!_matchesRepZE) continue;
         }
       } else if (_isBranchEntity) {
