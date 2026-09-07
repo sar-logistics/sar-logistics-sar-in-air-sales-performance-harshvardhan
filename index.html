@@ -8011,7 +8011,12 @@ function computeDrillResult(entity, metric, month){
         if (!_matchesGtZone) continue;
       } else if (_spFilterSet) {
         var _rowDn = row._dn ? normalizeName(row._dn) : null;
-        if (!_spFilterSet[row._sp] && !(_rowDn && _spFilterSet[_rowDn])) continue;
+        // A selected 'rep' can also be a relocated branch name (e.g.
+        // 'Mumbai') — match unmapped rows by their own location in that
+        // case too, same pattern used in grandEntity()/zoneEntity() etc.
+        var _rowLocGT = !row._zone ? normalizeName((row.location||'').trim()) : null;
+        var _matchesBranchGT = _rowLocGT && _spFilterSet[_rowLocGT];
+        if (!_matchesBranchGT && !_spFilterSet[row._sp] && !(_rowDn && _spFilterSet[_rowDn])) continue;
       }
     } else if (entity === 'Cross Sales'){
       // Cross Sales = unmapped rows only, excluding branches now shown under their own zones
