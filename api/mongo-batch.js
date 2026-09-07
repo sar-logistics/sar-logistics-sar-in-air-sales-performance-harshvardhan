@@ -2858,12 +2858,13 @@ module.exports = async function handler(req, res) {
       // Skip the lookup entirely and insertMany directly, same fast path
       // batchInsertJobs (JPA) already uses. No duplicate risk: the wipe
       // just happened, so there's nothing to duplicate against.
+      // One single insertMany for the whole payload — no internal
+      // sub-chunking — matching batchInsertJobs exactly (it never
+      // sub-chunks either; Apps Script already sized this request to fit
+      // via chunkBySize_ before sending it).
       if (justWiped) {
-        for (let i = 0; i < sanitizedRecords.length; i += CHUNK) {
-          const chunk = sanitizedRecords.slice(i, i + CHUNK);
-          await col.insertMany(chunk, { ordered: false });
-          inserted += chunk.length;
-        }
+        const r = await col.insertMany(sanitizedRecords, { ordered: false });
+        inserted = r.insertedCount;
         Object.keys(tradelaneCacheMap).forEach(k => delete tradelaneCacheMap[k]);
         return res.status(200).json({ success: true, collection: collectionName, inserted, updated: 0, keyField: null, fastPath: true });
       }
