@@ -2033,8 +2033,16 @@ function grandEntity(){
         }
         if(_fr) {
           var _rDnGE = r._dn ? normalizeName(r._dn) : null;
-          if (!r._sp && !_rDnGE) return false;
-          if (_fr.indexOf(r._sp) === -1 && !(_rDnGE && _fr.indexOf(_rDnGE) > -1)) return false;
+          // A selected 'rep' can also be a relocated branch name (e.g.
+          // 'Mumbai') rather than an individual person — match unmapped
+          // rows by their own location in that case, same pattern used
+          // for zoneEntity/the KPI computation earlier today.
+          var _rLocGE = r.location ? normalizeName((r.location||'').trim()) : null;
+          var _matchesBranchGE = !r._zone && _rLocGE && _fr.indexOf(_rLocGE) > -1;
+          if (!_matchesBranchGE) {
+            if (!r._sp && !_rDnGE) return false;
+            if (_fr.indexOf(r._sp) === -1 && !(_rDnGE && _fr.indexOf(_rDnGE) > -1)) return false;
+          }
         }
         return true;
       }
