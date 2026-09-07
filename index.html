@@ -7915,6 +7915,27 @@ function computeDrillResult(entity, metric, month){
     var _zsp = zoneToRawSPs(_fz) || [];
     var _frn = _fr.map(function(n){ return normalizeName(n); });
     _spFilter = _zsp.filter(function(sp){ return _frn.indexOf(sp) > -1; });
+    // A selected rep can be a relocated branch name itself (e.g. 'Mumbai')
+    // rather than an individual person — _zsp holds raw individual names
+    // only, so the name-intersection above can never match a branch name
+    // directly, leaving _spFilter empty even though the branch's data
+    // should be included. Confirmed live: 'No jobs found' for INAZ02 zone
+    // + Mumbai rep together. Add the branch's individual raw names in
+    // directly when the branch belongs to one of the selected zones.
+    var _selectedBranches = _frn.filter(function(rn){
+      return typeof BRANCH_ZONE_MAP !== 'undefined' && Object.keys(BRANCH_ZONE_MAP).some(function(b){
+        return normalizeName(b) === rn && _fz.indexOf(BRANCH_ZONE_MAP[b]) > -1;
+      });
+    });
+    if (_selectedBranches.length > 0 && allDrillRows) {
+      var _branchSpAdd = {};
+      allDrillRows.forEach(function(r){
+        if (r._zone || !r._sp) return;
+        var rl = normalizeName((r.location||'').trim());
+        if (_selectedBranches.indexOf(rl) > -1) _branchSpAdd[r._sp] = true;
+      });
+      Object.keys(_branchSpAdd).forEach(function(sp){ if (_spFilter.indexOf(sp) === -1) _spFilter.push(sp); });
+    }
   } else if (_fz.length > 0) {
     _spFilter = zoneToRawSPs(_fz);
   } else if (_fr.length > 0) {
@@ -8009,6 +8030,18 @@ function computeDrillResult(entity, metric, month){
         var _rowTgt = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBr] : null;
         var _matchesGtZone = _rowTgt ? (_gtZoneList.indexOf(_rowTgt) > -1) : (_gtZoneList.indexOf('Cross Sales') > -1);
         if (!_matchesGtZone) continue;
+        // A manual rep filter can be active alongside the zone filter —
+        // this path only checked zone membership, never the rep filter,
+        // same gap just fixed for the zone-entity drill. Confirmed live:
+        // Grand Total drill showed 'No jobs found' with INAZ02 zone +
+        // Mumbai rep both selected.
+        if (_fr.length > 0) {
+          var _frnGT2 = _fr.map(function(n){ return normalizeName(n); });
+          var _rowDnGT2 = row._dn ? normalizeName(row._dn) : null;
+          var _rowLocGT2 = normalizeName(_rowBr);
+          var _matchesRepGT2 = _frnGT2.indexOf(row._sp) > -1 || (_rowDnGT2 && _frnGT2.indexOf(_rowDnGT2) > -1) || _frnGT2.indexOf(_rowLocGT2) > -1;
+          if (!_matchesRepGT2) continue;
+        }
       } else if (_spFilterSet) {
         var _rowDn = row._dn ? normalizeName(row._dn) : null;
         // A selected 'rep' can also be a relocated branch name (e.g.
