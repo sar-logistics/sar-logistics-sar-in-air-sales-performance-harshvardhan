@@ -2802,6 +2802,18 @@ module.exports = async function handler(req, res) {
       if (!records) return res.status(400).json({ error: "records required" });
       const { summary, errors } = await batchInsertJobs(db, records, clearFirst, fy);
       salesCache = null; // invalidate in-memory cache — fresh data was just pushed
+      salesCacheTime = 0;
+      // drillRowsCache (allDrillRows — shipment counts, drill-through) is
+      // built from the same job collections but was NEVER invalidated here,
+      // only salesCache was. This let the two caches drift out of sync
+      // after a JPA push: salesCache correctly rebuilt fresh while
+      // drillRowsCache kept serving whatever was cached before the push,
+      // until its own independent TTL happened to expire. Confirmed live:
+      // after a full JPA resync, Grand Total (salesCache-based) and
+      // allDrillRows-based counts disagreed by a rep-and-month-specific
+      // amount that traced back to exactly this — invalidate both together.
+      drillRowsCache = null;
+      drillRowsCacheTime = 0;
       await db.collection("_meta").updateOne(
         { _id: "lastDataPush" },
         { $set: { updatedAt: new Date() } },
