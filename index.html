@@ -8042,6 +8042,17 @@ function computeDrillResult(entity, metric, month){
         var _matchesOwnZone = row._zone === entity;
         var _matchesMappedBranch = _zoneOwnBranches.length > 0 && !row._zone && _zoneOwnBranches.indexOf((row.location || '').trim()) > -1;
         if (!_matchesOwnZone && !_matchesMappedBranch) continue;
+        // Manual rep filter also narrows a zone drill, not just the Grand
+        // Total drill — was completely ignored here, so clicking a zone's
+        // number while a specific rep/branch was also selected showed the
+        // whole zone instead of just the selected rep's/branch's subset.
+        if (_fr.length > 0) {
+          var _frnZE = _fr.map(function(n){ return normalizeName(n); });
+          var _rowDnZE = row._dn ? normalizeName(row._dn) : null;
+          var _rowLocZE = !row._zone ? normalizeName((row.location||'').trim()) : null;
+          var _matchesRepZE = _frnZE.indexOf(row._sp) > -1 || (_rowDnZE && _frnZE.indexOf(_rowDnZE) > -1) || (_rowLocZE && _frnZE.indexOf(_rowLocZE) > -1);
+          if (!_matchesRepZE) continue;
+        }
       } else if (_isBranchEntity) {
         // Branch under Cross Sales: match by location + unmapped (_zone null) — mirrors Ocean
         if (row._zone) continue;
