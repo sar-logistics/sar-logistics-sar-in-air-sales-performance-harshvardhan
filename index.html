@@ -2146,8 +2146,14 @@ function getZones(){
     // entry) — a relocated branch's pseudo-rep can be present in repsRaw
     // purely so its data is available for its TARGET zone's total (RLS/
     // filter), without that meaning Cross Sales itself should show as a
-    // zone row.
-    if (r.zone === 'Cross Sales' && r.isBranch && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[r.name]) {
+    // zone row. EXCEPT when the user explicitly selected 'Cross Sales'
+    // itself as their zone filter — then every relocated branch pseudo-rep
+    // present is there BECAUSE of that selection, and should count as
+    // Cross Sales, not get redirected to zones the user never asked for.
+    // Confirmed live: selecting only 'Cross Sales' still showed INAZ02,
+    // INAZ03 etc as full, unfiltered zone rows.
+    var _crossSalesExplicitlySelected = state.filterZones && state.filterZones.indexOf('Cross Sales') > -1;
+    if (r.zone === 'Cross Sales' && r.isBranch && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[r.name] && !_crossSalesExplicitlySelected) {
       // It still counts as presence of its TARGET zone, though — otherwise
       // filtering to ONLY this branch (no other rep of that zone selected)
       // leaves zero zones present at all, and the whole page goes blank
