@@ -2031,7 +2031,11 @@ function grandEntity(){
           else if (!r._zone && typeof BRANCH_ZONE_MAP !== 'undefined' && _fz.indexOf(BRANCH_ZONE_MAP[(r.location||'').trim()]) > -1) { /* ok — relocated branch job, target zone selected */ }
           else return false;
         }
-        if(_fr && (!r._sp  || _fr.indexOf(r._sp)===-1)) return false;
+        if(_fr) {
+          var _rDnGE = r._dn ? normalizeName(r._dn) : null;
+          if (!r._sp && !_rDnGE) return false;
+          if (_fr.indexOf(r._sp) === -1 && !(_rDnGE && _fr.indexOf(_rDnGE) > -1)) return false;
+        }
         return true;
       }
       if(isWeekly) return wkeys.map(function(k){
