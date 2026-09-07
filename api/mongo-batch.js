@@ -2995,8 +2995,16 @@ module.exports = async function handler(req, res) {
 
     if (action === "dedup") {
       // Remove duplicate Shipment No entries — keep the document with the latest _insertedAt (or _id)
+      // Optional collection param: dedup just ONE collection instead of all 10 — needed because
+      // scanning every collection sequentially in one request exceeds Vercel's function timeout.
+      // Confirmed live: full-collection dedup 504'd. Call this once per collection instead.
+      const { collection: targetColl } = req.body || {};
+      const collsToProcess = targetColl ? [targetColl] : JOB_COLLECTIONS;
+      if (targetColl && !JOB_COLLECTIONS.includes(targetColl)) {
+        return res.status(400).json({ error: "unknown collection: " + targetColl, validCollections: JOB_COLLECTIONS });
+      }
       const results = {};
-      for (const collName of JOB_COLLECTIONS) {
+      for (const collName of collsToProcess) {
         const col = db.collection(collName);
         // Find all docs grouped by Shipment No
         const pipeline = [
@@ -3004,19 +3012,18 @@ module.exports = async function handler(req, res) {
           { $match: { count: { $gt: 1 } } }
         ];
         const dupes = await col.aggregate(pipeline).toArray();
-        let removed = 0;
-        for (const dupe of dupes) {
-          // Keep first, delete the rest
-          const toDelete = dupe.ids.slice(1);
-          const r = await col.deleteMany({ _id: { $in: toDelete } });
-          removed += r.deletedCount;
-        }
+        // Delete each group's extra docs in parallel — independent operations
+        const deleteResults = await Promise.all(dupes.map(dupe => {
+          const toDelete = dupe.ids.slice(1); // keep first, delete the rest
+          return col.deleteMany({ _id: { $in: toDelete } });
+        }));
+        const removed = deleteResults.reduce((s, r) => s + r.deletedCount, 0);
         results[collName] = { duplicateGroups: dupes.length, removed };
       }
       // Bust caches after dedup
       salesCache = null; salesCacheTime = 0;
       drillRowsCache = null; drillRowsCacheTime = 0;
-      return res.status(200).json({ success: true, action: "dedup", results });
+      return res.status(200).json({ success: true, action: "dedup", results, remainingCollections: targetColl ? JOB_COLLECTIONS.filter(c => c !== targetColl) : [] });
     }
 
     if (action === "users") {
