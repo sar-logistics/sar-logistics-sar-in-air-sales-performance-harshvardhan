@@ -3206,11 +3206,21 @@ function customerPage(){
   // by one matching job. Apply it only when the filter is purely zone-based
   // (no rep filter combined, no RLS).
   var _custPureZoneList = (_filterZones.length > 0 && (!state.filterReps || state.filterReps.length === 0) && !_rlsActiveC) ? _filterZones : null;
+  // A selected rep can be a relocated branch name itself (e.g. 'Mumbai')
+  // rather than an individual person. When combined with a zone filter,
+  // _effectiveFilterReps' name-intersection can never match a branch name
+  // directly (zoneToRawSPs returns individual people only), leaving it
+  // completely empty and skipping the whole override block below even
+  // though the branch's data should show. Track this separately so the
+  // override still runs, and match by location downstream.
+  var _custSelBranches = (_selReps || []).filter(function(rn){
+    return typeof BRANCH_ZONE_MAP !== 'undefined' && Object.keys(BRANCH_ZONE_MAP).some(function(b){ return normalizeName(b) === rn; });
+  });
   if (hasFilters && lobData.allCustomers) {
     var _frNorm = _effectiveFilterReps || [];
     // Use allDrillRows for accurate counts when rep/zone/RLS filter active
     var filteredCusts;
-    if (allDrillRows && allDrillRows.length > 0 && _effectiveFilterReps && _effectiveFilterReps.length > 0) {
+    if (allDrillRows && allDrillRows.length > 0 && ((_effectiveFilterReps && _effectiveFilterReps.length > 0) || _custSelBranches.length > 0)) {
       var _cActiveMonsSet = {};
       filteredMonthIndices().forEach(function(i){ _cActiveMonsSet[months26[i]] = true; });
       var _cLobKeys = {'Air':['AIR EXPORT','AIR IMPORT'],'Ocean':['SEA EXPORT','SEA IMPORT'],'ISO Tank':['ISOTANK EXPORT','ISOTANK IMPORT']};
@@ -3219,7 +3229,7 @@ function customerPage(){
       allDrillRows.forEach(function(r){
         if (_cLobFilter.indexOf(r.lob) === -1) return;
         if (!_cActiveMonsSet[r._ml]) return;
-        if (_frNorm.length > 0) {
+        if (_frNorm.length > 0 || _custSelBranches.length > 0) {
           if (_custPureZoneList && !r._zone) {
             var _rowBrC = (r.location || '').trim();
             var _rowTgtC = (typeof BRANCH_ZONE_MAP !== 'undefined') ? BRANCH_ZONE_MAP[_rowBrC] : null;
@@ -3227,7 +3237,9 @@ function customerPage(){
             if (!_matchesC) return;
           } else {
             var _rDnC = r._dn ? normalizeName(r._dn) : null;
-            if (_frNorm.indexOf(r._sp) === -1 && !(_rDnC && _frNorm.indexOf(_rDnC) > -1)) return;
+            var _rLocC = !r._zone ? normalizeName((r.location||'').trim()) : null;
+            var _matchesBranchC = _rLocC && _custSelBranches.indexOf(_rLocC) > -1;
+            if (!_matchesBranchC && _frNorm.indexOf(r._sp) === -1 && !(_rDnC && _frNorm.indexOf(_rDnC) > -1)) return;
           }
         }
         var cust = (r.customer||'').trim().toLowerCase();
@@ -3537,11 +3549,20 @@ function agentPage(){
 
   var _rlsActiveA = _rlsReps.length > 0;
   var hasFilters = (state.filterReps||[]).length > 0 || filterLobs.length > 0 || _filterZonesA.length > 0 || _rlsActiveA;
+  // A selected rep can be a relocated branch name itself (e.g. 'Mumbai')
+  // rather than an individual person — same gap fixed for Customer
+  // Insights just above. _effectiveFilterRepsA's zone∩rep name
+  // intersection can never match a branch name directly, leaving it
+  // completely empty and skipping this whole block even though the
+  // branch's data should show.
+  var _agentSelBranches = (_selRepsA || []).filter(function(rn){
+    return typeof BRANCH_ZONE_MAP !== 'undefined' && Object.keys(BRANCH_ZONE_MAP).some(function(b){ return normalizeName(b) === rn; });
+  });
   if (hasFilters && lobData.allAgents) {
     var _frNormA = _effectiveFilterRepsA || [];
     // When RLS active, build agent shipments from allDrillRows (accurate) not salesReps field (SRR, incomplete)
     var filteredAgents;
-    if (allDrillRows && allDrillRows.length > 0 && _frNormA.length > 0) {
+    if (allDrillRows && allDrillRows.length > 0 && (_frNormA.length > 0 || _agentSelBranches.length > 0)) {
       var _aActiveMonsSet = {};
       filteredMonthIndices().forEach(function(i){ _aActiveMonsSet[months26[i]] = true; });
       var _aAgentCounts = {}; // agentName -> {ships, gp, rev, tons, teu}
@@ -3550,9 +3571,11 @@ function agentPage(){
       allDrillRows.forEach(function(r){
         if (_aLobFilter.indexOf(r.lob) === -1) return;
         if (!_aActiveMonsSet[r._ml]) return;
-        if (_frNormA.length > 0) {
+        if (_frNormA.length > 0 || _agentSelBranches.length > 0) {
           var _rDnA = r._dn ? normalizeName(r._dn) : null;
-          if (_frNormA.indexOf(r._sp) === -1 && !(_rDnA && _frNormA.indexOf(_rDnA) > -1)) return;
+          var _rLocA = !r._zone ? normalizeName((r.location||'').trim()) : null;
+          var _matchesBranchA = _rLocA && _agentSelBranches.indexOf(_rLocA) > -1;
+          if (!_matchesBranchA && _frNormA.indexOf(r._sp) === -1 && !(_rDnA && _frNormA.indexOf(_rDnA) > -1)) return;
         }
         var agents = [];
         if (r.destAgent) agents.push((r.destAgent||'').trim().toLowerCase());
