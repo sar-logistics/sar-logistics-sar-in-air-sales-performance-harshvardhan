@@ -1902,6 +1902,16 @@ function model(){
       // re-excluding it with the same naive check).
       var _isRelocatedMatch = r.isBranch && r.zone === 'Cross Sales' && typeof BRANCH_ZONE_MAP !== 'undefined' && _fz.indexOf(BRANCH_ZONE_MAP[r.name]) > -1;
       if (!_isRelocatedMatch) return false;
+    } else if (_fz && r.isBranch && r.zone === 'Cross Sales' && typeof BRANCH_ZONE_MAP !== 'undefined' && BRANCH_ZONE_MAP[r.name]) {
+      // Direct match on 'Cross Sales' itself — but this is a RELOCATED
+      // branch, not a genuine Cross Sales entry. Only keep it here if its
+      // own target zone is ALSO selected (avoiding double-counting with
+      // its own zone row); if only 'Cross Sales' is selected and the
+      // target zone isn't, exclude it — same exclusion rule used for
+      // grandEntity/zoneEntity today. Confirmed live: selecting only
+      // 'Cross Sales' still summed every relocated branch's GP/Tons into
+      // the KPI cards, not just genuine Cross Sales branches like Kolkatta.
+      if (_fz.indexOf(BRANCH_ZONE_MAP[r.name]) === -1) return false;
     }
     if (_frNorm && _frNorm.indexOf(normalizeName(r.name)) === -1) return false;
     return true;
