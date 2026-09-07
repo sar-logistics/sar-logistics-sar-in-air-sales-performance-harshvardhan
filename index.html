@@ -5092,13 +5092,20 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       }
       if (_pendencyManualReps) {
         var _rNormGT = r._norm || (r._sp || '');
-        var _matchesGT = _pendencyManualReps.indexOf(_rNormGT) > -1 || _pendencyManualReps.indexOf(normalizeName((r.location||'').trim())) > -1;
+        // Location-based branch match only for UNMAPPED rows (r._zone
+        // falsy/'Unassigned') — a MAPPED rep (e.g. Aniket) can also be
+        // physically based in Mumbai, so his rows also carry
+        // location:'Mumbai'; matching by location regardless of mapped
+        // status let his rows incorrectly pass the 'Mumbai' rep filter
+        // too. Confirmed live: Grand Total 1027 instead of 239 with
+        // INAZ02 zone + Mumbai rep selected together.
+        var _isMappedGT2 = _fullZoneSet[r._zone];
+        var _matchesGT = _pendencyManualReps.indexOf(_rNormGT) > -1 || (!_isMappedGT2 && _pendencyManualReps.indexOf(normalizeName((r.location||'').trim())) > -1);
         if (!_matchesGT) return;
       }
       var isDoneGT = _isOLPage ? r.olDone : r.flDone;
       if (isDoneGT) _gtFreshD++; else _gtFreshP++;
     });
-    console.log('[DEBUG-GT]', 'zoneSet:', _pendencyZoneSet, '| manualReps:', _pendencyManualReps, '| fresh P/D:', _gtFreshP, _gtFreshD);
     gtPending = _gtFreshP;
     gtDone = _gtFreshD;
   }
