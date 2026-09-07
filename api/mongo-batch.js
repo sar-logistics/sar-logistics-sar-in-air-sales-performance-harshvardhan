@@ -2401,7 +2401,7 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "mappingSearch", "tonsDebug"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "mappingSearch"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
@@ -2500,61 +2500,6 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({
         success: true,
         lastUpdated: meta?.updatedAt ? meta.updatedAt.toISOString() : null,
-      });
-    }
-
-    if (action === "tonsDebug") {
-      // TEMPORARY — diagnosing a Tons mismatch between computeSalesAggregate
-      // (repsRaw) and getDrillRows (allDrillRows) for a specific rep+month.
-      // Queries every job collection directly, applies the same date/rep
-      // matching both functions use, and lists every matching job's raw
-      // fields — lets us compare against allDrillRows shipment numbers
-      // directly to find exactly which jobs differ. Remove once resolved.
-      const { repName, monthLabel } = req.query || {};
-      if (!repName || !monthLabel) return res.status(400).json({ error: "repName and monthLabel required" });
-      const targetName = normalizeName(repName);
-
-      const allResults = await Promise.all(
-        JOB_COLLECTIONS.map(c => db.collection(c).find({}).toArray().then(r => ({ collName: c, rows: r })))
-      );
-
-      const matches = [];
-      for (const { collName, rows } of allResults) {
-        for (const job of rows) {
-          const salesPerson = normalizeName(job["Sales Person"]) || "no rep assigned";
-          if (salesPerson !== targetName) continue;
-          const cls = classifyRow(job, collName);
-          const primaryDateStr = getDateValueFor(job, cls);
-          if (!primaryDateStr) continue;
-          const d = parseSheetDate(primaryDateStr);
-          if (!d) continue;
-          const ml = MONTH_NAMES[d.getMonth()] + "-" + String(d.getFullYear()).slice(2);
-          if (ml !== monthLabel) continue;
-          matches.push({
-            shipmentNo: job["Shipment No"] || "—",
-            collection: collName,
-            tons: calculateAirTons(job, cls),
-            chargeableWeight: job["Chargeable Weight"],
-            chargeableWeightUnit: job["Chargeable Weight Unit"],
-            dateUsed: primaryDateStr,
-            jobDate: job["Job Date"],
-            etdLoading: job["ETD Loading Port"],
-            etaDischarge: job["ETA Discharge"],
-            mongoId: job._id?.toString(),
-            _fy: job._fy || null,
-          });
-        }
-      }
-      const totalTons = matches.reduce((s, m) => s + (m.tons || 0), 0);
-      // Check for duplicate shipment numbers among matches
-      const shipmentCounts = {};
-      matches.forEach(m => { shipmentCounts[m.shipmentNo] = (shipmentCounts[m.shipmentNo] || 0) + 1; });
-      const duplicates = Object.entries(shipmentCounts).filter(([, c]) => c > 1);
-      return res.status(200).json({
-        success: true, repName, targetName, monthLabel,
-        jobCount: matches.length, totalTons: Math.round(totalTons * 100) / 100,
-        duplicateShipmentNos: duplicates,
-        jobs: matches,
       });
     }
 
