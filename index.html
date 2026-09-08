@@ -7552,9 +7552,9 @@ function render(){
   mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='agents' ? agentPage()
     : state.page==='tradelane' ? tradelanePage()
-    : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return salesPage();}()))
-    : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
-    : state.page==='admin' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1) ? adminPage() : (function(){ state.page='sales'; return salesPage(); })())
+    : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return '<div style="padding:20px 24px 32px;">'+kpiRow(M)+salesTable(M)+'</div>';}()))
+    : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return '<div style="padding:20px 24px 32px;">'+kpiRow(M)+salesTable(M)+'</div>';}()))
+    : state.page==='admin' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1) ? adminPage() : (function(){ state.page='sales'; return '<div style="padding:20px 24px 32px;">'+kpiRow(M)+salesTable(M)+'</div>'; })())
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
@@ -7578,8 +7578,8 @@ function renderKeepTopbar(){
   if(mainEl) mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='agents' ? agentPage()
     : state.page==='tradelane' ? tradelanePage()
-    : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return salesPage();}()))
-    : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
+    : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return '<div style="padding:20px 24px 32px;">'+kpiRow(M)+salesTable(M)+'</div>';}()))
+    : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return '<div style="padding:20px 24px 32px;">'+kpiRow(M)+salesTable(M)+'</div>';}()))
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
