@@ -380,7 +380,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-09-07T-drillrows-cache-sync-fix";
+const DEPLOY_TS = "2026-09-07T-mapping-cache-sync-fix";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -2831,6 +2831,15 @@ module.exports = async function handler(req, res) {
       if (!collectionName || !records) return res.status(400).json({ error: "collectionName and records required" });
       const result = await batchInsertMapping(db, collectionName, records, fy);
       if (result.error) return res.status(400).json({ error: result.error });
+      // Same gap as the jobs action had (fixed earlier today, d2b1ee1) — a
+      // mapping push (zone assignments, targets) writes to MongoDB fine but
+      // never invalidated salesCache, so the dashboard kept serving the
+      // OLD rep-to-zone mapping baked into the cache until something else
+      // happened to bust it. Confirmed: this is why a rep's zone change in
+      // the mapping sheet wasn't reflecting after a push + browser refresh
+      // — the staleness was server-side, not anything the browser controls.
+      salesCache = null; salesCacheTime = 0;
+      drillRowsCache = null; drillRowsCacheTime = 0;
       return res.status(200).json({ success: true, action: "mapping", collection: collectionName, inserted: result.inserted });
     }
 
