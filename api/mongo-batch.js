@@ -2790,6 +2790,61 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ success: true, org: updatedOrg });
     }
 
+    if (action === "bulkSyncUsers") {
+      // Manually triggered from Admin Panel. Two things happen, both
+      // matched against the mapping sheet:
+      // - creates: a mapping-sheet rep with a real email that has no
+      //   existing account at all (matched by email)
+      // - emailUpdates: a mapping-sheet rep whose NAME matches an existing
+      //   account, but whose email has changed (matched by name, since the
+      //   whole point is the email itself no longer matches)
+      // Both lists are reviewed and confirmed by the user before this is
+      // ever called — nothing here runs automatically on its own.
+      const { creates, emailUpdates } = req.body || {};
+      const results = { created: [], updated: [], skipped: [], errors: [] };
+
+      for (const c of (creates || [])) {
+        const email = String(c.email || "").toLowerCase().trim();
+        const name  = String(c.name  || "").trim();
+        if (!email || !name) { results.errors.push({ name, email, reason: "missing name or email" }); continue; }
+        try {
+          const existing = await db.collection("users").findOne({ email });
+          if (existing) { results.skipped.push({ name, email, reason: "account already exists" }); continue; }
+          await db.collection("users").insertOne({
+            email, name,
+            role: "Sales Rep",
+            zone: String(c.zone || "").trim(),
+            reportsTo: "",
+            isActive: true,
+            loginCount: 0,
+            createdAt: new Date(),
+          });
+          results.created.push({ name, email, zone: c.zone || "" });
+        } catch (err) {
+          results.errors.push({ name, email, reason: err.message });
+        }
+      }
+
+      for (const u of (emailUpdates || [])) {
+        const oldEmail = String(u.oldEmail || "").toLowerCase().trim();
+        const newEmail = String(u.newEmail || "").toLowerCase().trim();
+        const name = String(u.name || "").trim();
+        if (!oldEmail || !newEmail) { results.errors.push({ name, reason: "missing old or new email" }); continue; }
+        try {
+          const conflict = await db.collection("users").findOne({ email: newEmail });
+          if (conflict) { results.skipped.push({ name, oldEmail, newEmail, reason: "an account with the new email already exists" }); continue; }
+          const upd = await db.collection("users").updateOne({ email: oldEmail }, { $set: { email: newEmail } });
+          if (upd.matchedCount === 0) { results.skipped.push({ name, oldEmail, newEmail, reason: "no existing account found at the old email" }); continue; }
+          results.updated.push({ name, oldEmail, newEmail });
+        } catch (err) {
+          results.errors.push({ name, reason: err.message });
+        }
+      }
+
+      const updatedOrg = await getOrgChart(db);
+      return res.status(200).json({ success: true, results, org: updatedOrg });
+    }
+
     if (action === "updateUser") {
       const { email, role, reportsTo, zone, isActive, name } = req.body || {};
       const result = await updateUserFields(db, email, { role, reportsTo, zone, isActive, name });

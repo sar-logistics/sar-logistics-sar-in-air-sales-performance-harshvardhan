@@ -3163,6 +3163,14 @@ function adminPage(){
   '</div>'+
   sections+
   '</div>'+
+  (state.syncUsersMessage
+    ? '<div data-act="dismissSyncMessage" style="position:fixed;bottom:90px;right:28px;z-index:100;background:#0D2B5E;color:#FFFFFF;border-radius:10px;padding:12px 18px;font-size:12.5px;font-weight:600;max-width:340px;box-shadow:0 8px 24px rgba(13,43,94,0.3);cursor:pointer;white-space:pre-line;">'+esc(state.syncUsersMessage)+'<div style="font-size:10px;color:#94A9C9;margin-top:4px;font-weight:500;">Click to dismiss</div></div>'
+    : '')+
+  (canEdit ?
+    '<button data-act="syncNewUsersFromMapping" style="position:fixed;bottom:28px;right:150px;z-index:100;background:#FFFFFF;border:1.5px solid #E3E9F2;border-radius:999px;padding:13px 20px;font-size:13px;font-weight:700;color:#374151;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(13,43,94,0.12);">'+
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>Sync Users'+
+    '</button>'
+  :'')+
   (canEdit ?
     '<button data-act="addUserOpen" data-role="" style="position:fixed;bottom:28px;right:28px;z-index:100;background:linear-gradient(135deg,'+BRAND_A1+','+BRAND_A2+');border:none;border-radius:999px;padding:13px 22px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(29,95,204,0.4),0 1px 4px rgba(29,95,204,0.25);">'+
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" pointer-events="none"><path d="M12 5v14M5 12h14"/></svg>Add User'+
@@ -7544,9 +7552,9 @@ function render(){
   mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='agents' ? agentPage()
     : state.page==='tradelane' ? tradelanePage()
-    : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return salesPage();}()))
-    : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
-    : state.page==='admin' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1) ? adminPage() : (function(){ state.page='sales'; return salesPage(); })())
+    : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return '<div style="padding:20px 24px 32px;">'+kpiRow(M)+salesTable(M)+'</div>';}()))
+    : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return '<div style="padding:20px 24px 32px;">'+kpiRow(M)+salesTable(M)+'</div>';}()))
+    : state.page==='admin' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1) ? adminPage() : (function(){ state.page='sales'; return '<div style="padding:20px 24px 32px;">'+kpiRow(M)+salesTable(M)+'</div>'; })())
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
@@ -7570,8 +7578,8 @@ function renderKeepTopbar(){
   if(mainEl) mainEl.innerHTML = state.page==='customers' ? customerPage()
     : state.page==='agents' ? agentPage()
     : state.page==='tradelane' ? tradelanePage()
-    : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return salesPage();}()))
-    : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return salesPage();}()))
+    : state.page==='usage' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?usagePage():(function(){state.page='sales';return '<div style="padding:20px 24px 32px;">'+kpiRow(M)+salesTable(M)+'</div>';}()))
+    : state.page==='teams' ? ((currentUser&&['admin','hr'].indexOf((currentUser.role||'').toLowerCase())>-1)?teamsPage():(function(){state.page='sales';return '<div style="padding:20px 24px 32px;">'+kpiRow(M)+salesTable(M)+'</div>';}()))
     : state.page==='finance' ? financePage()
     : state.page==='op' ? opPage()
     : '<div style="padding:20px 24px 32px;">'+(state.page==='leaderboard'?'':((state.reportView==='Weekly'||state.reportView==='Quarterly'||state.reportView==='Yearly') ? '' : kpiRow(M)))+(state.page==='leaderboard'?leaderboard():salesTable(M))+'</div>';
@@ -9105,6 +9113,74 @@ document.addEventListener('click', function(ev){
     pending++; fetchOpData(done, true);
     pending++; fetchOrgData(done, true);
     pending++; fetchUsageData(done, true);
+  }
+  else if(act==='dismissSyncMessage'){ ev.stopPropagation(); state.syncUsersMessage=''; render(); }
+  else if(act==='syncNewUsersFromMapping'){
+    ev.stopPropagation();
+    var existingByEmail = {};
+    var existingByName = {};
+    if (orgData) {
+      (orgData.hierarchy||[]).concat(orgData.directReports||[]).concat(orgData.support||[]).forEach(function(p){
+        if (p.email) existingByEmail[p.email.toLowerCase().trim()] = p;
+        if (p.name) existingByName[normalizeName(p.name)] = p;
+      });
+    }
+    var creates = [];
+    var emailUpdates = [];
+    var seenCreateEmails = {};
+    repsRawOriginal.forEach(function(r){
+      var em = (r.email||'').toLowerCase().trim();
+      if (!em) return;
+      var nm = normalizeName(r.name);
+      var existingAcct = existingByName[nm];
+      if (existingAcct && existingAcct.email && existingAcct.email.toLowerCase().trim() !== em) {
+        // Name matches an existing account, but the email on the mapping
+        // sheet has changed — propose updating that account's email.
+        emailUpdates.push({ name: r.name, oldEmail: existingAcct.email, newEmail: em });
+      } else if (!existingByEmail[em] && !seenCreateEmails[em]) {
+        seenCreateEmails[em] = true;
+        creates.push({ name: r.name, email: em, zone: r.zone || '' });
+      }
+    });
+    if (creates.length === 0 && emailUpdates.length === 0) {
+      state.syncUsersMessage = 'Everyone in the mapping sheet already matches an existing account — nothing to sync.';
+      render();
+      return;
+    }
+    var summary = [];
+    if (creates.length > 0) summary.push(creates.length + ' new user' + (creates.length===1?'':'s') + ' to add:\n' + creates.map(function(c){ return '  • ' + c.name + ' (' + c.email + ')'; }).join('\n'));
+    if (emailUpdates.length > 0) summary.push(emailUpdates.length + ' email address' + (emailUpdates.length===1?'':'es') + ' to update:\n' + emailUpdates.map(function(u){ return '  • ' + u.name + ': ' + u.oldEmail + ' → ' + u.newEmail; }).join('\n'));
+    var proceed = window.confirm('Review before syncing:\n\n' + summary.join('\n\n') + '\n\nProceed?');
+    if (!proceed) return;
+    el.disabled = true;
+    var _origText = el.textContent;
+    el.textContent = 'Syncing...';
+    fetch('/api/mongo-batch?action=bulkSyncUsers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ creates: creates, emailUpdates: emailUpdates })
+    }).then(function(r){ return r.json(); })
+    .then(function(data){
+      el.disabled = false;
+      el.textContent = _origText;
+      if (!data.success) {
+        state.syncUsersMessage = 'Sync failed: ' + (data.error || 'unknown error');
+        render();
+        return;
+      }
+      if (data.org) orgData = data.org;
+      var r = data.results || { created: [], updated: [], skipped: [], errors: [] };
+      state.syncUsersMessage = 'Added ' + r.created.length + ', updated ' + r.updated.length + ' email' + (r.updated.length===1?'':'s')
+        + (r.skipped.length ? ', skipped ' + r.skipped.length : '')
+        + (r.errors.length ? ', ' + r.errors.length + ' failed' : '') + '.';
+      render();
+    })
+    .catch(function(err){
+      el.disabled = false;
+      el.textContent = _origText;
+      state.syncUsersMessage = 'Sync failed: could not reach the server.';
+      render();
+    });
   }
   else if(act==='addUserOpen'){
     ev.stopPropagation();
