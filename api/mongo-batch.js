@@ -2410,17 +2410,17 @@ module.exports = async function handler(req, res) {
     const db = await getDB();
 
     if (action === "mappingSearch") {
-      // Read-only diagnostic: search mapping_sales_targets by rep name substring
+      // Read-only diagnostic: search a mapping collection by substring.
+      // collection param defaults to mapping_sales_targets (reps); pass
+      // collection=mapping_zone_targets to check zone-level target rows
+      // instead — a second, separate sheet tab that can independently
+      // hold a stale zone label even after the rep mapping is fixed.
       const q = String(req.query?.name || "").trim().toLowerCase();
+      const collName = req.query?.collection === "mapping_zone_targets" ? "mapping_zone_targets" : "mapping_sales_targets";
       if (!q) return res.status(400).json({ error: "name query param required" });
-      const rows = await db.collection("mapping_sales_targets").find(
-        {}, { projection: { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1, "_fy": 1 } }
-      ).toArray();
-      const matches = rows.filter(r =>
-        String(r["Sales Rep Name"] || "").toLowerCase().includes(q) ||
-        String(r["Display Name"] || "").toLowerCase().includes(q)
-      );
-      return res.status(200).json({ success: true, count: matches.length, matches });
+      const rows = await db.collection(collName).find({}).toArray();
+      const matches = rows.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+      return res.status(200).json({ success: true, collection: collName, count: matches.length, matches });
     }
 
     if (action === "salesDebug") {
