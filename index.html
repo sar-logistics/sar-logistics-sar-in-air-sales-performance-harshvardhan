@@ -175,7 +175,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v94'; // bump on every deploy to wipe stale localStorage
+var CACHE_VERSION = 'v95'; // bump on every deploy to wipe stale localStorage
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -941,7 +941,7 @@ function fetchWeekDataIfNeeded(callback){
     return;
   }
   try {
-    var lsCached = localStorage.getItem('sar_week_cache_v3');
+    var lsCached = localStorage.getItem('sar_week_cache_' + CACHE_VERSION);
     if (lsCached) {
       var parsed = JSON.parse(lsCached);
       // Support both old array format and new {data,_cachedAt} format
@@ -971,7 +971,7 @@ function fetchWeekDataIfNeeded(callback){
         try {
           var toStore = repsRawOriginal.filter(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; })
             .map(function(r){ return {name:r.name, zone:r.zone, weekData:r.weekData}; });
-          localStorage.setItem('sar_week_cache_v3', JSON.stringify({data:toStore, _cachedAt:Date.now()}));
+          localStorage.setItem('sar_week_cache_' + CACHE_VERSION, JSON.stringify({data:toStore, _cachedAt:Date.now()}));
         } catch(e){}
       }
       if (callback) callback();
@@ -6570,7 +6570,9 @@ function tableRows(){
     var tgtArr  = dispTgt;
     var achArr  = dispAch;
 
-    function metric(label, indent, type, color, vals, fy, toggleType, repInfo){
+    function metric(label, indent, type, color, vals, fy, toggleType, repInfo, drillName){
+      // drillName (optional): full metric name sent to the drill-down / used as its title when the row's
+      // visible label is deliberately short (e.g. 'FL Done' under its 'Revenue' parent row).
       var isShip = toggleType === 'ship';
       var isGP   = toggleType === 'gp';
       var isRev  = toggleType === 'rev';
@@ -6604,7 +6606,7 @@ function tableRows(){
         labelWeight:indent?500:600, labelStyle:indent?'italic':'normal',
         caret:arrowChar, toggleType:toggleType||false, entityName: isZone ? e.zone : e.name,
         repInfo:repInfo||null, rowBg: groupBg, isZoneBlock: isZone, isGrandBlock: isGrand,
-        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, label, colLabels, noTarget, rawColKeys)
+        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, (drillName || label), colLabels, noTarget, rawColKeys)
       };
     }
 
@@ -6637,15 +6639,18 @@ function tableRows(){
     var revOpen = state.revOpen[e.name] === true;
     rows.push(metric('Revenue', 0, 'cur', '#0D7C6B', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), 'rev'));
     if (revOpen) {
-      rows.push(metric('Billed Revenue',      1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false));
-      rows.push(metric('Provisional Revenue', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false));
+      // Financial Lock split (same rule as the Detailed View columns). The visible label stays short - it sits
+      // directly under its 'Revenue' parent row and the metric column is only 140px wide - while the drill-down
+      // still gets the full name ('Revenue (FL Done)').
+      rows.push(metric('FL Done',     1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false, null, 'Revenue (FL Done)'));
+      rows.push(metric('FL Not Done', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false, null, 'Revenue (FL Not Done)'));
     }
 
     rows.push(metric('GP', 0, 'cur', '#374151', dispGp, sum(dispGp), 'gp'));
 
     if (gpOpen) {
-      rows.push(metric('Actual Profit',      1, 'cur', '#1D5FCC', dispGpActual, sum(dispGpActual), false));
-      rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
+      rows.push(metric('FL Done',     1, 'cur', '#1D5FCC', dispGpActual, sum(dispGpActual), false, null, 'GP (FL Done)'));
+      rows.push(metric('FL Not Done', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false, null, 'GP (FL Not Done)'));
     }
 
     rows.push(metric('Target',        0, 'cur', '#2563EB', tgtArr,  sum(tgtArr), false));
@@ -7000,22 +7005,36 @@ function drawer(){
       { k:'shipmentNo', l:'Shipment No', t:'mono', color:'#2563EB', sticky:0,   width:130 },
       { k:'jobDate', l:'Job Date', t:'date', sticky:130, width:105 },
       { k:'lob', l:'LOB', t:'badge', sticky:235, width:105 },
+      // Financial Lock split - Revenue, Cost and GP, FL Done then FL Not Done, straight after the three
+      // identifying columns. s.r / s.x / s.g are the server's finMetrics revenue, cost and GP (the same rule
+      // the grid uses): FL Done -> Billed (C) / Posted (G) / C-G; FL Not Done -> MAX(C,A) / MAX(G,E) / MAX(C,A)-MAX(G,E).
+      // Exactly one of each pair is filled per job; Revenue - Cost = GP inside each bucket.
+      { k:'revFlDone',     l:'Revenue (FL Done)',     t:'cur', color:'#2563EB', derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.r : null;
+        } },
+      { k:'revFlNotDone',  l:'Revenue (FL Not Done)', t:'cur', color:'#2563EB', derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.r : null;
+        } },
+      { k:'costFlDone',    l:'Cost (FL Done)',        t:'cur', color:'#DC2626', derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.x : null;
+        } },
+      { k:'costFlNotDone', l:'Cost (FL Not Done)',    t:'cur', color:'#DC2626', derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.x : null;
+        } },
+      { k:'gpFlDone',      l:'GP (FL Done)',          t:'cur', signed:true, derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.g : null;
+        } },
+      { k:'gpFlNotDone',   l:'GP (FL Not Done)',      t:'cur', signed:true, derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.g : null;
+        } },
       { k:'masterNo', l:'Master No.', t:'text' },
       { k:'houseNo', l:'House No.', t:'text' },
       { k:'consolNo', l:'Consol No.', t:'text' },
       { k:'cargoType', l:'Cargo Type', t:'text' },
       { k:'carrier', l:'Carrier', t:'text', truncate:130 },
       { k:'gp', l:'GP', t:'cur', signed:true, derived:function(s){ return s.g; } },
-      { k:'gpOlDone', l:'Actual GP', t:'cur', signed:true, derived:function(s){
-          var locked = (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
-          return locked ? s.actualProfit : null;
-        } },
-      { k:'gpOlNotDone', l:'Provisional GP', t:'cur', signed:true, derived:function(s){
-          var locked = (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
-          return !locked ? s.provisionalProfit : null;
-        } },
       { k:'firstOlStatus', l:'Lock Status', t:'olbadge', derived:function(s){
-          return (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
+          return String(s.financialLock||'').trim() !== '';   // Financial Lock, every LOB
         } },
       { k:'provRevenue', l:'Provisional Revenue (A)', t:'cur' },
       { k:'billedRevenue', l:'Billed Revenue (C)', t:'cur', color:'#2563EB' },
@@ -7162,9 +7181,9 @@ function drawer(){
     var colSums = {};
     var dActualGpSum = 0, dProvGpSum = 0;
     visibleRows.forEach(function(r){
-      var _locked = (r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT') ? !!r.financialLock : !!r.operationLock;
-      if (_locked) dActualGpSum += (r.actualProfit || 0);
-      else dProvGpSum += (r.provisionalProfit || 0);
+      var _locked = String(r.financialLock||'').trim() !== '';   // Financial Lock rule, all LOBs
+      if (_locked) dActualGpSum += (r.g || 0);
+      else dProvGpSum += (r.g || 0);
       COLS.forEach(function(c){
         if (c.t !== 'cur' && c.t !== 'num') return;
         var v = c.derived ? c.derived(r) : r[c.k];
@@ -7174,8 +7193,8 @@ function drawer(){
       });
     });
     // Override derived OL-status GP columns with their correct sums
-    colSums['gpOlDone']    = dActualGpSum;
-    colSums['gpOlNotDone'] = dProvGpSum;
+    colSums['gpFlDone']    = dActualGpSum;
+    colSums['gpFlNotDone'] = dProvGpSum;
 
     // Sticky total row — all numeric columns summed
     var totalRowBg = '#EEF3FC';
