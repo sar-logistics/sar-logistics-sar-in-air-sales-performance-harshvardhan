@@ -265,6 +265,20 @@ function finMetrics(job) {
   const cost    = flDone ? postedCost : Math.max(postedCost, provCost);
   return { flDone, isProvisional: !flDone, revenue, cost, gp: revenue - cost, billedRev, provRev, postedCost, provCost };
 }
+// ── Job de-duplication: ONE job per Shipment No + collection + sales person ─────────────────────────────────
+// The source sheet genuinely lists some shipments twice and every re-push inserts the copies again, so the database
+// can hold duplicate documents at any time. The browser has always removed them from the drill rows before computing
+// the KPI cards and the drill-through (dedupDrillRows: Shipment No | collection | sales person, first copy wins), but
+// the server's per-rep totals - which are what the grid shows - counted every document. Result: the grid and the
+// cards disagreed whenever a duplicate existed (e.g. 4 shipments in the grid, 3 in the card and the drill), and a
+// cleanup (the dedup action) "fixed" it only until the next push. Every server path now applies the same rule, so
+// the numbers never depend on how clean the database is.
+function _jobDupKey(collName, job) {
+  const no = job["Shipment No"];
+  // Without a shipment number two jobs cannot be told apart from a duplicate - never collapse them (null = do not de-duplicate)
+  if (no === undefined || no === null || String(no).trim() === "") return null;
+  return no + "|" + collName + "|" + (normalizeName(job["Sales Person"]) || "no rep assigned");
+}
 
 // TEU and LCL(CBM) metrics are calculated only for SEA and ISOTANK rows
 function hasTeuLclRow(cls) { return cls.kind === "SEA" || cls.kind === "ISOTANK"; }
@@ -393,7 +407,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-10-20T-air-v1-financial-lock-revenue-cost-gp-rule";
+const DEPLOY_TS = "2026-10-21T-air-v2-job-dedup-in-totals";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -433,6 +447,7 @@ function isoWeekInfo(date) {
 }
 
 async function getDrillRows(db, entity, metric, month, lobsParam) {
+  const _seenJobs = new Set(); // job de-duplication (see _jobDupKey)
   const activeLobs = lobsParam ? lobsParam.split(',').map(s=>s.trim()).filter(Boolean) : [];
   const LOB_CL = {
     'AIR EXPORT':     cl => cl.includes('air')     && cl.includes('export'),
@@ -482,6 +497,11 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
     const allRows = [];
     for (const { collName, rows } of allResults) {
       for (const job of rows) {
+        const _jk = _jobDupKey(collName, job);
+        if (_jk !== null) {
+          if (_seenJobs.has(_jk)) continue; // same job listed twice - count it once (same rule as the browser's dedupDrillRows)
+          _seenJobs.add(_jk);
+        }
         const cls = classifyRow(job, collName);
         // Fallback chain: primary ETD/ETA → origin/destination leg → Job Date
         // (matches Ocean dashboard — was previously ETD/ETA only, dropping jobs
@@ -713,6 +733,7 @@ function fyForMonthLabel(monthLabel) {
 }
 
 async function computeSalesAggregate(db) {
+  const _seenJobs = new Set(); // job de-duplication (see _jobDupKey)
   // 1. Load sales rep mapping — built as ONE lookup PER FISCAL YEAR, since
   // FY26 and FY27 mapping rows now coexist in the same collection and a
   // rep's zone/target can legitimately differ between the two years.
@@ -806,7 +827,7 @@ async function computeSalesAggregate(db) {
       "Sales Person":1, "Job Date":1, "LOB":1, "Location":1, "Customer":1,
       "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
       "Billed Revenue (C)":1, "Provisional Revenue (A)":1,
-      "Posted Cost (G)":1, "Provisional Cost (E)":1,
+      "Shipment No": 1, "Posted Cost (G)":1, "Provisional Cost (E)":1,
       "Financial Lock":1, "Operation Lock":1,
       "ETD Loading Port":1, "ETA Discharge":1,
       "ETD First Leg of Origin":1, "ETA Last Leg of Destination":1,
@@ -818,6 +839,11 @@ async function computeSalesAggregate(db) {
   for (const { collName, jobs } of allJobResults) {
 
     for (const job of jobs) {
+      const _jk = _jobDupKey(collName, job);
+      if (_jk !== null) {
+        if (_seenJobs.has(_jk)) continue; // same job listed twice - count it once (same rule as the browser's dedupDrillRows)
+        _seenJobs.add(_jk);
+      }
       const salesPerson = normalizeName(job["Sales Person"]) || "no rep assigned";
 
       // Classify this row by its own LOB column (or _tab for ISO Tank),
@@ -1130,6 +1156,7 @@ async function getCustomerAggregate(db, force, dateFrom, dateTo, cacheKey) {
 }
 
 async function computeCustomerAggregate(db, dateFrom, dateTo) {
+  const _seenJobs = new Set(); // job de-duplication (see _jobDupKey)
   // Parse active month labels from dateFrom/dateTo (e.g. "Jan-26" to "Jun-26")
   const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
     "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
@@ -1161,7 +1188,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
   const custLobLabels = {};
 
   const projection = {
-    "Customer": 1, "Billed Revenue (C)": 1, "Provisional Revenue (A)": 1, "Posted Cost (G)": 1, "Provisional Cost (E)": 1,
+    "Customer": 1, "Billed Revenue (C)": 1, "Provisional Revenue (A)": 1, "Shipment No": 1, "Posted Cost (G)": 1, "Provisional Cost (E)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
     "Sales Person": 1,
     "Financial Lock": 1, "Operation Lock": 1,
@@ -1184,6 +1211,11 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
     const jobs = await db.collection(collName).find({}, { projection }).toArray();
 
     for (const job of jobs) {
+      const _jk = _jobDupKey(collName, job);
+      if (_jk !== null) {
+        if (_seenJobs.has(_jk)) continue; // same job listed twice - count it once (same rule as the browser's dedupDrillRows)
+        _seenJobs.add(_jk);
+      }
       // Date filter — only include jobs within the selected month range
       if (activeMonthSet) {
         // Fallback chain: primary ETD/ETA -> origin/destination leg -> Job Date
@@ -1640,6 +1672,7 @@ async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
 }
 
 async function computeTradelaneAggregate(db, dateFrom, dateTo) {
+  const _seenJobs = new Set(); // job de-duplication (see _jobDupKey)
   const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
     "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
     "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
@@ -1726,6 +1759,11 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     const jobs = await db.collection(cfg.coll).find({}, { projection }).toArray();
 
     for (const job of jobs) {
+      const _jk = _jobDupKey(cfg.coll, job);
+      if (_jk !== null) {
+        if (_seenJobs.has(_jk)) continue; // same job listed twice - count it once (same rule as the browser's dedupDrillRows)
+        _seenJobs.add(_jk);
+      }
       // Date filter — fallback chain: primary ETD/ETA -> leg -> Job Date
       if (activeMonthSet) {
         const rawDate = getDateValueFor(job, cls);
@@ -1918,6 +1956,7 @@ async function getAgentAggregate(db, force, dateFrom, dateTo, cacheKey) {
 }
 
 async function computeAgentAggregate(db, dateFrom, dateTo) {
+  const _seenJobs = new Set(); // job de-duplication (see _jobDupKey)
   const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
     "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
     "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
@@ -1943,7 +1982,7 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
 
   const projection = {
     "Destination Agent": 1, "Origin Agent": 1,
-    "Billed Revenue (C)": 1, "Provisional Revenue (A)": 1, "Posted Cost (G)": 1, "Provisional Cost (E)": 1,
+    "Billed Revenue (C)": 1, "Provisional Revenue (A)": 1, "Shipment No": 1, "Posted Cost (G)": 1, "Provisional Cost (E)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
     "Financial Lock": 1, "Operation Lock": 1,
     "Sales Person": 1,
@@ -1973,6 +2012,11 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     const jobs = await db.collection(collName).find({}, { projection }).toArray();
 
     for (const job of jobs) {
+      const _jk = _jobDupKey(collName, job);
+      if (_jk !== null) {
+        if (_seenJobs.has(_jk)) continue; // same job listed twice - count it once (same rule as the browser's dedupDrillRows)
+        _seenJobs.add(_jk);
+      }
       // Date filter — fallback chain: primary ETD/ETA -> leg -> Job Date
       if (activeMonthSet) {
         const rawDate = getDateValueFor(job, cls);
