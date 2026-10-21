@@ -4143,9 +4143,10 @@ function tradelanePage(){
   }
 
   function effectiveRevenueTL(r) {
-    var isAir = r.lob === 'AIR EXPORT' || r.lob === 'AIR IMPORT';
-    var locked = isAir ? !!r.financialLock : !!r.operationLock;
-    return locked ? (r.billedRevenue || r.r || 0) : (r.provRevenue || r.r || 0);
+    // Revenue follows the Financial-Lock rule, computed ONCE on the server (finMetrics): FL Done -> Billed (C);
+    // FL Not Done -> MAX(Billed C, Prov. A). r.r is exactly that, so this page agrees with the grid and its own GP.
+    // This used to re-derive it here with the OLD rule (Operation Lock for non-Air LOBs, Provisional instead of the MAX).
+    return r.r || 0;
   }
 
   var periodLabel = (function(){
@@ -4219,13 +4220,12 @@ function tradelanePage(){
 function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps, branchOnly) {
   var rows = (lobData.allCountries || []).slice().sort(function(a,b){ return b.gp - a.gp; });
 
-  // Effective revenue per drill row:
-  // Air Export/Import: billedRevenue if financialLock filled, else provRevenue
-  // Other LOBs: billedRevenue if operationLock filled, else provRevenue
+  // Effective revenue per drill row: the server's Financial-Lock revenue (r.r) - see finMetrics in the API.
   function effectiveRevenue(r) {
-    var isAir = r.lob === 'AIR EXPORT' || r.lob === 'AIR IMPORT';
-    var locked = isAir ? !!r.financialLock : !!r.operationLock;
-    return locked ? (r.billedRevenue || r.r || 0) : (r.provRevenue || r.r || 0);
+    // Revenue follows the Financial-Lock rule, computed ONCE on the server (finMetrics): FL Done -> Billed (C);
+    // FL Not Done -> MAX(Billed C, Prov. A). r.r is exactly that, so this page agrees with the grid and its own GP.
+    // This used to re-derive it here with the OLD rule (Operation Lock for non-Air LOBs, Provisional instead of the MAX).
+    return r.r || 0;
   }
 
   var BORDER = '#D5DCE6';
