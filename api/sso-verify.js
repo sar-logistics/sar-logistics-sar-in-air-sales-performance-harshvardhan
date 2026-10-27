@@ -18,13 +18,8 @@ const COLLECTION_USERS = "users";
 const HUB_ISSUER          = "sar-systems-hub";
 const DEFAULT_HUB_ORIGIN  = "https://systems.sarlogisolutions.com";
 
-// This dashboard is registered in the Hub's Dashboards Master under one or
-// both of these slugs (a staging/test entry and the production entry) so
-// the same code keeps working as it moves from `staging` to `main`.
-const KNOWN_DASHBOARD_SLUGS = [
-  "stspl-air-sales-test",
-  "stspl-air-sales", // TODO: confirm final production slug with the Hub team before merging to main
-];
+// Fallback only. The slug the Hub actually launched (staging or production
+// entry) comes from the signature-verified token.
 const DEFAULT_DASHBOARD_SLUG = "stspl-air-sales-test";
 
 let cachedClient = null;
@@ -113,7 +108,7 @@ module.exports = async function handler(req, res) {
   }
 
   const tokenSlug = typeof payload.slug === "string" ? payload.slug.trim() : "";
-  const dashboardSlug = KNOWN_DASHBOARD_SLUGS.includes(tokenSlug) ? tokenSlug : DEFAULT_DASHBOARD_SLUG;
+  const dashboardSlug = /^[a-z0-9][a-z0-9_-]{0,79}$/i.test(tokenSlug) ? tokenSlug : DEFAULT_DASHBOARD_SLUG;
 
   try {
     const db   = await getDB();
