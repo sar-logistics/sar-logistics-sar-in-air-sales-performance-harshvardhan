@@ -15,6 +15,7 @@
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@500;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@500;700&display=swap"></noscript>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   /* Sidebar is always visible — fixed width, no collapse/toggle */
   .insight-bar-row { transition: background 0.15s; border-radius: 6px; }
@@ -174,7 +175,7 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v94'; // bump on every deploy to wipe stale localStorage
+var CACHE_VERSION = 'v96'; // bump on every deploy to wipe stale localStorage
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -940,7 +941,7 @@ function fetchWeekDataIfNeeded(callback){
     return;
   }
   try {
-    var lsCached = localStorage.getItem('sar_air_week_cache_v3');
+    var lsCached = localStorage.getItem('sar_air_week_cache_' + CACHE_VERSION);
     if (lsCached) {
       var parsed = JSON.parse(lsCached);
       // Support both old array format and new {data,_cachedAt} format
@@ -970,7 +971,7 @@ function fetchWeekDataIfNeeded(callback){
         try {
           var toStore = repsRawOriginal.filter(function(r){ return r.weekData && Object.keys(r.weekData).length > 0; })
             .map(function(r){ return {name:r.name, zone:r.zone, weekData:r.weekData}; });
-          localStorage.setItem('sar_air_week_cache_v3', JSON.stringify({data:toStore, _cachedAt:Date.now()}));
+          localStorage.setItem('sar_air_week_cache_' + CACHE_VERSION, JSON.stringify({data:toStore, _cachedAt:Date.now()}));
         } catch(e){}
       }
       if (callback) callback();
@@ -2008,8 +2009,23 @@ function model(){
     teusGrand = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.teu&&r.teu[i])||0;}));}));
     revGrand  = sum(filteredRepsForModel.map(function(r){return sum(idxs.map(function(i){return (r.rev&&r.rev[i])||0;}));}));
   }
+  // A rep's target is prorated per month by the days they were actually employed (joining / exit date) - exactly what
+  // the grid row does in dispTgt. The card used a FLAT monthly target x number of months, so for any rep who joined or
+  // left inside the selected range (e.g. joined in Aug, range Apr-Oct) the GP TARGET and ACHIEVEMENT cards disagreed
+  // with that rep's own row. Reps with no joining/exit date are unchanged (monthly target x months).
+  function _repTargetForMonths(r){
+    var base = r.tgt || 0;
+    if (!(r.joinDate || r.exitDate)) return base * idxs.length;
+    return sum(idxs.map(function(i){
+      var b = monthBounds(months26[i]);
+      var active = activeDaysInRange(b[0], b[1], r.joinDate || null, r.exitDate || null);
+      if (active <= 0) return 0;
+      var total = Math.round((new Date(b[1]) - new Date(b[0])) / 86400000) + 1;
+      return active < total ? Math.round(base * active / total) : base;
+    }));
+  }
   var tgtGrand  = (_mRole === 'sales rep' || _frNorm)
-    ? sum(filteredRepsForModel.map(function(r){ return (r.tgt||0) * idxs.length; }))
+    ? sum(filteredRepsForModel.map(_repTargetForMonths))
     : sum(realZones.map(function(z){ return (z.monthlyTarget||0) * idxs.length; }));
   var achGrand  = tgtGrand > 0 ? Math.round(gpGrand / tgtGrand * 100) : 0;
   return {gpGrand:gpGrand, shipGrand:shipGrand, tonsGrand:tonsGrand, tgtGrand:tgtGrand, achGrand:achGrand, teusGrand:teusGrand, revGrand:revGrand};
@@ -2162,7 +2178,7 @@ var BRANCH_ZONE_MAP = {
   'Hyderabad':  'INAZ05 (Hyderabad) - Geetha',
   'Ahmedabad':  'INAZ06 (Ahmedabad) - Rushabh Shah',
   'Gandhidham': 'INAZ06 (Ahmedabad) - Rushabh Shah',
-  'Bangalore':  'INAZ07 (Bangalore) - Kavitha A',
+  'Bangalore':  'INAZ07 (Bangalore)',
   'Chennai':    'INAZ08 (Chennai)',
 };
 // Synthetic zones — exist only in display layer, no mapping sheet entry
@@ -4127,9 +4143,10 @@ function tradelanePage(){
   }
 
   function effectiveRevenueTL(r) {
-    var isAir = r.lob === 'AIR EXPORT' || r.lob === 'AIR IMPORT';
-    var locked = isAir ? !!r.financialLock : !!r.operationLock;
-    return locked ? (r.billedRevenue || r.r || 0) : (r.provRevenue || r.r || 0);
+    // Revenue follows the Financial-Lock rule, computed ONCE on the server (finMetrics): FL Done -> Billed (C);
+    // FL Not Done -> MAX(Billed C, Prov. A). r.r is exactly that, so this page agrees with the grid and its own GP.
+    // This used to re-derive it here with the OLD rule (Operation Lock for non-Air LOBs, Provisional instead of the MAX).
+    return r.r || 0;
   }
 
   var periodLabel = (function(){
@@ -4203,13 +4220,12 @@ function tradelanePage(){
 function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveReps, branchOnly) {
   var rows = (lobData.allCountries || []).slice().sort(function(a,b){ return b.gp - a.gp; });
 
-  // Effective revenue per drill row:
-  // Air Export/Import: billedRevenue if financialLock filled, else provRevenue
-  // Other LOBs: billedRevenue if operationLock filled, else provRevenue
+  // Effective revenue per drill row: the server's Financial-Lock revenue (r.r) - see finMetrics in the API.
   function effectiveRevenue(r) {
-    var isAir = r.lob === 'AIR EXPORT' || r.lob === 'AIR IMPORT';
-    var locked = isAir ? !!r.financialLock : !!r.operationLock;
-    return locked ? (r.billedRevenue || r.r || 0) : (r.provRevenue || r.r || 0);
+    // Revenue follows the Financial-Lock rule, computed ONCE on the server (finMetrics): FL Done -> Billed (C);
+    // FL Not Done -> MAX(Billed C, Prov. A). r.r is exactly that, so this page agrees with the grid and its own GP.
+    // This used to re-derive it here with the OLD rule (Operation Lock for non-Air LOBs, Provisional instead of the MAX).
+    return r.r || 0;
   }
 
   var BORDER = '#D5DCE6';
@@ -5930,10 +5946,15 @@ function usagePage(){
   }).join('');
 
   return '<div style="padding:24px 28px 32px;">'
-  +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;">'
-    + usageKpiCard(d.totalUsers, 'Total Users', '#2563EB')
-    + usageKpiCard(d.activeUsers, 'Active Users', '#15875A')
-    + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;flex:1;">'
+      + usageKpiCard(d.totalUsers, 'Total Users', '#2563EB')
+      + usageKpiCard(d.activeUsers, 'Active Users', '#15875A')
+      + usageKpiCard(d.loggedIn7Day, 'Logged in (7 days)', '#7C3AED')
+    +'</div>'
+    +'<button onclick="exportUsageAnalyticsToExcel()" style="margin-left:16px;flex-shrink:0;display:flex;align-items:center;gap:7px;padding:10px 18px;background:#15875A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;">'
+      +'<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Download Excel'
+    +'</button>'
   +'</div>'
   +'<div style="background:#FFFFFF;border:1px solid #E7ECF3;border-radius:10px;overflow:hidden;">'
     +'<div style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 130px);">'
@@ -5951,6 +5972,34 @@ function usagePage(){
     +'</table>'
   +'</div>'
   +'</div>';
+}
+
+// Exports the currently-loaded Usage Analytics table to a real .xlsx file
+// via SheetJS (loaded from CDN in <head>). Uses usageData directly — the
+// same data already rendered in the table, no extra fetch needed. Column
+// order/labels match the on-screen table exactly.
+function exportUsageAnalyticsToExcel(){
+  if (!usageDataReady || !usageData || !usageData.users) {
+    alert('Usage data is still loading — please wait a moment and try again.');
+    return;
+  }
+  var rows = usageData.users.map(function(u){
+    return {
+      '#': u.index,
+      'Name': u.name,
+      'Email': u.email,
+      'Role': u.role,
+      'Total Logins': u.totalLogins,
+      'Last Login': fmtLastLogin(u.lastLogin),
+      'Status': u.isActive ? 'Active' : 'Inactive'
+    };
+  });
+  var ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:4},{wch:24},{wch:32},{wch:14},{wch:14},{wch:18},{wch:10}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Usage Analytics');
+  var today = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, 'Usage_Analytics_' + today + '.xlsx');
 }
 
 /* ====================== TEAMS / ORG CHART ====================== */
@@ -6535,8 +6584,15 @@ function tableRows(){
     var lcl     = dispLcl;
     var tgtArr  = dispTgt;
     var achArr  = dispAch;
+    // The FY / Grand Total achievement - and the row header's badge, bar and colour - must be measured against the SAME target
+    // the Target row's total shows: the sum of the per-month targets, prorated by joining / exit date for a rep. It used to be
+    // computed further up from a FLAT monthly target x number of columns, so for a rep who joined (or left) inside the range
+    // the row said e.g. "Target 300" while its Achievement % was measured against 700. The monthly cells already used dispTgt.
+    achFy = sum(tgtArr) > 0 ? Math.round(sum(dispGp) / sum(tgtArr) * 100) : 0;
 
-    function metric(label, indent, type, color, vals, fy, toggleType, repInfo){
+    function metric(label, indent, type, color, vals, fy, toggleType, repInfo, drillName){
+      // drillName (optional): full metric name sent to the drill-down / used as its title when the row's
+      // visible label is deliberately short (e.g. 'FL Done' under its 'Revenue' parent row).
       var isShip = toggleType === 'ship';
       var isGP   = toggleType === 'gp';
       var isRev  = toggleType === 'rev';
@@ -6570,7 +6626,7 @@ function tableRows(){
         labelWeight:indent?500:600, labelStyle:indent?'italic':'normal',
         caret:arrowChar, toggleType:toggleType||false, entityName: isZone ? e.zone : e.name,
         repInfo:repInfo||null, rowBg: groupBg, isZoneBlock: isZone, isGrandBlock: isGrand,
-        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, label, colLabels, noTarget, rawColKeys)
+        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, (drillName || label), colLabels, noTarget, rawColKeys)
       };
     }
 
@@ -6581,10 +6637,11 @@ function tableRows(){
     var repInfo = {
       name: e.name, initials: e.initials, avatarBg: avatarBg,
       nameWeight: nameWeight, groupBg: groupBg,
-      achFmt: e.tgt>0 ? achFy+'%' : '—',
+      achFmt: sum(tgtArr) > 0 ? achFy+'%' : '—',
       barWidth: Math.min(100,achFy)+'%',
       barColor: barColor, achColor: achColor,
-      isZone: isZone, isGrand: isGrand, isBranch: !!e.isBranch
+      isZone: isZone, isGrand: isGrand, isBranch: !!e.isBranch,
+      joinDate: e.joinDate || null, exitDate: e.exitDate || null
     };
 
     rows.push(metric('Shipments', 0, 'int', '#15233B', dispShip, sum(dispShip), 'ship', repInfo));
@@ -6602,15 +6659,18 @@ function tableRows(){
     var revOpen = state.revOpen[e.name] === true;
     rows.push(metric('Revenue', 0, 'cur', '#0D7C6B', dispRev || dispGp.map(function(){return 0;}), sum(dispRev||[]), 'rev'));
     if (revOpen) {
-      rows.push(metric('Billed Revenue',      1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false));
-      rows.push(metric('Provisional Revenue', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false));
+      // Financial Lock split (same rule as the Detailed View columns). The visible label stays short - it sits
+      // directly under its 'Revenue' parent row and the metric column is only 140px wide - while the drill-down
+      // still gets the full name ('Revenue (FL Done)').
+      rows.push(metric('FL Done',     1, 'cur', '#1D5FCC', dispRevBilled || dispGp.map(function(){return 0;}), sum(dispRevBilled||[]), false, null, 'Revenue (FL Done)'));
+      rows.push(metric('FL Not Done', 1, 'cur', '#475569', dispRevProv   || dispGp.map(function(){return 0;}), sum(dispRevProv||[]),   false, null, 'Revenue (FL Not Done)'));
     }
 
     rows.push(metric('GP', 0, 'cur', '#374151', dispGp, sum(dispGp), 'gp'));
 
     if (gpOpen) {
-      rows.push(metric('Actual Profit',      1, 'cur', '#1D5FCC', dispGpActual, sum(dispGpActual), false));
-      rows.push(metric('Provisional Profit', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false));
+      rows.push(metric('FL Done',     1, 'cur', '#1D5FCC', dispGpActual, sum(dispGpActual), false, null, 'GP (FL Done)'));
+      rows.push(metric('FL Not Done', 1, 'cur', '#10875A', dispGpProv,   sum(dispGpProv),   false, null, 'GP (FL Not Done)'));
     }
 
     rows.push(metric('Target',        0, 'cur', '#2563EB', tgtArr,  sum(tgtArr), false));
@@ -6841,15 +6901,15 @@ function salesTable(M){
           +'<div style="font-size:11px;font-weight:600;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ri.name)+'">'+ri.name+'</div>'
         +'</div>';
       } else {
-        var dojStr = ri.joinDate ? (function(d){ var dt=new Date(d); return isNaN(dt)?null:dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'}); })(ri.joinDate) : null;
-        var doeStr = ri.exitDate ? (function(d){ var dt=new Date(d); return isNaN(dt)?null:dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'}); })(ri.exitDate) : null;
+        var dojStr = ri.joinDate ? (function(d){ var dt=new Date(d); return isNaN(dt)?null:dt.toLocaleDateString('en-GB',{month:'short',year:'numeric'}); })(ri.joinDate) : null;
+        var doeStr = ri.exitDate ? (function(d){ var dt=new Date(d); return isNaN(dt)?null:dt.toLocaleDateString('en-GB',{month:'short',year:'numeric'}); })(ri.exitDate) : null;
         nameLabel = '<div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:1px;">'
           +'<div style="font-size:11px;font-weight:600;color:#1E3A66;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="'+esc(ri.name)+'">'+esc(ri.name)+'</div>'
           +(dojStr||doeStr
             ? '<div style="font-size:9px;color:#94A3B8;font-weight:500;white-space:nowrap;display:flex;align-items:center;gap:4px;">'
-              +(dojStr ? '<span title="Date of Joining" style="color:#10875A;">&#x2794; '+esc(dojStr)+'</span>' : '')
+              +(dojStr ? '<span title="Date of Joining" style="color:#10875A;">DOJ: '+esc(dojStr)+'</span>' : '')
               +(dojStr && doeStr ? '<span style="color:#CBD5E1;">·</span>' : '')
-              +(doeStr ? '<span title="Date of Exit" style="color:#DC2626;">&#x2715; '+esc(doeStr)+'</span>' : '')
+              +(doeStr ? '<span title="Date of Exit" style="color:#DC2626;">DOE: '+esc(doeStr)+'</span>' : '')
             +'</div>'
             : '')
         +'</div>';
@@ -6965,22 +7025,36 @@ function drawer(){
       { k:'shipmentNo', l:'Shipment No', t:'mono', color:'#2563EB', sticky:0,   width:130 },
       { k:'jobDate', l:'Job Date', t:'date', sticky:130, width:105 },
       { k:'lob', l:'LOB', t:'badge', sticky:235, width:105 },
+      // Financial Lock split - Revenue, Cost and GP, FL Done then FL Not Done, straight after the three
+      // identifying columns. s.r / s.x / s.g are the server's finMetrics revenue, cost and GP (the same rule
+      // the grid uses): FL Done -> Billed (C) / Posted (G) / C-G; FL Not Done -> MAX(C,A) / MAX(G,E) / MAX(C,A)-MAX(G,E).
+      // Exactly one of each pair is filled per job; Revenue - Cost = GP inside each bucket.
+      { k:'revFlDone',     l:'Revenue (FL Done)',     t:'cur', color:'#2563EB', derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.r : null;
+        } },
+      { k:'revFlNotDone',  l:'Revenue (FL Not Done)', t:'cur', color:'#2563EB', derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.r : null;
+        } },
+      { k:'costFlDone',    l:'Cost (FL Done)',        t:'cur', color:'#DC2626', derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.x : null;
+        } },
+      { k:'costFlNotDone', l:'Cost (FL Not Done)',    t:'cur', color:'#DC2626', derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.x : null;
+        } },
+      { k:'gpFlDone',      l:'GP (FL Done)',          t:'cur', signed:true, derived:function(s){
+          return String(s.financialLock||'').trim() !== '' ? s.g : null;
+        } },
+      { k:'gpFlNotDone',   l:'GP (FL Not Done)',      t:'cur', signed:true, derived:function(s){
+          return String(s.financialLock||'').trim() === '' ? s.g : null;
+        } },
       { k:'masterNo', l:'Master No.', t:'text' },
       { k:'houseNo', l:'House No.', t:'text' },
       { k:'consolNo', l:'Consol No.', t:'text' },
       { k:'cargoType', l:'Cargo Type', t:'text' },
       { k:'carrier', l:'Carrier', t:'text', truncate:130 },
       { k:'gp', l:'GP', t:'cur', signed:true, derived:function(s){ return s.g; } },
-      { k:'gpOlDone', l:'Actual GP', t:'cur', signed:true, derived:function(s){
-          var locked = (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
-          return locked ? s.actualProfit : null;
-        } },
-      { k:'gpOlNotDone', l:'Provisional GP', t:'cur', signed:true, derived:function(s){
-          var locked = (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
-          return !locked ? s.provisionalProfit : null;
-        } },
       { k:'firstOlStatus', l:'Lock Status', t:'olbadge', derived:function(s){
-          return (s.lob==='AIR EXPORT'||s.lob==='AIR IMPORT') ? !!s.financialLock : !!s.operationLock;
+          return String(s.financialLock||'').trim() !== '';   // Financial Lock, every LOB
         } },
       { k:'provRevenue', l:'Provisional Revenue (A)', t:'cur' },
       { k:'billedRevenue', l:'Billed Revenue (C)', t:'cur', color:'#2563EB' },
@@ -7127,9 +7201,9 @@ function drawer(){
     var colSums = {};
     var dActualGpSum = 0, dProvGpSum = 0;
     visibleRows.forEach(function(r){
-      var _locked = (r.lob==='AIR EXPORT'||r.lob==='AIR IMPORT') ? !!r.financialLock : !!r.operationLock;
-      if (_locked) dActualGpSum += (r.actualProfit || 0);
-      else dProvGpSum += (r.provisionalProfit || 0);
+      var _locked = String(r.financialLock||'').trim() !== '';   // Financial Lock rule, all LOBs
+      if (_locked) dActualGpSum += (r.g || 0);
+      else dProvGpSum += (r.g || 0);
       COLS.forEach(function(c){
         if (c.t !== 'cur' && c.t !== 'num') return;
         var v = c.derived ? c.derived(r) : r[c.k];
@@ -7139,8 +7213,8 @@ function drawer(){
       });
     });
     // Override derived OL-status GP columns with their correct sums
-    colSums['gpOlDone']    = dActualGpSum;
-    colSums['gpOlNotDone'] = dProvGpSum;
+    colSums['gpFlDone']    = dActualGpSum;
+    colSums['gpFlNotDone'] = dProvGpSum;
 
     // Sticky total row — all numeric columns summed
     var totalRowBg = '#EEF3FC';
@@ -7731,6 +7805,9 @@ function dedupDrillRows(rows) {
   if (!rows || !rows.length) return rows;
   var seen = {};
   var deduped = rows.filter(function(r){
+    // No shipment number (the server writes an em dash as the placeholder) -> cannot be recognised as a duplicate, so never
+    // collapse such rows (the same guard the server's job de-duplication uses, so the grid and the cards stay in step)
+    if (!r.shipmentNo || r.shipmentNo === '\u2014' || r.shipmentNo === '?') return true;
     var key = r.shipmentNo + '|' + (r._cl||'') + '|' + (r._sp||'');
     if (seen[key]) return false;
     seen[key] = true;

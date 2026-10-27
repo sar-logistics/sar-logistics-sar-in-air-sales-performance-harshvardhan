@@ -241,16 +241,43 @@ function calculateAirTons(job, cls) {
   return rawWeight / 1000;
 }
 
-// Pick the correct GP field based on lock status
-// Air (Import/Export): if "Financial Lock" is empty → Provisional; else Actual
-// All others:          if "Operation Lock" is empty → Provisional; else Actual
-function pickGP(job, cls) {
-  const isAir = cls.kind === "AIR";
-  const lockField = isAir ? "Financial Lock" : "Operation Lock";
-  const isLocked  = job[lockField] !== undefined && job[lockField] !== null && String(job[lockField]).trim() !== "";
-  const actual      = parseFloat(job["Actual Profit (J=C-G)"]     || 0) || 0;
-  const provisional = parseFloat(job["Provisional Profit (I=A-E)"] || 0) || 0;
-  return { gp: isLocked ? actual : provisional, isProvisional: !isLocked };
+// ── FINANCIAL-LOCK REVENUE / COST / GP RULE — the single source of truth, applies to ALL LOBs ──
+// "FL Done" = the job's Financial Lock column is not blank. Operation Lock and Job Rev Recognition Date play NO role.
+//   FL Done:     Revenue = Billed Revenue (C)                 Cost = Posted Cost (G)
+//                GP = Billed Revenue (C) - Posted Cost (G)
+//   FL Not Done: Revenue = MAX(Billed Revenue C, Prov. Rev A)  Cost = MAX(Posted Cost G, Prov. Cost E)
+//                GP = MAX(C, A) - MAX(G, E)
+// Both buckets add up to the total Revenue / GP. Cost is computed (it drives GP) but is not displayed on the dashboard.
+function finMetrics(job) {
+  const num = v => parseFloat(v || 0) || 0;
+  const fl = job["Financial Lock"];
+  const flDone = fl !== undefined && fl !== null && String(fl).trim() !== "";
+  const billedRev = num(job["Billed Revenue (C)"]);
+  const provRev   = num(job["Provisional Revenue (A)"]);
+  const provCost  = num(job["Provisional Cost (E)"]);
+  // Posted Cost (G): when the cell is blank, derive it as C - J (Actual Profit) - the same fallback the
+  // drill rows have always used - so a job with no G column keeps GP = Actual Profit instead of GP = C.
+  const g = job["Posted Cost (G)"];
+  const postedCost = (g !== undefined && g !== null && String(g).trim() !== "")
+    ? num(g)
+    : (billedRev - num(job["Actual Profit (J=C-G)"]));
+  const revenue = flDone ? billedRev : Math.max(billedRev, provRev);
+  const cost    = flDone ? postedCost : Math.max(postedCost, provCost);
+  return { flDone, isProvisional: !flDone, revenue, cost, gp: revenue - cost, billedRev, provRev, postedCost, provCost };
+}
+// ── Job de-duplication: ONE job per Shipment No + collection + sales person ─────────────────────────────────
+// The source sheet genuinely lists some shipments twice and every re-push inserts the copies again, so the database
+// can hold duplicate documents at any time. The browser has always removed them from the drill rows before computing
+// the KPI cards and the drill-through (dedupDrillRows: Shipment No | collection | sales person, first copy wins), but
+// the server's per-rep totals - which are what the grid shows - counted every document. Result: the grid and the
+// cards disagreed whenever a duplicate existed (e.g. 4 shipments in the grid, 3 in the card and the drill), and a
+// cleanup (the dedup action) "fixed" it only until the next push. Every server path now applies the same rule, so
+// the numbers never depend on how clean the database is.
+function _jobDupKey(collName, job) {
+  const no = job["Shipment No"];
+  // Without a shipment number two jobs cannot be told apart from a duplicate - never collapse them (null = do not de-duplicate)
+  if (no === undefined || no === null || String(no).trim() === "") return null;
+  return no + "|" + collName + "|" + (normalizeName(job["Sales Person"]) || "no rep assigned");
 }
 
 // TEU and LCL(CBM) metrics are calculated only for SEA and ISOTANK rows
@@ -380,7 +407,7 @@ function normalizeName(name) {
 }
 
 // In-memory cache — survives across warm Lambda invocations (same container)
-const DEPLOY_TS = "2026-09-07T-drillrows-cache-sync-fix";
+const DEPLOY_TS = "2026-10-21T-air-v2-job-dedup-in-totals";
 let salesCache = null;
 let salesCacheTime = 0;
 let salesCacheDeployTs = null;
@@ -420,6 +447,7 @@ function isoWeekInfo(date) {
 }
 
 async function getDrillRows(db, entity, metric, month, lobsParam) {
+  const _seenJobs = new Set(); // job de-duplication (see _jobDupKey)
   const activeLobs = lobsParam ? lobsParam.split(',').map(s=>s.trim()).filter(Boolean) : [];
   const LOB_CL = {
     'AIR EXPORT':     cl => cl.includes('air')     && cl.includes('export'),
@@ -469,6 +497,11 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
     const allRows = [];
     for (const { collName, rows } of allResults) {
       for (const job of rows) {
+        const _jk = _jobDupKey(collName, job);
+        if (_jk !== null) {
+          if (_seenJobs.has(_jk)) continue; // same job listed twice - count it once (same rule as the browser's dedupDrillRows)
+          _seenJobs.add(_jk);
+        }
         const cls = classifyRow(job, collName);
         // Fallback chain: primary ETD/ETA → origin/destination leg → Job Date
         // (matches Ocean dashboard — was previously ETD/ETA only, dropping jobs
@@ -487,7 +520,9 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
         const _zone = _meta ? _meta.zone : null; // null = unmapped/cross sales
         const _dn   = _meta ? _meta.displayName : null; // display name for rep matching
 
-        const { gp: rowGP, isProvisional } = pickGP(job, cls);
+        const _fm = finMetrics(job);
+        const rowGP = _fm.gp;
+        const isProvisional = _fm.isProvisional;
         const billedRevenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
         const provRevenue   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
         const provCost      = parseFloat(job["Provisional Cost (E)"] || 0) || 0;
@@ -565,7 +600,7 @@ async function getDrillRows(db, entity, metric, month, lobsParam) {
           volumeUnit:   job["Volume Unit"]         || "",
           operationLock: job["Operation Lock"]     || "",
           financialLock: job["Financial Lock"]     || "",
-          g: rowGP, r: isProvisional ? provRevenue : billedRevenue, x: postedCost,
+          g: rowGP, r: _fm.revenue, x: _fm.cost, // Financial-Lock rule (finMetrics): GP, revenue and cost all come from one function. x (cost) drives GP but is not displayed anywhere.
           t: parseFloat(job["Container TEU"] || 0) || 0,
           chargeableWeight,
           chargeableWeightUnit,
@@ -698,6 +733,7 @@ function fyForMonthLabel(monthLabel) {
 }
 
 async function computeSalesAggregate(db) {
+  const _seenJobs = new Set(); // job de-duplication (see _jobDupKey)
   // 1. Load sales rep mapping — built as ONE lookup PER FISCAL YEAR, since
   // FY26 and FY27 mapping rows now coexist in the same collection and a
   // rep's zone/target can legitimately differ between the two years.
@@ -791,6 +827,7 @@ async function computeSalesAggregate(db) {
       "Sales Person":1, "Job Date":1, "LOB":1, "Location":1, "Customer":1,
       "Actual Profit (J=C-G)":1, "Provisional Profit (I=A-E)":1,
       "Billed Revenue (C)":1, "Provisional Revenue (A)":1,
+      "Shipment No": 1, "Posted Cost (G)":1, "Provisional Cost (E)":1,
       "Financial Lock":1, "Operation Lock":1,
       "ETD Loading Port":1, "ETA Discharge":1,
       "ETD First Leg of Origin":1, "ETA Last Leg of Destination":1,
@@ -802,6 +839,11 @@ async function computeSalesAggregate(db) {
   for (const { collName, jobs } of allJobResults) {
 
     for (const job of jobs) {
+      const _jk = _jobDupKey(collName, job);
+      if (_jk !== null) {
+        if (_seenJobs.has(_jk)) continue; // same job listed twice - count it once (same rule as the browser's dedupDrillRows)
+        _seenJobs.add(_jk);
+      }
       const salesPerson = normalizeName(job["Sales Person"]) || "no rep assigned";
 
       // Classify this row by its own LOB column (or _tab for ISO Tank),
@@ -826,16 +868,18 @@ async function computeSalesAggregate(db) {
       const mapped = repLookupByFY[rowFY]?.[salesPerson]
                   || repLookupByFY[rowFY === 'FY27' ? 'FY26' : 'FY27']?.[salesPerson];
 
-      const { gp, isProvisional } = pickGP(job, cls);
+      const _fm = finMetrics(job);
+      const gp = _fm.gp;
+      const isProvisional = _fm.isProvisional;
       const gpProv   = isProvisional ? gp : 0;
       const gpActual = isProvisional ? 0 : gp;
       const billedRev = parseFloat(job["Billed Revenue (C)"]      || 0) || 0;
       const provRev   = parseFloat(job["Provisional Revenue (A)"] || 0) || 0;
-      // Revenue = pick-one: locked → Billed Revenue (C), unlocked → Provisional Revenue (A)
-      // Billed sub-row = locked jobs only, Provisional sub-row = unlocked jobs only → adds up to Revenue
-      const rev = isProvisional ? provRev : billedRev;
-      const revBilledAmt = isProvisional ? 0 : billedRev;  // locked jobs → Billed sub-row
-      const revProvAmt   = isProvisional ? provRev : 0;    // unlocked jobs → Provisional sub-row
+      // Revenue / cost / GP all come from finMetrics() (Financial-Lock rule, every LOB) - see its definition.
+      // FL Done: Billed (C); FL Not Done: MAX(Billed C, Prov. A). The two buckets add up to Revenue.
+      const rev = _fm.revenue;
+      const revBilledAmt = isProvisional ? 0 : rev;  // FL Done jobs     -> 'FL Done' sub-row
+      const revProvAmt   = isProvisional ? rev : 0;  // FL Not Done jobs -> 'FL Not Done' sub-row
 
       // Tons — only for AIR rows, Chargeable Weight (kg) ÷ 1000
       let tons = 0;
@@ -1101,7 +1145,7 @@ const customerCacheMap = {}; // key → { data, time }
 const CUSTOMER_INSIGHTS_COLLECTIONS = ["jobs_air_export", "jobs_air_import"];
 
 async function getCustomerAggregate(db, force, dateFrom, dateTo, cacheKey) {
-  const key = cacheKey || 'all';
+  const key = (cacheKey || 'all') + '|' + DEPLOY_TS; // tied to the deploy so a stale response (old revenue/GP rule) can never survive a new deployment
   const entry = customerCacheMap[key];
   if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
     return { ...entry.data, cached: true };
@@ -1112,6 +1156,7 @@ async function getCustomerAggregate(db, force, dateFrom, dateTo, cacheKey) {
 }
 
 async function computeCustomerAggregate(db, dateFrom, dateTo) {
+  const _seenJobs = new Set(); // job de-duplication (see _jobDupKey)
   // Parse active month labels from dateFrom/dateTo (e.g. "Jan-26" to "Jun-26")
   const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
     "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
@@ -1143,7 +1188,7 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
   const custLobLabels = {};
 
   const projection = {
-    "Customer": 1, "Billed Revenue (C)": 1,
+    "Customer": 1, "Billed Revenue (C)": 1, "Provisional Revenue (A)": 1, "Shipment No": 1, "Posted Cost (G)": 1, "Provisional Cost (E)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
     "Sales Person": 1,
     "Financial Lock": 1, "Operation Lock": 1,
@@ -1166,6 +1211,11 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
     const jobs = await db.collection(collName).find({}, { projection }).toArray();
 
     for (const job of jobs) {
+      const _jk = _jobDupKey(collName, job);
+      if (_jk !== null) {
+        if (_seenJobs.has(_jk)) continue; // same job listed twice - count it once (same rule as the browser's dedupDrillRows)
+        _seenJobs.add(_jk);
+      }
       // Date filter — only include jobs within the selected month range
       if (activeMonthSet) {
         // Fallback chain: primary ETD/ETA -> origin/destination leg -> Job Date
@@ -1180,8 +1230,9 @@ async function computeCustomerAggregate(db, dateFrom, dateTo) {
 
       const customer = String(job["Customer"] || "").trim();
       if (!customer) continue;
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      const { gp } = pickGP(job, cls);
+      const _fm = finMetrics(job);
+      const revenue = _fm.revenue;
+      const gp = _fm.gp;
 
       // Tons for Air only
       let tons = 0;
@@ -1621,6 +1672,7 @@ async function getTradelaneAggregate(db, force, dateFrom, dateTo, cacheKey) {
 }
 
 async function computeTradelaneAggregate(db, dateFrom, dateTo) {
+  const _seenJobs = new Set(); // job de-duplication (see _jobDupKey)
   const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
     "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
     "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
@@ -1681,7 +1733,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
   ];
 
   const projection = {
-    "Shipment No": 1, "Billed Revenue (C)": 1,
+    "Shipment No": 1, "Billed Revenue (C)": 1, "Provisional Revenue (A)": 1, "Posted Cost (G)": 1, "Provisional Cost (E)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
     "Financial Lock": 1, "Operation Lock": 1,
     "Sales Person": 1, "Chargeable Weight": 1, "Chargeable Weight Unit": 1,
@@ -1707,6 +1759,11 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
     const jobs = await db.collection(cfg.coll).find({}, { projection }).toArray();
 
     for (const job of jobs) {
+      const _jk = _jobDupKey(cfg.coll, job);
+      if (_jk !== null) {
+        if (_seenJobs.has(_jk)) continue; // same job listed twice - count it once (same rule as the browser's dedupDrillRows)
+        _seenJobs.add(_jk);
+      }
       // Date filter — fallback chain: primary ETD/ETA -> leg -> Job Date
       if (activeMonthSet) {
         const rawDate = getDateValueFor(job, cls);
@@ -1751,8 +1808,9 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
       }
       if (!tradelane) continue;
 
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      const { gp } = pickGP(job, cls);
+      const _fm = finMetrics(job);
+      const revenue = _fm.revenue;
+      const gp = _fm.gp;
 
       let tons = 0;
       if (isAir) {
@@ -1887,7 +1945,7 @@ async function computeTradelaneAggregate(db, dateFrom, dateTo) {
 }
 
 async function getAgentAggregate(db, force, dateFrom, dateTo, cacheKey) {
-  const key = cacheKey || 'all';
+  const key = (cacheKey || 'all') + '|' + DEPLOY_TS; // tied to the deploy so a stale response (old revenue/GP rule) can never survive a new deployment
   const entry = agentCacheMap[key];
   if (!force && entry && (Date.now() - entry.time) < SALES_CACHE_TTL_MS) {
     return { ...entry.data, cached: true };
@@ -1898,6 +1956,7 @@ async function getAgentAggregate(db, force, dateFrom, dateTo, cacheKey) {
 }
 
 async function computeAgentAggregate(db, dateFrom, dateTo) {
+  const _seenJobs = new Set(); // job de-duplication (see _jobDupKey)
   const FY_MONTHS_LIST = ["Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25",
     "Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26",
     "Apr-26","May-26","Jun-26","Jul-26","Aug-26","Sep-26",
@@ -1923,7 +1982,7 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
 
   const projection = {
     "Destination Agent": 1, "Origin Agent": 1,
-    "Billed Revenue (C)": 1,
+    "Billed Revenue (C)": 1, "Provisional Revenue (A)": 1, "Shipment No": 1, "Posted Cost (G)": 1, "Provisional Cost (E)": 1,
     "Actual Profit (J=C-G)": 1, "Provisional Profit (I=A-E)": 1,
     "Financial Lock": 1, "Operation Lock": 1,
     "Sales Person": 1,
@@ -1953,6 +2012,11 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
     const jobs = await db.collection(collName).find({}, { projection }).toArray();
 
     for (const job of jobs) {
+      const _jk = _jobDupKey(collName, job);
+      if (_jk !== null) {
+        if (_seenJobs.has(_jk)) continue; // same job listed twice - count it once (same rule as the browser's dedupDrillRows)
+        _seenJobs.add(_jk);
+      }
       // Date filter — fallback chain: primary ETD/ETA -> leg -> Job Date
       if (activeMonthSet) {
         const rawDate = getDateValueFor(job, cls);
@@ -1969,8 +2033,9 @@ async function computeAgentAggregate(db, dateFrom, dateTo) {
         : String(job["Origin Agent"] || "").trim();
       if (!agentRaw) continue;
 
-      const revenue = parseFloat(job["Billed Revenue (C)"] || 0) || 0;
-      const { gp } = pickGP(job, cls);
+      const _fm = finMetrics(job);
+      const revenue = _fm.revenue;
+      const gp = _fm.gp;
 
       let tons = 0;
       if (isAir) {
@@ -2410,17 +2475,17 @@ module.exports = async function handler(req, res) {
     const db = await getDB();
 
     if (action === "mappingSearch") {
-      // Read-only diagnostic: search mapping_sales_targets by rep name substring
+      // Read-only diagnostic: search a mapping collection by substring.
+      // collection param defaults to mapping_sales_targets (reps); pass
+      // collection=mapping_zone_targets to check zone-level target rows
+      // instead — a second, separate sheet tab that can independently
+      // hold a stale zone label even after the rep mapping is fixed.
       const q = String(req.query?.name || "").trim().toLowerCase();
+      const collName = req.query?.collection === "mapping_zone_targets" ? "mapping_zone_targets" : "mapping_sales_targets";
       if (!q) return res.status(400).json({ error: "name query param required" });
-      const rows = await db.collection("mapping_sales_targets").find(
-        {}, { projection: { "Sales Rep Name": 1, "Display Name": 1, "Zone": 1, "_fy": 1 } }
-      ).toArray();
-      const matches = rows.filter(r =>
-        String(r["Sales Rep Name"] || "").toLowerCase().includes(q) ||
-        String(r["Display Name"] || "").toLowerCase().includes(q)
-      );
-      return res.status(200).json({ success: true, count: matches.length, matches });
+      const rows = await db.collection(collName).find({}).toArray();
+      const matches = rows.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+      return res.status(200).json({ success: true, collection: collName, count: matches.length, matches });
     }
 
     if (action === "salesDebug") {
@@ -2886,6 +2951,15 @@ module.exports = async function handler(req, res) {
       if (!collectionName || !records) return res.status(400).json({ error: "collectionName and records required" });
       const result = await batchInsertMapping(db, collectionName, records, fy);
       if (result.error) return res.status(400).json({ error: result.error });
+      // Same gap as the jobs action had (fixed earlier today, d2b1ee1) — a
+      // mapping push (zone assignments, targets) writes to MongoDB fine but
+      // never invalidated salesCache, so the dashboard kept serving the
+      // OLD rep-to-zone mapping baked into the cache until something else
+      // happened to bust it. Confirmed: this is why a rep's zone change in
+      // the mapping sheet wasn't reflecting after a push + browser refresh
+      // — the staleness was server-side, not anything the browser controls.
+      salesCache = null; salesCacheTime = 0;
+      drillRowsCache = null; drillRowsCacheTime = 0;
       return res.status(200).json({ success: true, action: "mapping", collection: collectionName, inserted: result.inserted });
     }
 
