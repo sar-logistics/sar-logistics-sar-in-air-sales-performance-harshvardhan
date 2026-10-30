@@ -3007,6 +3007,9 @@ module.exports = async function handler(req, res) {
         const r = await col.insertMany(sanitizedRecords, { ordered: false });
         inserted = r.insertedCount;
         Object.keys(tradelaneCacheMap).forEach(k => delete tradelaneCacheMap[k]);
+        // SRR pushes upsert in place, so record the push time for api/last-updated.js (the SAR
+        // Systems Hub card). Kept apart from _meta.lastDataPush, which drives cache invalidation.
+        await db.collection("_meta").updateOne({ _id: "lastPush_srr" }, { $set: { updatedAt: new Date() } }, { upsert: true });
         return res.status(200).json({ success: true, collection: collectionName, inserted, updated: 0, keyField: null, fastPath: true });
       }
 
@@ -3038,6 +3041,9 @@ module.exports = async function handler(req, res) {
         }
       }
       Object.keys(tradelaneCacheMap).forEach(k => delete tradelaneCacheMap[k]);
+      // SRR pushes upsert in place, so record the push time for api/last-updated.js (the SAR
+      // Systems Hub card). Kept apart from _meta.lastDataPush, which drives cache invalidation.
+      await db.collection("_meta").updateOne({ _id: "lastPush_srr" }, { $set: { updatedAt: new Date() } }, { upsert: true });
       return res.status(200).json({ success: true, collection: collectionName, inserted, updated, keyField });
     }
 
