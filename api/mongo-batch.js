@@ -2431,17 +2431,13 @@ module.exports = async function handler(req, res) {
       await getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => null);
     }
 
-    // Strip weekData from sales, keep Air lobData for default LOB filter
+    // Strip weekData from sales; keep every LOB's figures (all LOBs are filter
+    // options — trimming to Air here made Sea/ISO/General selections show 0 or
+    // differ from the drill-through until a later full load)
     let salesStripped = null;
     if (salesResult && salesResult.repsRaw) {
       salesStripped = { ...salesResult, repsRaw: salesResult.repsRaw.map(r => {
         const c = { ...r }; delete c.weekData;
-        if (c.lobData) {
-          const airOnly = {};
-          if (c.lobData['AIR EXPORT']) airOnly['AIR EXPORT'] = c.lobData['AIR EXPORT'];
-          if (c.lobData['AIR IMPORT']) airOnly['AIR IMPORT'] = c.lobData['AIR IMPORT'];
-          c.lobData = airOnly;
-        }
         return c;
       })};
       // Bundle allDrillRows from drillRowsCache so client never needs a separate drill fetch
@@ -2582,16 +2578,9 @@ module.exports = async function handler(req, res) {
         if (includeLob) {
           // Full lobData requested — keep as-is
         } else {
-          // Air dashboard LOBs: Air Export, Air Import and General (the only
-          // LOB filter options). Keeping General here means a General
-          // selection works from the first load, not only after includeLob=1.
-          if (copy.lobData) {
-            const airOnly = {};
-            if (copy.lobData['AIR EXPORT']) airOnly['AIR EXPORT'] = copy.lobData['AIR EXPORT'];
-            if (copy.lobData['AIR IMPORT']) airOnly['AIR IMPORT'] = copy.lobData['AIR IMPORT'];
-            if (copy.lobData['GENERAL'])    airOnly['GENERAL']    = copy.lobData['GENERAL'];
-            copy.lobData = airOnly;
-          }
+          // Keep every LOB's figures: all LOBs are filter options, so any
+          // selection (Sea, ISO Tank, General...) must be right from the first
+          // load, not only after the includeLob=1 load arrives.
         }
         return copy;
       })});

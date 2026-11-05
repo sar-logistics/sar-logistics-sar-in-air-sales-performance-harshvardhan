@@ -175,10 +175,11 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v98'; // bump on every deploy to wipe stale localStorage
-// The Air dashboard covers Air Export, Air Import and General only — Sea and
-// ISO Tank jobs are never counted in its tables or listed in its drill-throughs.
-var AIR_DASHBOARD_LOBS = ['AIR EXPORT', 'AIR IMPORT', 'GENERAL'];
+var CACHE_VERSION = 'v99'; // bump on every deploy to wipe stale localStorage
+// Every LOB is available in the filter; Air Export + Air Import are selected
+// by default (see state.filterLobs). Tables and drill-throughs only ever count
+// the selected LOBs.
+var AIR_DASHBOARD_LOBS = ['AIR EXPORT', 'AIR IMPORT', 'SEA EXPORT', 'SEA IMPORT', 'ISOTANK EXPORT', 'ISOTANK IMPORT', 'GENERAL'];
 // The LOB filter in effect: the selected LOBs that belong to this dashboard,
 // or all of them when nothing is selected.
 function airEffectiveLobs() {
@@ -2829,7 +2830,7 @@ function topbar(){
 
         if (isFOpen) {
           var _isPendencyPage = state.page === 'op' || state.page === 'finance';
-          var LOB_KEYS = AIR_DASHBOARD_LOBS.slice(); // Air dashboard: Air Export, Air Import, General only
+          var LOB_KEYS = AIR_DASHBOARD_LOBS.slice(); // all LOBs (Air first); default selection is Air Export + Air Import
           var LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','GENERAL':'General'};
           // RLS-only base (not the manual rep-filter narrowing that repsRaw
           // ALSO carries) — repsRaw gets narrowed by BOTH RLS and the
