@@ -384,8 +384,10 @@ function _showDashboardBody() {
     setTimeout(function(){
       if (!allPendencyDrillRows) {
         fetchOpData(function(){
-          // If user is on OP/FP in weekly view, re-render with the now-loaded data
-          if ((state.page === 'op' || state.page === 'finance') && state.reportView === 'Weekly') {
+          // If user is on OP/FP, re-render with the now-loaded data — in every
+          // view. Previously Monthly view was left showing the older table while
+          // the drill-through already read these newer rows, so the two disagreed.
+          if (state.page === 'op' || state.page === 'finance') {
             render();
           }
         }, false);
@@ -1307,7 +1309,11 @@ function prefetchCustomerRanges() {
 var fetchFinanceData  = makeFetcher('finance',   'finance',   function(d){ financeData  = d; financeDataReady  = true; });
 var fetchOpData = makeFetcher('op', 'op', function(d){ opData = d; opDataReady = true; if (d.allDrillJobRows) { allPendencyDrillRows = d.allDrillJobRows;
     _pendencyDrillCache = {}; // clear stale cache when fresh drill rows arrive
-    delete d.allDrillJobRows; } });
+    delete d.allDrillJobRows;
+    // Fresh drill rows must always be matched by a fresh table, or the table
+    // (older numbers) and its drill-through (newer rows) disagree.
+    if (state.page === 'op' || state.page === 'finance') setTimeout(render, 0);
+  } });
 
 // ── Agent Insights fetch (mirrors customer fetch pattern) ─────────────────────
 var _agentCache = {};
@@ -4669,6 +4675,22 @@ function tradelanePivotTable(lobData, activeLob, brandC, filterLobs, effectiveRe
 /* ====================== FINANCE PENDENCY ====================== */
 function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobOwners, lockType){
   var d = data;
+  // Display names used by more than one rep (e.g. several reps called "Others"
+  // in different zones). Their per-rep numbers must be keyed by name + zone,
+  // otherwise they overwrite each other and the table loses jobs.
+  // Two reps can even share name AND zone, so each rep also gets its own key
+  // (_pk) for the per-rep LOB index; the name@@zone key is used for the
+  // drill-through and the week index, which can only see name and zone.
+  var _dupRepNames = {}, _firstPkByKey = {};
+  (function(){ var seen = {}; (d.reps || []).forEach(function(r){ if (seen[r.name]) _dupRepNames[r.name] = true; seen[r.name] = true; }); })();
+  function _repKey(name, zone){ return _dupRepNames[name] ? name + '@@' + (zone || '') : name; }
+  (d.reps || []).forEach(function(r, i){
+    r.__pk = _dupRepNames[r.name] ? _repKey(r.name, r.zone) + '@@' + i : r.name;
+    var k = _repKey(r.name, r.zone); if (!_firstPkByKey[k]) _firstPkByKey[k] = r.__pk;
+  });
+  // Week index is built from job rows (name + zone only): give a shared
+  // name@@zone total to the first such rep only, so it is not counted twice.
+  function _weekKeyFor(rep){ var k = _repKey(rep.name, rep.zone); return _firstPkByKey[k] === rep.__pk ? k : null; }
   var isWeekly = state.reportView === 'Weekly';
   var isQuarterly = state.reportView === 'Quarterly';
   var isYearly = state.reportView === 'Yearly';
@@ -4728,6 +4750,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       if ((row._month || row.month) !== _selectedMonth) return;
       var repName = row._repName || '';
       if (!repName) return;
+      repName = _repKey(repName, row._zone);
       // LOB filter
       if (_flobs && _flobs.length > 0) {
         var lobMatch = _flobs.some(function(fl){
@@ -4894,7 +4917,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           merged[m].done    += lobData[m].done    || 0;
         });
       });
-      _pendencyLobIndex[rep.name] = merged;
+      _pendencyLobIndex[rep.__pk || rep.name] = merged;
     });
   }
 
@@ -5083,7 +5106,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         return g.idxs.reduce(function(acc, i){
           var m = months26[i];
           var src = _pendencyLobIndex
-            ? ((_pendencyLobIndex[rep.name] && _pendencyLobIndex[rep.name][m]) || { pending:0, done:0 })
+            ? ((_pendencyLobIndex[rep.__pk || rep.name] && _pendencyLobIndex[rep.__pk || rep.name][m]) || { pending:0, done:0 })
             : (rep.monthData[m] || { pending:0, done:0 });
           acc.pending += src.pending || 0;
           acc.done    += src.done    || 0;
@@ -5095,7 +5118,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       colData = _qGroups.map(function(g){
         return g.months.reduce(function(acc, m){
           var src = _pendencyLobIndex
-            ? ((_pendencyLobIndex[rep.name] && _pendencyLobIndex[rep.name][m]) || { pending:0, done:0 })
+            ? ((_pendencyLobIndex[rep.__pk || rep.name] && _pendencyLobIndex[rep.__pk || rep.name][m]) || { pending:0, done:0 })
             : (rep.monthData[m] || { pending:0, done:0 });
           acc.pending += src.pending || 0;
           acc.done    += src.done    || 0;
@@ -5107,12 +5130,13 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         // Weekly view ALWAYS uses the week-bucketed index — must come first
         if (isWeekly) {
           if (_weeklyPendencyIndex) {
-            return (_weeklyPendencyIndex[rep.name] && _weeklyPendencyIndex[rep.name][col]) || { pending:0, done:0 };
+            var _wkK = _weekKeyFor(rep);
+            return (_wkK && _weeklyPendencyIndex[_wkK] && _weeklyPendencyIndex[_wkK][col]) || { pending:0, done:0 };
           }
           return { pending:0, done:0 };
         }
         if (_pendencyLobIndex) {
-          return (_pendencyLobIndex[rep.name] && _pendencyLobIndex[rep.name][col]) || { pending:0, done:0 };
+          return (_pendencyLobIndex[rep.__pk || rep.name] && _pendencyLobIndex[rep.__pk || rep.name][col]) || { pending:0, done:0 };
         }
         return rep.monthData[col] || { pending:0, done:0 };
       });
@@ -5123,7 +5147,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var _rawZone = rep.zone || 'Unspecified';
     var zone = _fullZoneSet[_rawZone] ? _rawZone : 'Cross Sales';
     var originalZone = (zone === 'Cross Sales') ? (_repLocationMap[normalizeName(rep.name)] || _rawZone) : _rawZone;
-    return { name: rep.name, zone: zone, originalZone: originalZone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
+    return { name: rep.name, drillKey: _repKey(rep.name, _rawZone === 'Unspecified' ? rep.zone : _rawZone), zone: zone, originalZone: originalZone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
   }).filter(function(r){ return r.total > 0; });
 
   // Grand totals — sum from repsFiltered (already LOB-filtered via _pendencyLobIndex)
@@ -5579,7 +5603,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
               +(repCollapsed ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>' : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>')
               +'</div>'
             : '';
-          bodyRows += metricRows(rep, null, '#FDFCFF', false, 'Cross Sales', branchKey, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #C4B5FD;', null, rep.name, lockType);
+          bodyRows += metricRows(rep, null, '#FDFCFF', false, 'Cross Sales', branchKey, false, (rep.drillKey||rep.name), repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #C4B5FD;', null, rep.name, lockType);
 
           // Job Owners under rep
           if (hasOwners && !repCollapsed) {
@@ -5639,7 +5663,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
           +(repCollapsed ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>' : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>')
           +'</div>'
         : '';
-      bodyRows += metricRows(rep, null, '#FFFFFF', false, zone, null, false, rep.name, repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #9AA6B8;', null, rep.name, lockType);
+      bodyRows += metricRows(rep, null, '#FFFFFF', false, zone, null, false, (rep.drillKey||rep.name), repAvatar, repLabel, repChev, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #9AA6B8;', null, rep.name, lockType);
 
       // Job owners nested under rep (OL page only)
       if (hasOwners && !repCollapsed) {
@@ -5740,7 +5764,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
             +(repCollapsedZ ? '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>' : '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>')
             +'</div>'
           : '';
-        bodyRows += metricRows(rep, null, '#FDFCFF', false, zone, branchKey, false, rep.name, repAvatarZ, repLabelZ, repChevZ, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #C4B5FD;', null, rep.name, lockType);
+        bodyRows += metricRows(rep, null, '#FDFCFF', false, zone, branchKey, false, (rep.drillKey||rep.name), repAvatarZ, repLabelZ, repChevZ, 'box-shadow:inset -1.5px 0 0 '+PBORDER_STRONG+';', 'border-top:1.5px dashed #C4B5FD;', null, rep.name, lockType);
 
         if (hasOwnersZ && !repCollapsedZ) {
           rep.jobOwners.forEach(function(jo){
@@ -8701,6 +8725,9 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
     return !salesZoneSet[drillRow._zone];
   }
 
+  // "name@@zone" = a display name shared by reps in different zones
+  var _repZoneOnly = null;
+  if (type === 'rep' && rep && rep.indexOf('@@') > -1) { _repZoneOnly = rep.split('@@')[1] || null; rep = rep.split('@@')[0]; }
   var repNorm = normalizeName(rep);
 
   // Pre-build zone/rep/RLS SP filter for grand total
@@ -8834,6 +8861,8 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
         if (!_matchesBranchNameZ && _pManualZ.indexOf(r._norm||'') === -1) continue;
       }
     } else if (type === 'rep') {
+      // A name shared by several reps arrives as "name@@zone" — only that zone's rep
+      if (_repZoneOnly && r._zone !== _repZoneOnly) continue;
       // Match by any of: _norm, _displayNorm, normalized _repName, or normalized salesPerson
       var spNorm = normalizeName(r.salesPerson || '');
       var repNameNorm = normalizeName(r._repName || '');
