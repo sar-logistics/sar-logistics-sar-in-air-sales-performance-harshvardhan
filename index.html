@@ -4697,7 +4697,17 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   });
   // Week index is built from job rows (name + zone only): give a shared
   // name@@zone total to the first such rep only, so it is not counted twice.
-  function _weekKeyFor(rep){ var k = _repKey(rep.name, rep.zone); return _firstPkByKey[k] === rep.__pk ? k : null; }
+  function _weekKeyFor(rep){
+    if (_dupRepNames[rep.name] && rep.norm) return 'n:' + rep.norm; // exact rep (newer server data)
+    var k = _repKey(rep.name, rep.zone); return _firstPkByKey[k] === rep.__pk ? k : null;
+  }
+  // Same key, from a job row (rows carry _norm = the rep's own key)
+  var _repsHaveNorm = (d.reps || []).length > 0 && (d.reps || []).every(function(r){ return r.norm !== undefined; });
+  function _rowWeekKey(row){
+    var nm = row._repName || '';
+    if (_dupRepNames[nm] && _repsHaveNorm) return 'n:' + (row._norm || '');
+    return _repKey(nm, row._zone);
+  }
   var isWeekly = state.reportView === 'Weekly';
   var isQuarterly = state.reportView === 'Quarterly';
   var isYearly = state.reportView === 'Yearly';
@@ -4757,7 +4767,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       if ((row._month || row.month) !== _selectedMonth) return;
       var repName = row._repName || '';
       if (!repName) return;
-      repName = _repKey(repName, row._zone);
+      repName = _rowWeekKey(row);
       // LOB filter
       if (_flobs && _flobs.length > 0) {
         var lobMatch = _flobs.some(function(fl){
@@ -4863,9 +4873,16 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   function _locBucket(r){ return isWeekly ? (r._month === _locWeekMonth ? r._wk : null) : r._month; }
   var _blCacheKey = 'sar_air_branch_loc_index_' + (_isOLPage ? 'ol' : 'fl') + '_' + (_blFl ? _blFl.slice().sort().join(',') : 'all') + '_' + (_pendencyManualReps ? _pendencyManualReps.slice().sort().join(',') : 'all') + (isWeekly ? '_wk_' + _locWeekMonth : '') + '_' + CACHE_VERSION;
   var _branchLocIndex = {};
+  // Role access (Sales Rep = own jobs, Zonal Manager = own zone) — these
+  // indexes feed zone/branch header rows, which previously ignored it and
+  // showed other people's / other zones' totals to restricted users.
+  var _rlsRowOk = buildPendencyScopeMatcher({ rlsOnly: true });
+  var _rlsLimited = currentUser && ['sales rep','zonal manager'].indexOf((currentUser.role||'').toLowerCase().trim()) > -1;
+  if (_rlsLimited) _blCacheKey += '_rls_' + normalizeName(currentUser.name||'') + '_' + (currentUser.zone||'');
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
     allPendencyDrillRows.forEach(function(r){
       if (_fullZoneSet[r._zone]) return; // mapped zone — not Cross Sales
+      if (_rlsLimited && !_rlsRowOk(r)) return;
       if (_blFl && _blFl.indexOf(r.lob) === -1) return; // LOB filter — was missing, inflated totals
       var loc = (r.location || '').trim();
       if (!loc || loc === '—') return;
@@ -4902,6 +4919,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
     allPendencyDrillRows.forEach(function(r){
       if (!_fullZoneSet[r._zone]) return; // unmapped — not this zone's own rep
+      if (_rlsLimited && !_rlsRowOk(r)) return;
       if (_blFl && _blFl.indexOf(r.lob) === -1) return;
       if (_pendencyManualReps) {
         var _rNormZL = r._norm || (r._sp || '');
@@ -5166,7 +5184,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var _rawZone = rep.zone || 'Unspecified';
     var zone = _fullZoneSet[_rawZone] ? _rawZone : 'Cross Sales';
     var originalZone = (zone === 'Cross Sales') ? (_repLocationMap[normalizeName(rep.name)] || _rawZone) : _rawZone;
-    return { name: rep.name, drillKey: _repKey(rep.name, _rawZone === 'Unspecified' ? rep.zone : _rawZone), zone: zone, originalZone: originalZone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
+    return { name: rep.name, drillKey: _repKey(rep.name, _rawZone === 'Unspecified' ? rep.zone : _rawZone) + (_dupRepNames[rep.name] && rep.norm ? '##' + rep.norm : ''), zone: zone, originalZone: originalZone, colData: colData, totalPending: tp, totalDone: td, total: tp+td, jobOwners: rep.jobOwners||[] };
   }).filter(function(r){ return r.total > 0; });
 
   // Grand totals — sum from repsFiltered (already LOB-filtered via _pendencyLobIndex)
@@ -5225,12 +5243,43 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     gtDone = _gtFreshD;
   }
   var gtTotal   = gtPending + gtDone;
+  // Months (or week keys) that make up column ci in the current view
+  function _colMonthsOf(ci){
+    if (isYearly && _pFyGroups) return _pFyGroups[ci].idxs.map(function(i){ return months26[i]; });
+    if (isQuarterly && _qGroups) return _qGroups[ci].months.slice();
+    return [activeCols[ci]];
+  }
+  // Sum a location index (key -> month/week -> {pending,done}) over column ci
+  function _locSum(idx, key, ci){
+    var p = 0, dn = 0, e = idx[key];
+    if (e) _colMonthsOf(ci).forEach(function(m){ if (e[m]) { p += e[m].pending||0; dn += e[m].done||0; } });
+    return { pending: p, done: dn };
+  }
   var gtColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
     return {
       pending: repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
       done:    repsFiltered.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
     };
   });
+  // Grand Total from the job rows with the same scope rule as its drill-through
+  if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
+    var _gtMatch = buildPendencyScopeMatcher();
+    var _gtCols = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols);
+    var _gtBucketOf = {}; // bucket key -> column index
+    _gtCols.forEach(function(c, ci){ _colMonthsOf(ci).forEach(function(k){ _gtBucketOf[k] = ci; }); });
+    var _gtWeekMonth = isWeekly ? (state.weeklyMonth || months26[months26.length-1]) : null;
+    gtColData = _gtCols.map(function(){ return { pending: 0, done: 0 }; });
+    allPendencyDrillRows.forEach(function(r){
+      var k = isWeekly ? (r._month === _gtWeekMonth ? r._wk : null) : r._month;
+      if (!k || _gtBucketOf[k] === undefined) return;
+      if (!_gtMatch(r)) return;
+      var isDoneG = _isOLPage ? r.olDone : r.flDone;
+      if (isDoneG) gtColData[_gtBucketOf[k]].done++; else gtColData[_gtBucketOf[k]].pending++;
+    });
+    gtPending = gtColData.reduce(function(s,c){ return s+c.pending; }, 0);
+    gtDone    = gtColData.reduce(function(s,c){ return s+c.done; }, 0);
+    gtTotal   = gtPending + gtDone;
+  }
 
   // Build zone aggregates purely from repsFiltered (filtered period only)
   var zoneTotals = {};
@@ -5498,7 +5547,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var zAccentColor = isCrossSales ? '#7C3AED' : BRAND;
     var zAccent = 'box-shadow:inset 3px 0 0 '+zAccentColor+', inset -1.5px 0 0 '+PBORDER_STRONG+';';
     var zoneBg   = isCrossSales ? '#F5F3FF' : '#F0F4FB';
-    var _useLocIndexForHeader = !isYearly && !isQuarterly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
+    var _useLocIndexForHeader = allPendencyDrillRows && allPendencyDrillRows.length > 0;
     var zoneData;
     if (isCrossSales && _useLocIndexForHeader) {
       // Cross Sales total must exclude branches relocated elsewhere — computed
@@ -5506,12 +5555,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // zt (from the untouched zoneTotals aggregation above) still includes
       // every unmapped rep including relocated ones.
       var _relocatedBranchNames = (typeof BRANCH_ZONE_MAP !== 'undefined') ? Object.keys(BRANCH_ZONE_MAP) : [];
-      var _csColData = activeCols.map(function(col){
+      var _csColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_c, ci){
         var p = 0, d = 0;
         Object.keys(_branchLocIndex).forEach(function(br){
           if (_relocatedBranchNames.indexOf(br) > -1) return;
-          var entry = _branchLocIndex[br][col];
-          if (entry) { p += entry.pending||0; d += entry.done||0; }
+          var entry = _locSum(_branchLocIndex, br, ci);
+          p += entry.pending; d += entry.done;
         });
         return { pending: p, done: d };
       });
@@ -5522,13 +5571,12 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       // Real zone with a relocated branch — own (from _zoneOwnLocIndex) +
       // each relocated branch (from _branchLocIndex), computed fresh and
       // independently of zoneTotals/repsFiltered's per-rep sums entirely.
-      var _zColData = activeCols.map(function(col){
-        var ownEntry = (_zoneOwnLocIndex[zone] && _zoneOwnLocIndex[zone][col]) || null;
-        var p = (ownEntry && ownEntry.pending) || 0;
-        var d = (ownEntry && ownEntry.done) || 0;
+      var _zColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_c, ci){
+        var ownEntry = _locSum(_zoneOwnLocIndex, zone, ci);
+        var p = ownEntry.pending, d = ownEntry.done;
         _zoneOwnBranchesCheck.forEach(function(br){
-          var brEntry = _branchLocIndex[br] && _branchLocIndex[br][col];
-          if (brEntry) { p += brEntry.pending||0; d += brEntry.done||0; }
+          var brEntry = _locSum(_branchLocIndex, br, ci);
+          p += brEntry.pending; d += brEntry.done;
         });
         return { pending: p, done: d };
       });
@@ -5542,6 +5590,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         ? { colData: zt.colData, totalPending: zt.totalPending, totalDone: zt.totalDone, total: zt.total }
         : { colData: activeCols.map(function(){ return {pending:0,done:0}; }), totalPending: 0, totalDone: 0, total: 0 };
     }
+    // A restricted user (Sales Rep / Zonal Manager) never sees an empty
+    // placeholder row for a zone that has nothing of theirs in it
+    if (_rlsLimited && zoneData.total === 0) return;
     bodyRows += metricRows(zoneData, null, zoneBg, true, null, null, false, zone, zAvatar, zLabel, zToggle, zAccent, 'border-top:2px solid '+PBORDER_STRONG+';', null, zone, lockType);
 
     if (isCollapsed) return; // skip reps if zone collapsed
@@ -5572,13 +5623,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         var branchReps = branchMap[branch];
         // Aggregate branch totals -- prefer location-based drill index (matches drill exactly)
         // for Monthly/Custom views; Yearly/Quarterly/Weekly keep the rep-sum fallback for now.
-        var _useLocIndex = !isYearly && !isQuarterly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
+        var _useLocIndex = allPendencyDrillRows && allPendencyDrillRows.length > 0;
         var bColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
-          if (_useLocIndex) {
-            var _m = activeCols[ci];
-            var _entry = (_branchLocIndex[branch] && _branchLocIndex[branch][_m]) || null;
-            return { pending: (_entry && _entry.pending) || 0, done: (_entry && _entry.done) || 0 };
-          }
+          if (_useLocIndex) return _locSum(_branchLocIndex, branch, ci);
           return {
             pending: branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
             done:    branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
@@ -5739,13 +5786,9 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       var branchReps = repsFiltered.filter(function(r){ return r.zone === 'Cross Sales' && r.originalZone === branch; });
       var branchKey = 'branch__' + zone + '__' + branch;
       var branchCollapsed = state.pendencyZoneOpen[branchKey] === false;
-      var _useLocIndexZ = !isYearly && !isQuarterly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
+      var _useLocIndexZ = allPendencyDrillRows && allPendencyDrillRows.length > 0;
       var zbColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
-        if (_useLocIndexZ) {
-          var _m = activeCols[ci];
-          var _entry = (_branchLocIndex[branch] && _branchLocIndex[branch][_m]) || null;
-          return { pending: (_entry && _entry.pending) || 0, done: (_entry && _entry.done) || 0 };
-        }
+        if (_useLocIndexZ) return _locSum(_branchLocIndex, branch, ci);
         return {
           pending: branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].pending:0); }, 0),
           done:    branchReps.reduce(function(s,r){ return s+(r.colData[ci]?r.colData[ci].done:0);    }, 0),
@@ -8701,6 +8744,35 @@ function openPendencyDrill(rep, col, status, lock, type){
     .catch(function(){ state.pendencyDrill.loading=false; state.pendencyDrill.error='Could not load job data.'; render(); });
 }
 
+// One rule for "is this job in scope?" — used by BOTH the Grand Total cells
+// and the Grand Total drill-through, so they can never disagree. Covers the
+// LOB filter, the zone filter (mapped zone, or a relocated branch's target
+// zone for unmapped reps), the manual rep filter, and role-based access.
+function buildPendencyScopeMatcher(opts) {
+  var rlsOnly = !!(opts && opts.rlsOnly);
+  var full = {};
+  if (typeof zonesRaw !== 'undefined' && zonesRaw && zonesRaw.length) zonesRaw.forEach(function(z){ if (z.zone) full[z.zone] = true; });
+  else if (typeof repsRawOriginal !== 'undefined' && repsRawOriginal) repsRawOriginal.forEach(function(r){ if (r.zone) full[r.zone] = true; });
+  var lobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
+  var zs = null; if ((state.filterZones || []).length > 0) { zs = {}; state.filterZones.forEach(function(z){ zs[z] = true; }); }
+  var manual = (state.filterReps || []).length > 0 ? state.filterReps.map(function(n){ return normalizeName(n); }) : null;
+  var role = currentUser ? (currentUser.role || '').toLowerCase().trim() : '';
+  var rlsZone = role === 'zonal manager' ? (currentUser.zone || '').trim() : '';
+  var rlsName = role === 'sales rep' ? normalizeName(currentUser.name || '') : '';
+  var BZ = typeof BRANCH_ZONE_MAP !== 'undefined' ? BRANCH_ZONE_MAP : {};
+  return function(r) {
+    var mapped = !!full[r._zone], loc = (r.location || '').trim();
+    var effZone = mapped ? r._zone : (BZ[loc] || 'Cross Sales');
+    if (rlsName && !(r._norm === rlsName || (r._displayNorm || '') === rlsName || normalizeName(r._repName || '') === rlsName)) return false;
+    if (rlsZone && effZone !== rlsZone) return false;
+    if (rlsOnly) return true;
+    if (lobs && lobs.indexOf(r.lob) === -1) return false;
+    if (zs && !zs[effZone]) return false;
+    if (manual && !(manual.indexOf(r._norm || '') > -1 || manual.indexOf(r._displayNorm || '') > -1 || (!mapped && manual.indexOf(normalizeName(loc)) > -1))) return false;
+    return true;
+  };
+}
+
 // Pure client-side pendency drill filter — handles rep, zone, grand, branch, crosssales, jobowner
 function computePendencyDrillResult(rep, col, status, lock, type) {
   var isOL = lock === 'Operation Lock';
@@ -8751,6 +8823,8 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
 
   // "name@@zone" = a display name shared by reps in different zones
   var _repZoneOnly = null;
+  var _repNormOnly = null; // "name@@zone##norm" = one exact rep (newer server data)
+  if (type === 'rep' && rep && rep.indexOf('##') > -1) { _repNormOnly = rep.split('##')[1] || null; rep = rep.split('##')[0]; }
   if (type === 'rep' && rep && rep.indexOf('@@') > -1) { _repZoneOnly = rep.split('@@')[1] || null; rep = rep.split('@@')[0]; }
   var repNorm = normalizeName(rep);
 
@@ -8822,9 +8896,14 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
     _pFz.forEach(function(z){ _pZoneSet[z] = true; });
   }
 
+  var _scopeMatch = buildPendencyScopeMatcher();
+  // A Sales Rep only ever sees their own jobs — on every row type, not just
+  // their own rep row (zone/branch drills previously listed the whole zone).
+  var _drillRlsName = (currentUser && (currentUser.role||'').toLowerCase().trim() === 'sales rep') ? normalizeName(currentUser.name||'') : '';
   var matched = [];
   for (var i = 0; i < allPendencyDrillRows.length; i++) {
     var r = allPendencyDrillRows[i];
+    if (_drillRlsName && !(r._norm === _drillRlsName || (r._displayNorm||'') === _drillRlsName || normalizeName(r._repName||'') === _drillRlsName)) continue;
 
     // Month filter
     if (allowedMonths && !allowedMonths.has(r._month)) continue;
@@ -8834,6 +8913,8 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
 
     // Entity filter
     if (type === 'grand') {
+      if (!_scopeMatch(r)) continue;
+    } else if (type === '__old_grand__') {
       // Grand Total — apply zone/rep/RLS filter using _zone field
       // Use _zone to match against visible zones (same source as zone rows = SRR)
       if (_pSpFilterSet) {
@@ -8888,6 +8969,7 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
     } else if (type === 'rep') {
       // A name shared by several reps arrives as "name@@zone" — only that zone's rep
       if (_repZoneOnly && r._zone !== _repZoneOnly) continue;
+      if (_repNormOnly && r._norm !== _repNormOnly) continue;
       // Match by any of: _norm, _displayNorm, normalized _repName, or normalized salesPerson
       var spNorm = normalizeName(r.salesPerson || '');
       var repNameNorm = normalizeName(r._repName || '');

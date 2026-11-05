@@ -2349,7 +2349,7 @@ async function computeBothPendency(db) {
   const monthsInData = FY_MONTHS.filter(m => seenMonths.has(m));
 
   function buildResult(repMonthMap) {
-    const reps = Object.values(repMonthMap).map((rep) => {
+    const reps = Object.entries(repMonthMap).map(([norm, rep]) => {
       let totalPending = 0, totalDone = 0;
       for (const m of monthsInData) {
         totalPending += (rep.monthData[m]?.pending || 0);
@@ -2360,7 +2360,9 @@ async function computeBothPendency(db) {
         for (const m of monthsInData) { op += ownerMonthData[m]?.pending||0; od += ownerMonthData[m]?.done||0; }
         return { name: ownerName, monthData: ownerMonthData, totalPending: op, totalDone: od, total: op+od };
       }).filter(o => o.total > 0).sort((a,b) => b.total - a.total);
-      return { name: rep.displayName, zone: rep.zone, monthData: rep.monthData, lobMonthData: rep.lobMonthData||{}, totalPending, totalDone, total: totalPending + totalDone, jobOwners };
+      // norm = the rep's own key (same as each drill row's _norm), so two reps
+      // that share a display name, even in the same zone, can be told apart
+      return { name: rep.displayName, norm, zone: rep.zone, monthData: rep.monthData, lobMonthData: rep.lobMonthData||{}, totalPending, totalDone, total: totalPending + totalDone, jobOwners };
     }).sort((a, b) => b.total - a.total);
 
     const zoneMap = {};
