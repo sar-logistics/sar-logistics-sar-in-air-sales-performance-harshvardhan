@@ -2582,12 +2582,14 @@ module.exports = async function handler(req, res) {
         if (includeLob) {
           // Full lobData requested — keep as-is
         } else {
-          // Always include Air Export + Air Import lobData (needed for default filter)
-          // Strip all other LOBs to keep response small
+          // Air dashboard LOBs: Air Export, Air Import and General (the only
+          // LOB filter options). Keeping General here means a General
+          // selection works from the first load, not only after includeLob=1.
           if (copy.lobData) {
             const airOnly = {};
             if (copy.lobData['AIR EXPORT']) airOnly['AIR EXPORT'] = copy.lobData['AIR EXPORT'];
             if (copy.lobData['AIR IMPORT']) airOnly['AIR IMPORT'] = copy.lobData['AIR IMPORT'];
+            if (copy.lobData['GENERAL'])    airOnly['GENERAL']    = copy.lobData['GENERAL'];
             copy.lobData = airOnly;
           }
         }

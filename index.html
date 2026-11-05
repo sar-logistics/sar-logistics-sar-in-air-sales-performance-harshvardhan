@@ -175,7 +175,16 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
-var CACHE_VERSION = 'v97'; // bump on every deploy to wipe stale localStorage
+var CACHE_VERSION = 'v98'; // bump on every deploy to wipe stale localStorage
+// The Air dashboard covers Air Export, Air Import and General only — Sea and
+// ISO Tank jobs are never counted in its tables or listed in its drill-throughs.
+var AIR_DASHBOARD_LOBS = ['AIR EXPORT', 'AIR IMPORT', 'GENERAL'];
+// The LOB filter in effect: the selected LOBs that belong to this dashboard,
+// or all of them when nothing is selected.
+function airEffectiveLobs() {
+  var sel = (state.filterLobs || []).filter(function(l){ return AIR_DASHBOARD_LOBS.indexOf(l) > -1; });
+  return sel.length ? sel : AIR_DASHBOARD_LOBS.slice();
+}
 var GOOGLE_CLIENT_ID = '71401290862-it2v6ru4et49diahsv4j63h07pm68thr.apps.googleusercontent.com';
 var currentUser = null;
 var tokenClient = null;
@@ -773,10 +782,15 @@ function computeFilteredRepsRaw(){
 
   // LOB filter — use lobData (fetched via includeLob=1) to recompute monthly arrays
   var filterLobs = state.filterLobs || [];
-  if (filterLobs.length > 0 && _lobDataFetched) {
+  // Apply the LOB filter as soon as per-LOB data is present: the default
+  // response already carries every Air-dashboard LOB, so there's no need to
+  // wait for the includeLob=1 load (until then the table showed all LOBs).
+  var _hasLobData = _lobDataFetched || base.some(function(r){ return r.lobData && Object.keys(r.lobData).length > 0; });
+  if (filterLobs.length > 0 && _hasLobData) {
     base = base.map(function(r) {
-      if (!r.lobData || Object.keys(r.lobData).length === 0) return r;
-      var ld = r.lobData;
+      // No per-LOB data = nothing in the selected LOBs (e.g. a Sea-only rep):
+      // count zeros, not their full all-LOB totals
+      var ld = r.lobData || {};
       var filtered = Object.assign({}, r);
       filtered.gp       = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gp)   ||0); },0); });
       filtered.gpProv   = months26.map(function(m){ return filterLobs.reduce(function(s,lob){ return s+((ld[lob]&&ld[lob][m]&&ld[lob][m].gpProv)||0); },0); });
@@ -2815,7 +2829,7 @@ function topbar(){
 
         if (isFOpen) {
           var _isPendencyPage = state.page === 'op' || state.page === 'finance';
-          var LOB_KEYS = ['SEA EXPORT','SEA IMPORT','ISOTANK EXPORT','ISOTANK IMPORT','AIR EXPORT','AIR IMPORT'].concat(_isPendencyPage ? ['GENERAL'] : []);
+          var LOB_KEYS = AIR_DASHBOARD_LOBS.slice(); // Air dashboard: Air Export, Air Import, General only
           var LOB_LABELS = {'SEA EXPORT':'Sea Export','SEA IMPORT':'Sea Import','ISOTANK EXPORT':'ISO Tank Export','ISOTANK IMPORT':'ISO Tank Import','AIR EXPORT':'Air Export','AIR IMPORT':'Air Import','GENERAL':'General'};
           // RLS-only base (not the manual rep-filter narrowing that repsRaw
           // ALSO carries) — repsRaw gets narrowed by BOTH RLS and the
@@ -6712,7 +6726,7 @@ function tableRows(){
         labelWeight:indent?500:600, labelStyle:indent?'italic':'normal',
         caret:arrowChar, toggleType:toggleType||false, entityName: isZone ? e.zone : e.name,
         repInfo:repInfo||null, rowBg: groupBg, isZoneBlock: isZone, isGrandBlock: isGrand,
-        cells:buildCells(fy, vals, type, color, isZone ? e.zone : e.name, (drillName || label), colLabels, noTarget, rawColKeys)
+        cells:buildCells(fy, vals, type, color, isZone ? e.zone : (_salesDupNames()[e.name] && !e.isBranch ? e.name + '@@' + (e.zone || '') : e.name), (drillName || label), colLabels, noTarget, rawColKeys)
       };
     }
 
@@ -7681,6 +7695,13 @@ function scheduleRender() {
 }
 
 function render(){
+  // Keep the LOB filter inside this dashboard's LOBs (a saved or emptied
+  // selection never turns into "every LOB", which would bring Sea/ISO in)
+  if (state.filterLobs) {
+    var _okL = state.filterLobs.filter(function(l){ return AIR_DASHBOARD_LOBS.indexOf(l) > -1; });
+    if (!_okL.length) _okL = AIR_DASHBOARD_LOBS.slice();
+    if (_okL.length !== state.filterLobs.length) state.filterLobs = _okL;
+  }
   var _tRender = performance.now();
   computeFilteredRepsRaw();
   // Skip model() on insight pages — they don't use it, saves CPU
@@ -8137,6 +8158,17 @@ function zoneToRawSPs(zones) {
 }
 
 // Pure in-browser drill filtering — filters allDrillRows by entity+metric+month
+// Display names shared by more than one rep row (e.g. "Others" in two zones)
+var _salesDupCache = { src: null, map: {} };
+function _salesDupNames() {
+  var src = repsRawOriginal || repsRaw || [];
+  if (_salesDupCache.src === src) return _salesDupCache.map;
+  var seen = {}, dup = {};
+  src.forEach(function(r){ if (r.isBranch) return; if (seen[r.name]) dup[r.name] = true; seen[r.name] = true; });
+  _salesDupCache = { src: src, map: dup };
+  return dup;
+}
+
 function computeDrillResult(entity, metric, month){
   if (!allDrillRows) return null;
   var isGT   = entity === 'Grand Total';
@@ -8179,7 +8211,7 @@ function computeDrillResult(entity, metric, month){
 
   // LOB filter — match by row.lob (same key as lobData: "AIR EXPORT", "SEA IMPORT" etc)
   // This matches exactly how the table counts via lobData[lob][month].ship
-  var _activeLobFilter = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
+  var _activeLobFilter = airEffectiveLobs(); // Air dashboard LOBs only (Sea/ISO never listed)
 
   // Build set of normalized raw names for reps currently in repsRaw (respects RLS + filterReps)
   // repsRaw contains display names — we need to map to raw normalized names via normalizeName
@@ -8265,6 +8297,8 @@ function computeDrillResult(entity, metric, month){
     }
   }
 
+  var _entRepName = entity, _entRepZone = null;
+  if (entity && entity.indexOf('@@') > -1) { _entRepName = entity.split('@@')[0]; _entRepZone = entity.split('@@')[1] || ''; entity = _entRepName + '@@' + _entRepZone; }
   var matched = [];
   for (var i=0; i<allDrillRows.length; i++){
     var row = allDrillRows[i];
@@ -8365,8 +8399,9 @@ function computeDrillResult(entity, metric, month){
         if (row._zone) continue;
         if ((row.location || '').trim() !== entity) continue;
       } else {
-        // Rep: row._dn must match display name
-        var repMatch = row._dn === entity;
+        // Rep: row._dn must match display name; a display name shared by
+        // reps in different zones (e.g. "Others") arrives as "name@@zone"
+        var repMatch = _entRepZone !== null ? (row._dn === _entRepName && row._zone === _entRepZone) : row._dn === entity;
         if (!repMatch) continue;
       }
     }
@@ -9621,7 +9656,7 @@ document.addEventListener('click', function(ev){
   }
   else if(act==='toggleFilterLobDrop'){ ev.stopPropagation(); state.filterLobDropOpen=!state.filterLobDropOpen; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterRepDrop'){ ev.stopPropagation(); state.filterRepDropOpen=!state.filterRepDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='filterLobAll'){ ev.stopPropagation(); _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _customerPivotCache = {}; _agentPivotCache = {}; state.filterLobs=[]; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterLobAll'){ ev.stopPropagation(); _drillResultCache = {}; _insightDrillCache = {}; _tradelanePivotCache = {}; _tlGrandDrillCache = {}; _customerPivotCache = {}; _agentPivotCache = {}; state.filterLobs=AIR_DASHBOARD_LOBS.slice(); render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='filterRepAll'){ ev.stopPropagation(); state.filterReps=[]; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='toggleFilterLob'){
     ev.stopPropagation();
@@ -9669,7 +9704,7 @@ document.addEventListener('click', function(ev){
     _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
   }
   else if(act==='toggleFilterZoneDrop'){ ev.stopPropagation(); state.filterZoneDropOpen=!state.filterZoneDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobs=[]; state.filterReps=[]; state.filterZones=[]; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobs=['AIR EXPORT','AIR IMPORT']; state.filterReps=[]; state.filterZones=[]; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
   else if(act==='rateCommit'){ var v=parseFloat(document.getElementById('rate-input').value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
   else if(act==='feedbackOpen'){ ev.stopPropagation(); state.feedbackOpen=true; state.feedbackSent=false; state.feedbackText=''; render(); }
