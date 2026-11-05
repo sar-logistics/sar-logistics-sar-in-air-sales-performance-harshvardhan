@@ -1888,7 +1888,9 @@ function syncDateRangeToData(){
   state.dateFrom = defaultFrom;
   state.dateTo   = defaultTo;
   if (!state.weeklyMonth || months26.indexOf(state.weeklyMonth) < 0) {
-    state.weeklyMonth = months26[months26.length - 1];
+    // Current month when it has data (same as picking Weekly from the menu),
+    // not the last month with any data (which can be a future month).
+    state.weeklyMonth = months26.indexOf(curMonLabel) >= 0 ? curMonLabel : months26[months26.length - 1];
   }
 }
 
@@ -4684,6 +4686,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   var _dupRepNames = {}, _firstPkByKey = {};
   (function(){ var seen = {}; (d.reps || []).forEach(function(r){ if (seen[r.name]) _dupRepNames[r.name] = true; seen[r.name] = true; }); })();
   function _repKey(name, zone){ return _dupRepNames[name] ? name + '@@' + (zone || '') : name; }
+  // LOB filter, read up front: the weekly indexes below are built before the
+  // original `var _flobs` line further down, so they saw it as undefined and
+  // ignored the LOB filter entirely (table showed all LOBs, drill only the
+  // selected ones).
+  var _flobs = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
   (d.reps || []).forEach(function(r, i){
     r.__pk = _dupRepNames[r.name] ? _repKey(r.name, r.zone) + '@@' + i : r.name;
     var k = _repKey(r.name, r.zone); if (!_firstPkByKey[k]) _firstPkByKey[k] = r.__pk;
@@ -4760,15 +4767,21 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       }
       // Derive ISO week from the correct primary date
       // Use ETD for export-type rows, ETA for import-type rows — same as server
-      var lob = (row.lob || '').toUpperCase();
-      var isImport = lob.indexOf('IMPORT') >= 0;
-      var rawDate = isImport
-        ? (row.etaDischarge || row.etdLoading || row.jobDate || '')
-        : (row.etdLoading  || row.etaDischarge || row.jobDate || '');
-      if (!rawDate) return;
-      var d = new Date(rawDate);
-      if (isNaN(d)) return;
-      var wk = getISOWeek(d).key;
+      // Week from the server (_wk) — the same week the drill-through filters
+      // on. Re-deriving it here with new Date() misread DD/MM/YYYY dates and
+      // skipped the leg-date fallbacks, so the table and drill disagreed.
+      var wk = row._wk;
+      if (!wk) {
+        var lob = (row.lob || '').toUpperCase();
+        var isImport = lob.indexOf('IMPORT') >= 0;
+        var rawDate = isImport
+          ? (row.etaDischarge || row.etdLoading || row.jobDate || '')
+          : (row.etdLoading  || row.etaDischarge || row.jobDate || '');
+        if (!rawDate) return;
+        var d = new Date(rawDate);
+        if (isNaN(d)) return;
+        wk = getISOWeek(d).key;
+      }
       if (!_wkSet[wk]) return;
       if (!_weeklyPendencyIndex[repName]) _weeklyPendencyIndex[repName] = {};
       if (!_weeklyPendencyIndex[repName][wk]) _weeklyPendencyIndex[repName][wk] = { pending:0, done:0 };
@@ -4844,7 +4857,11 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
   // totals (which span ALL their jobs) does not equal a location-filtered count.
   var _isOLPage = lockType === 'Operation Lock';
   var _blFl = state.filterLobs && state.filterLobs.length > 0 ? state.filterLobs : null;
-  var _blCacheKey = 'sar_air_branch_loc_index_' + (_isOLPage ? 'ol' : 'fl') + '_' + (_blFl ? _blFl.slice().sort().join(',') : 'all') + '_' + (_pendencyManualReps ? _pendencyManualReps.slice().sort().join(',') : 'all') + '_' + CACHE_VERSION;
+  // Weekly view: bucket by the server's week key (_wk), limited to the
+  // selected month's jobs — exactly what the weekly drill-through counts.
+  var _locWeekMonth = isWeekly ? (state.weeklyMonth || months26[months26.length-1]) : null;
+  function _locBucket(r){ return isWeekly ? (r._month === _locWeekMonth ? r._wk : null) : r._month; }
+  var _blCacheKey = 'sar_air_branch_loc_index_' + (_isOLPage ? 'ol' : 'fl') + '_' + (_blFl ? _blFl.slice().sort().join(',') : 'all') + '_' + (_pendencyManualReps ? _pendencyManualReps.slice().sort().join(',') : 'all') + (isWeekly ? '_wk_' + _locWeekMonth : '') + '_' + CACHE_VERSION;
   var _branchLocIndex = {};
   if (allPendencyDrillRows && allPendencyDrillRows.length > 0) {
     allPendencyDrillRows.forEach(function(r){
@@ -4857,7 +4874,8 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         var _matchesBL = _pendencyManualReps.indexOf(_rNormBL) > -1 || _pendencyManualReps.indexOf(normalizeName(loc)) > -1;
         if (!_matchesBL) return;
       }
-      var m = r._month;
+      var m = _locBucket(r);
+      if (!m) return;
       if (!_branchLocIndex[loc]) _branchLocIndex[loc] = {};
       if (!_branchLocIndex[loc][m]) _branchLocIndex[loc][m] = { pending: 0, done: 0 };
       var isDone = _isOLPage ? r.olDone : r.flDone;
@@ -4890,7 +4908,8 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         if (_pendencyManualReps.indexOf(_rNormZL) === -1) return;
       }
       var z = r._zone;
-      var m = r._month;
+      var m = _locBucket(r);
+      if (!m) return;
       if (!_zoneOwnLocIndex[z]) _zoneOwnLocIndex[z] = {};
       if (!_zoneOwnLocIndex[z][m]) _zoneOwnLocIndex[z][m] = { pending: 0, done: 0 };
       var isDone2 = _isOLPage ? r.olDone : r.flDone;
@@ -5479,7 +5498,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
     var zAccentColor = isCrossSales ? '#7C3AED' : BRAND;
     var zAccent = 'box-shadow:inset 3px 0 0 '+zAccentColor+', inset -1.5px 0 0 '+PBORDER_STRONG+';';
     var zoneBg   = isCrossSales ? '#F5F3FF' : '#F0F4FB';
-    var _useLocIndexForHeader = !isYearly && !isQuarterly && !isWeekly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
+    var _useLocIndexForHeader = !isYearly && !isQuarterly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
     var zoneData;
     if (isCrossSales && _useLocIndexForHeader) {
       // Cross Sales total must exclude branches relocated elsewhere — computed
@@ -5553,7 +5572,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
         var branchReps = branchMap[branch];
         // Aggregate branch totals -- prefer location-based drill index (matches drill exactly)
         // for Monthly/Custom views; Yearly/Quarterly/Weekly keep the rep-sum fallback for now.
-        var _useLocIndex = !isYearly && !isQuarterly && !isWeekly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
+        var _useLocIndex = !isYearly && !isQuarterly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
         var bColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
           if (_useLocIndex) {
             var _m = activeCols[ci];
@@ -5720,7 +5739,7 @@ function pendencyPage(data, title, pendingLabel, doneLabel, brandColor, showJobO
       var branchReps = repsFiltered.filter(function(r){ return r.zone === 'Cross Sales' && r.originalZone === branch; });
       var branchKey = 'branch__' + zone + '__' + branch;
       var branchCollapsed = state.pendencyZoneOpen[branchKey] === false;
-      var _useLocIndexZ = !isYearly && !isQuarterly && !isWeekly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
+      var _useLocIndexZ = !isYearly && !isQuarterly && allPendencyDrillRows && allPendencyDrillRows.length > 0;
       var zbColData = (isYearly && _pFyGroups ? _pFyGroups : isQuarterly && _qGroups ? _qGroups : activeCols).map(function(_,ci){
         if (_useLocIndexZ) {
           var _m = activeCols[ci];
@@ -8695,20 +8714,25 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
   // Detect week key format e.g. "2026-W29" — convert to month for _month matching
   var isWeekKey = col && /^\d{4}-W\d+$/.test(col);
   var allowedMonths = null;
+  var _wkRangeSet = null; // Weekly Grand Total column: a range of week keys
+  // Weekly view only counts the selected month's jobs (a week straddling two
+  // months shows each month's part under that month) — the drill must too.
+  var _weeklyMonthSel = state.weeklyMonth || months26[months26.length-1];
   if (isWeekKey) {
-    // Convert ISO week key to month label using allPendencyDrillRows
-    var _wkMonthSet = {};
-    if (allPendencyDrillRows) {
-      allPendencyDrillRows.forEach(function(r){ if (r._wk === col && r._month) _wkMonthSet[r._month] = true; });
-    }
-    allowedMonths = Object.keys(_wkMonthSet).length > 0 ? new Set(Object.keys(_wkMonthSet)) : null;
-    // Also store week key for week-level filtering
+    allowedMonths = new Set([_weeklyMonthSel]);
   } else if (!isFY && !isRange && col) {
     allowedMonths = new Set([col]);
   } else if (isRange) {
     var parts = col.split(':');
-    var fi = FY_ALL.indexOf(parts[1]), ti = FY_ALL.indexOf(parts[2]);
-    if (fi >= 0 && ti >= 0) allowedMonths = new Set(FY_ALL.slice(fi, ti+1));
+    if (/^\d{4}-W\d+$/.test(parts[1] || '')) {
+      var _wks = filteredWeekKeys();
+      var wfi = _wks.indexOf(parts[1]), wti = _wks.indexOf(parts[2]);
+      _wkRangeSet = new Set(wfi >= 0 && wti >= 0 ? _wks.slice(wfi, wti + 1) : _wks);
+      allowedMonths = new Set([_weeklyMonthSel]);
+    } else {
+      var fi = FY_ALL.indexOf(parts[1]), ti = FY_ALL.indexOf(parts[2]);
+      if (fi >= 0 && ti >= 0) allowedMonths = new Set(FY_ALL.slice(fi, ti+1));
+    }
   }
 
   // salesZoneSet: zones that appear in Sales Performance (repsRaw)
@@ -8806,6 +8830,7 @@ function computePendencyDrillResult(rep, col, status, lock, type) {
     if (allowedMonths && !allowedMonths.has(r._month)) continue;
     // Week key filter — for weekly view, further restrict to the specific week
     if (isWeekKey && r._wk !== col) continue;
+    if (_wkRangeSet && !_wkRangeSet.has(r._wk)) continue;
 
     // Entity filter
     if (type === 'grand') {
