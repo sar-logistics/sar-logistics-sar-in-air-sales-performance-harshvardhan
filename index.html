@@ -2812,14 +2812,15 @@ function topbar(){
       +(['usage','teams','admin','org'].indexOf(state.page) >= 0 ? '' : '</div>'))
       // Rate — hidden on non-data pages
       +(['usage','teams','admin','org'].indexOf(state.page) >= 0 ? '' : '<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#9AAFC8;font-weight:600;flex-shrink:0;white-space:nowrap;background:#FFFFFF;border-radius:999px;padding:7px 13px;box-shadow:'+pillShadow+';">Rate '+rateEl+'</div>')
-      // Filters — only on Sales Performance (sales page). Sales Rep never
-      // gets the Filters button at all (no zone/rep to filter by — they only
-      // ever see their own data). Zonal Manager keeps LOB + Rep sections but
+      // Filters — Sales Rep gets an LOB-only panel (no zone/rep: RLS already
+      // limits them to their own data) and no button on Customers/Agents/
+      // Tradelane, which have no LOB filter. Zonal Manager keeps LOB + Rep sections but
       // not Zone (they're already restricted to one zone via RLS).
-      +((['admin','usage','org','teams'].indexOf(state.page) >= 0 || (currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep')) ? '' : (function(){
+      +((['admin','usage','org','teams'].indexOf(state.page) >= 0 || ((currentUser && (currentUser.role||'').toLowerCase().trim()==='sales rep') && ['customers','agents','tradelane'].indexOf(state.page) >= 0)) ? '' : (function(){
         var _isInsightPg = ['customers','agents','tradelane'].indexOf(state.page) >= 0;
         var _fRole = currentUser ? (currentUser.role||'').toLowerCase().trim() : '';
-        var _hideZoneSection = _fRole === 'zonal manager';
+        var _isSalesRepF = _fRole === 'sales rep'; // Sales Rep: LOB filter only
+        var _hideZoneSection = _fRole === 'zonal manager' || _isSalesRepF;
         var activeCount = (_isInsightPg ? 0 : state.filterLobs.length) + state.filterReps.length + (_hideZoneSection ? 0 : (state.filterZones||[]).length);
         var isFOpen = state.filtersOpen;
         var btnHtml = '<button data-act="toggleFiltersDrop" style="display:flex;align-items:center;gap:6px;background:'+(activeCount>0?'#EEF3FC':'#FFFFFF')+';border:1.5px solid '+(isFOpen?BRAND_A1:(activeCount>0?'#B7C8EA':'#D8E1F0'))+';border-radius:999px;padding:8px 15px;font-size:11.5px;font-weight:700;color:'+(activeCount>0?'#1E3A66':'#3C5275')+';cursor:pointer;transition:box-shadow 0.15s;flex-shrink:0;white-space:nowrap;box-shadow:'+pillShadow+';">'
@@ -2920,7 +2921,7 @@ function topbar(){
                 + '</div>'
               + '</div>' : '');
 
-          var repSection = sectionHeader('Reps', state.filterReps.length, repOpen, 'toggleFilterRepDrop')
+          var repSection = _isSalesRepF ? '' : sectionHeader('Reps', state.filterReps.length, repOpen, 'toggleFilterRepDrop')
             + (repOpen ? '<div style="border:1.5px solid #E3E9F2;border-top:none;border-radius:0 0 9px 9px;margin-top:-2px;padding:6px;">'
                 + searchBox('rep-search-input', 'Search reps…')
                 + '<div id="rep-checklist" style="max-height:180px;overflow-y:auto;">'
