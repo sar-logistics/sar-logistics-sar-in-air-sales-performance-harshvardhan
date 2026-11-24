@@ -6528,7 +6528,8 @@ function _arTopFilters(){
         var mine = (currentUser.region || '').split(',').map(function(x){ return x.trim(); }).filter(Boolean);
         if (mine.length) regList = regList.filter(function(r){ return mine.indexOf(r) > -1; });
       }
-      out += _arTopDrop('region', 'Region', 'All Regions', fr,
+      // Air has no zone → region map (no regions at all): no Region dropdown then. It appears by itself if regions are added.
+      if (Object.keys(regs).length) out += _arTopDrop('region', 'Region', 'All Regions', fr,
         regList.map(function(r){ return { label: r, val: r, on: fr.indexOf(r) > -1 }; }));
       // Zone: zones with AR rows, narrowed to the ticked regions
       var zs = {};
