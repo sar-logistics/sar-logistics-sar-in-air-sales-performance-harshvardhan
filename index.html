@@ -175,6 +175,8 @@ var SAR_LOGO_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ0AAABqCAYAAA
 // Bump this whenever aggregation/data logic changes — invalidates all
 // existing browser caches instantly, even though MongoDB data itself
 // hasn't changed (so the meta-timestamp check alone wouldn't catch it).
+// Air: the AR page's LOB filter starts on the Air LOBs; every LOB can still be picked ("All LOBs")
+var AR_DEFAULT_LOBS = ['AIR EXPORT','AIR IMPORT'];
 var AR_DEFAULT_GL = ['TPY Receivable','OVR Receivable','LEG Receivable','STN Receivable','DIP Receivable','CGN Receivable'];
 var CACHE_VERSION = 'v99'; // bump on every deploy to wipe stale localStorage
 // Every LOB is available in the filter; Air Export + Air Import are selected
@@ -1536,7 +1538,7 @@ var state = { page:'sales', currency:'INR', reportView:'Monthly', viewDropOpen:f
   filterLobs: ['AIR EXPORT','AIR IMPORT'],   // default Air Export + Air Import; empty = All LOBs
   filterReps: [],   // empty = All Reps; else array of selected rep names
   filterGl: AR_DEFAULT_GL.slice(), arTypes: [],   // AR page GL Group Name filter; empty = all
-  arLobs: [],                        // AR page LOB cards (multi-select); empty = all LOBs
+  arLobs: AR_DEFAULT_LOBS.slice(),   // AR page LOB filter (multi-select); empty = all LOBs; starts on Air
   filterZones: []   // empty = All Zones; else array of selected zone names
 };
 
@@ -6551,8 +6553,9 @@ function _arTopFilters(){
       Object.keys(reps).sort(function(a, b){ return a.localeCompare(b); }).map(function(n){ return { label: n, val: n, on: frepN.indexOf(normalizeName(n)) > -1 }; }),
       { search: true });
   }
-  if (flob.length || fr.length || fz.length || frep.length) {
-    out += '<button data-act="arPgTopReset" class="btnq" title="Clear LOB, Region, Zone and Rep" style="flex-shrink:0;background:none;border:none;color:#94A3B8;font-size:11.5px;font-weight:700;cursor:pointer;padding:6px 4px;white-space:nowrap;">Clear</button>';
+  var lobsDefault = flob.length === AR_DEFAULT_LOBS.length && AR_DEFAULT_LOBS.every(function(k){ return flob.indexOf(k) > -1; });
+  if (!lobsDefault || fr.length || fz.length || frep.length) {
+    out += '<button data-act="arPgTopReset" class="btnq" title="Back to Air LOBs, all Zones and Reps" style="flex-shrink:0;background:none;border:none;color:#94A3B8;font-size:11.5px;font-weight:700;cursor:pointer;padding:6px 4px;white-space:nowrap;">Clear</button>';
   }
   return '<div style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap;">' + out + '</div>';
 }
@@ -7322,7 +7325,7 @@ function arHandleAct(act, el){
     else if (key === 'rep') state.filterReps = tog(state.filterReps);
     render();
   } else if (act === 'arPgTopReset') {
-    state.arLobs = []; state.filterReps = []; state.filterZones = []; state._regionExpandedZones = false;
+    state.arLobs = AR_DEFAULT_LOBS.slice(); state.filterReps = []; state.filterZones = []; state._regionExpandedZones = false;
     if (_arRole() !== 'regional manager') state.filterRegions = [];
     state.arTopOpen = null; render();
   } else if (act === 'arPgGlAll') {
@@ -11118,7 +11121,7 @@ document.addEventListener('click', function(ev){
     _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops);
   }
   else if(act==='toggleFilterZoneDrop'){ ev.stopPropagation(); state.filterZoneDropOpen=!state.filterZoneDropOpen; render(); requestAnimationFrame(positionAllDrops); }
-  else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobNone=false; state.filterGl=AR_DEFAULT_GL.slice(); state.arLobs=[]; state.arTypes=[]; if(_lobApplyTimer){clearTimeout(_lobApplyTimer);_lobApplyTimer=null;} state.filterLobs=['AIR EXPORT','AIR IMPORT']; state.filterReps=[]; state.filterZones=[]; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
+  else if(act==='filterResetAll'){ ev.stopPropagation(); state.filterLobNone=false; state.filterGl=AR_DEFAULT_GL.slice(); state.arLobs=AR_DEFAULT_LOBS.slice(); state.arTypes=[]; if(_lobApplyTimer){clearTimeout(_lobApplyTimer);_lobApplyTimer=null;} state.filterLobs=['AIR EXPORT','AIR IMPORT']; state.filterReps=[]; state.filterZones=[]; _insightDrillCache={}; _tradelanePivotCache={}; _tlGrandDrillCache={}; render(); requestAnimationFrame(positionAllDrops); }
   else if(act==='rateEdit'){ state.rateEditing=true; render(); setTimeout(function(){ var inp=document.getElementById('rate-input'); if(inp) inp.focus(); },50); }
   else if(act==='rateCommit'){ var v=parseFloat(document.getElementById('rate-input').value); if(!isNaN(v)&&v>0) state.rate=v; state.rateEditing=false; render(); }
   else if(act==='feedbackOpen'){ ev.stopPropagation(); state.feedbackOpen=true; state.feedbackSent=false; state.feedbackText=''; render(); }

@@ -5,8 +5,8 @@
 //  AIR SALES copy (24-Nov-2026). The AR data itself is uploaded by the Ocean Sales
 //  dashboard's AR sync (apps-script/arSync.gs in the Ocean repo) into the
 //  ar_outstanding collection of the shared "sar-in-air-sales" database. This
-//  dashboard only READS it - there is no arPush here - and keeps the AIR EXPORT /
-//  AIR IMPORT lines (invoices, On Account and DSO totals). Zones and sales reps
+//  dashboard only READS it - there is no arPush here. All LOBs are sent; the page
+//  ticks AIR EXPORT / AIR IMPORT by default (AR_DEFAULT_LOBS). Zones and sales reps
 //  come from this dashboard's own mapping (mapping_sales_targets); overdue slabs
 //  are this dashboard's own (_meta ar_buckets_air).
 // ─────────────────────────────────────────────────────────────────
@@ -14,9 +14,6 @@
 const AR_COLLECTION = "ar_outstanding";
 const AR_META_ID = "ar_meta";
 const AR_BUCKETS_ID = "ar_buckets_air"; // _meta doc: overdue bucket limits set by an Air admin (Ocean has its own)
-// Air page: only these LOB keys (arLobKey) are shown
-const AR_LOBS = ["AIR EXPORT", "AIR IMPORT"];
-function arIsAir(r) { return AR_LOBS.indexOf(arLobKey(r.lob, r.location)) > -1; }
 
 function normalizeName(name) {
   return String(name || "").split("|")[0].toLowerCase().replace(/\s+/g, " ").trim();
@@ -212,7 +209,7 @@ async function arGet(db, force, deployTs) {
     db.collection(AR_COLLECTION).find({ _batch: meta.currentBatch, _paid: { $ne: true } }, { projection: { _id: 0, customer: 1, salesPerson: 1, lob: 1, location: 1, branch: 1, type: 1, txnNo: 1, transDate: 1, billAmt: 1, outstanding: 1, overdueDays: 1, ageingDays: 1, creditDays: 1, houseNo: 1, jobOwner: 1, _dso: 1, dsoBill: 1, dsoBillDays: 1, dsoDays: 1, dsoCount: 1, glGroup: 1, "GL Group Name": 1, ATA: 1, eta: 1, "Receipt Date": 1, arStart: 1, arStartKind: 1 } }).toArray(),
     loadRepLookup(db),
   ]);
-  const data = buildArPayload(rows.filter(arIsAir), repLookup, meta);
+  const data = buildArPayload(rows, repLookup, meta);
   arCache = { key, data };
   return data;
 }
@@ -281,14 +278,14 @@ async function arDetail(db, customers) {
   const fields = AR_DETAIL_FIELDS.map((f) => f[0]);
   const meta = await db.collection("_meta").findOne({ _id: AR_META_ID });
   if (!meta || !meta.currentBatch) return { status: 200, json: { success: true, fields, rows: [] } };
-  const projection = { _id: 0, customer: 1, txnNo: 1, houseNo: 1, outstanding: 1, lob: 1, location: 1 };
+  const projection = { _id: 0, customer: 1, txnNo: 1, houseNo: 1, outstanding: 1 };
   AR_DETAIL_FIELDS.forEach((f) => { projection[f[1]] = 1; });
   const docs = await db.collection(AR_COLLECTION).find(
     { _batch: meta.currentBatch, customer: names.length === 1 ? names[0] : { $in: names }, _paid: { $ne: true } },
     { projection }
   ).toArray();
   const s = (v) => String(v == null ? "" : v).trim();
-  const rows = docs.filter(arIsAir).map((d) => [s(d.customer), s(d.txnNo), s(d.houseNo), Number(d.outstanding) || 0]
+  const rows = docs.map((d) => [s(d.customer), s(d.txnNo), s(d.houseNo), Number(d.outstanding) || 0]
     .concat(AR_DETAIL_FIELDS.map((f) => s(d[f[1]]))));
   return { status: 200, json: { success: true, fields, rows } };
 }
