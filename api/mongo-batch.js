@@ -2349,7 +2349,7 @@ async function computeBothPendency(db) {
   const monthsInData = FY_MONTHS.filter(m => seenMonths.has(m));
 
   function buildResult(repMonthMap) {
-    const reps = Object.values(repMonthMap).map((rep) => {
+    const reps = Object.entries(repMonthMap).map(([norm, rep]) => {
       let totalPending = 0, totalDone = 0;
       for (const m of monthsInData) {
         totalPending += (rep.monthData[m]?.pending || 0);
@@ -2360,7 +2360,9 @@ async function computeBothPendency(db) {
         for (const m of monthsInData) { op += ownerMonthData[m]?.pending||0; od += ownerMonthData[m]?.done||0; }
         return { name: ownerName, monthData: ownerMonthData, totalPending: op, totalDone: od, total: op+od };
       }).filter(o => o.total > 0).sort((a,b) => b.total - a.total);
-      return { name: rep.displayName, zone: rep.zone, monthData: rep.monthData, lobMonthData: rep.lobMonthData||{}, totalPending, totalDone, total: totalPending + totalDone, jobOwners };
+      // norm = the rep's own key (same as each drill row's _norm), so two reps
+      // that share a display name, even in the same zone, can be told apart
+      return { name: rep.displayName, norm, zone: rep.zone, monthData: rep.monthData, lobMonthData: rep.lobMonthData||{}, totalPending, totalDone, total: totalPending + totalDone, jobOwners };
     }).sort((a, b) => b.total - a.total);
 
     const zoneMap = {};
@@ -2429,17 +2431,13 @@ module.exports = async function handler(req, res) {
       await getDrillRows(db, "Grand Total", "Shipments", "FY Total").catch(() => null);
     }
 
-    // Strip weekData from sales, keep Air lobData for default LOB filter
+    // Strip weekData from sales; keep every LOB's figures (all LOBs are filter
+    // options — trimming to Air here made Sea/ISO/General selections show 0 or
+    // differ from the drill-through until a later full load)
     let salesStripped = null;
     if (salesResult && salesResult.repsRaw) {
       salesStripped = { ...salesResult, repsRaw: salesResult.repsRaw.map(r => {
         const c = { ...r }; delete c.weekData;
-        if (c.lobData) {
-          const airOnly = {};
-          if (c.lobData['AIR EXPORT']) airOnly['AIR EXPORT'] = c.lobData['AIR EXPORT'];
-          if (c.lobData['AIR IMPORT']) airOnly['AIR IMPORT'] = c.lobData['AIR IMPORT'];
-          c.lobData = airOnly;
-        }
         return c;
       })};
       // Bundle allDrillRows from drillRowsCache so client never needs a separate drill fetch
@@ -2580,14 +2578,9 @@ module.exports = async function handler(req, res) {
         if (includeLob) {
           // Full lobData requested — keep as-is
         } else {
-          // Always include Air Export + Air Import lobData (needed for default filter)
-          // Strip all other LOBs to keep response small
-          if (copy.lobData) {
-            const airOnly = {};
-            if (copy.lobData['AIR EXPORT']) airOnly['AIR EXPORT'] = copy.lobData['AIR EXPORT'];
-            if (copy.lobData['AIR IMPORT']) airOnly['AIR IMPORT'] = copy.lobData['AIR IMPORT'];
-            copy.lobData = airOnly;
-          }
+          // Keep every LOB's figures: all LOBs are filter options, so any
+          // selection (Sea, ISO Tank, General...) must be right from the first
+          // load, not only after the includeLob=1 load arrives.
         }
         return copy;
       })});
