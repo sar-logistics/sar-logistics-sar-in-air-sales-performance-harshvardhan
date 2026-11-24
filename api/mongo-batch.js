@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────
 
 const { MongoClient } = require("mongodb");
+const { arGet, arBucketsGet, arBucketsSave, arDetail } = require("./_ar");
 
 const MONGO_URI = process.env.MONGO_URI;
 const DB_NAME   = "sar-in-air-sales";
@@ -2464,13 +2465,28 @@ module.exports = async function handler(req, res) {
   }
 
   // "sales" is a read action — allow GET. Everything else requires POST.
-  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "mappingSearch"]);
+  const READ_ONLY_ACTIONS = new Set(["sales", "meta", "debug", "srrProbe", "customers", "agents", "tradelane", "usage", "org", "lobCheck", "drill", "ping", "finance", "financeDebug", "op", "pendencyDrill", "tradelaneDebug", "mappingSearch", "ar", "arDetail"]);
   if (!READ_ONLY_ACTIONS.has(action) && req.method !== "POST") {
     return res.status(405).json({ error: "Use POST for this action." });
   }
 
   try {
     const db = await getDB();
+
+    // Accounts Receivable (Air LOBs): GET action=ar, action=arDetail; POST action=arBuckets (admin slabs).
+    // The data is uploaded by the Ocean dashboard's AR sync into the shared DB - read only here.
+    if (action === "ar") {
+      const [data, buckets] = await Promise.all([arGet(db, req.query?.force === "1", DEPLOY_TS), arBucketsGet(db)]);
+      return res.status(200).json({ ...data, buckets });
+    }
+    if (action === "arDetail") {
+      const r = await arDetail(db, req.method === "POST" ? (req.body || {}).customers : req.query?.customer);
+      return res.status(r.status).json(r.json);
+    }
+    if (action === "arBuckets") {
+      const r = await arBucketsSave(db, req.body || {});
+      return res.status(r.status).json(r.json);
+    }
 
     if (action === "mappingSearch") {
       // Read-only diagnostic: search a mapping collection by substring.
